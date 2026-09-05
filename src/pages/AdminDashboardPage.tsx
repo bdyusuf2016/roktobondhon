@@ -32,11 +32,14 @@ import {
   Lock,
   Key,
   Shield,
+  ShieldAlert,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDialog } from '../contexts/DialogContext';
+import { isDemoMode } from '../firebase/config';
 import { PERMISSION_DEFINITIONS } from '../data/seedData';
 import type {
   BloodGroup,
@@ -365,6 +368,32 @@ export const AdminDashboardPage: React.FC = () => {
     });
   };
 
+  const isPrivilegedStaff =
+    isDemoMode ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'moderator';
+
+  if (!isPrivilegedStaff) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">অননুমোদিত প্রবেশাধিকার</h2>
+        <p className="text-xs text-slate-500">
+          এই পৃষ্ঠাটি শুধুমাত্র অনুমোদিত এডমিন ও মডারেটরদের জন্য সংরক্ষিত। অনুগ্রহ করে আপনার অনুমোদিত অ্যাকাউন্টে লগইন করুন।
+        </p>
+        <Link
+          to="/login"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-xs"
+        >
+          লগইন পৃষ্ঠায় যান
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Header */}
@@ -383,34 +412,36 @@ export const AdminDashboardPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Demo Data Reset Button */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              const confirmed = await dialog.confirm({
-                title: 'টেস্ট ডেটাবেজ রিসেট',
-                message: 'আপনি কি টেস্ট ডেটাবেজ রিসেট করতে চান? (১০০ ডোনার, ২০ রিকোয়েস্ট, ৫০ রক্তদান তৈরি হবে)',
-                type: 'danger',
-                confirmText: 'হ্যাঁ, রিসেট করুন',
-                cancelText: 'বাতিল',
-              });
-              if (confirmed) {
-                resetDemoData();
-                dialog.alert({
-                  title: 'রিসেট সম্পন্ন!',
-                  message: 'ডেটাবেজ সফলভাবে রিসেট ও সিড করা হয়েছে!',
-                  type: 'success',
+        {/* Demo Data Reset Button — Protected strictly for Demo Mode & Super Admin */}
+        {isDemoMode && currentUser?.role === 'super_admin' && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const confirmed = await dialog.confirm({
+                  title: 'টেস্ট ডেটাবেজ রিসেট',
+                  message: 'আপনি কি টেস্ট ডেটাবেজ রিসেট করতে চান? (১০০ ডোনার, ২০ রিকোয়েস্ট, ৫০ রক্তদান তৈরি হবে)',
+                  type: 'danger',
+                  confirmText: 'হ্যাঁ, রিসেট করুন',
+                  cancelText: 'বাতিল',
                 });
-              }
-            }}
-            className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200"
-            title="১০০ জন ডোনার, ২০ আবেদন এবং ৫০ রক্তদান পুনঃলোড করুন"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-            ডেমো ডেটা রিসেট (100 Donors Seed)
-          </button>
-        </div>
+                if (confirmed) {
+                  resetDemoData();
+                  dialog.alert({
+                    title: 'রিসেট সম্পন্ন!',
+                    message: 'ডেটাবেজ সফলভাবে রিসেট ও সিড করা হয়েছে!',
+                    type: 'success',
+                  });
+                }
+              }}
+              className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200"
+              title="১০০ জন ডোনার, ২০ আবেদন এবং ৫০ রক্তদান পুনঃলোড করুন"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              ডেমো ডেটা রিসেট (100 Donors Seed)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Admin Tab Navigation */}
@@ -1797,44 +1828,58 @@ export const AdminDashboardPage: React.FC = () => {
                     <span>ব্যাকআপ রিস্টোর (Import)</span>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    পূর্বে ডাউনলোড করা `.json` ফাইল আপলোড করে সম্পূর্ণ সিস্টেমের তথ্য পুনরুদ্ধার করুন।
+                    পূর্বে ডাউনলোড করা `.json` ফাইল আপলোড করে সম্পূর্ণ সিস্টেমের তথ্য পুনরুদ্ধার করুন (শুধুমাত্র সুপার এডমিন)।
                   </p>
                 </div>
-                <label className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors">
-                  <Upload className="w-4 h-4 text-slate-500" />
-                  <span>ব্যাকআপ ফাইল আপলোড করুন</span>
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const content = event.target?.result as string;
-                        if (content) {
-                          const result = importBackupData(content);
-                          if (result.success) {
-                            setBackupRestoreMsg(result.message);
-                            dialog.alert({
-                              title: 'রিস্টোর সফল হয়েছে',
-                              message: result.message,
-                              theme: 'success',
+                {currentUser?.role === 'super_admin' ? (
+                  <label className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors">
+                    <Upload className="w-4 h-4 text-slate-500" />
+                    <span>ব্যাকআপ ফাইল আপলোড করুন</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                          const content = event.target?.result as string;
+                          if (content) {
+                            const confirmed = await dialog.confirm({
+                              title: 'ব্যাকআপ রিস্টোর নিশ্চিতকরণ',
+                              message: 'আপনি কি নিশ্চিত যে ব্যাকআপ ফাইলটি রিস্টোর করতে চান? এটি প্ল্যাটফর্মের বর্তমান মেমরি ডেটা ওভাররাইট করবে।',
+                              type: 'danger',
+                              confirmText: 'হ্যাঁ, রিস্টোর করুন',
+                              cancelText: 'বাতিল',
                             });
-                          } else {
-                            dialog.alert({
-                              title: 'রিস্টোর ব্যর্থ হয়েছে',
-                              message: result.message,
-                              theme: 'danger',
-                            });
+                            if (!confirmed) return;
+                            const result = importBackupData(content);
+                            if (result.success) {
+                              setBackupRestoreMsg(result.message);
+                              dialog.alert({
+                                title: 'রিস্টোর সফল হয়েছে',
+                                message: result.message,
+                                theme: 'success',
+                              });
+                            } else {
+                              dialog.alert({
+                                title: 'রিস্টোর ব্যর্থ হয়েছে',
+                                message: result.message,
+                                theme: 'danger',
+                              });
+                            }
                           }
-                        }
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                </label>
+                        };
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[11px] font-semibold text-center">
+                    ডেটাবেজ রিস্টোর করার অনুমতি শুধুমাত্র সুপার এডমিনের জন্য সংরক্ষিত।
+                  </div>
+                )}
               </div>
             </div>
           </div>

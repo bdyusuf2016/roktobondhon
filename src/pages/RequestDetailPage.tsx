@@ -74,7 +74,9 @@ export const RequestDetailPage: React.FC = () => {
     currentUser?.role === 'moderator';
 
   const handleShare = () => {
-    const text = `জরুরি রক্তের প্রয়োজন!\nরোগী: ${request.patientName}\nগ্রুপ: ${request.bloodGroup} (${request.requiredUnits} ব্যাগ)\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\nমোবাইল: ${request.contactNumber}\nরক্তবন্ধন লিঙ্ক: ${window.location.href}`;
+    const patientText = request.patientName ? `রোগী: ${request.patientName}\n` : '';
+    const contactText = request.contactNumber ? `মোবাইল: ${request.contactNumber}\n` : '';
+    const text = `জরুরি রক্তের প্রয়োজন!\n${patientText}গ্রুপ: ${request.bloodGroup} (${request.requiredUnits} ব্যাগ)\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactText}রক্তবন্ধন লিঙ্ক: ${window.location.href}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       dialog.alert({
@@ -151,7 +153,7 @@ export const RequestDetailPage: React.FC = () => {
                   {request.requestId}
                 </span>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  {request.patientName}
+                  {request.patientName || `${request.hospital}-এ রক্ত প্রয়োজন`}
                 </h1>
                 {request.verification.isVerified && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -161,9 +163,11 @@ export const RequestDetailPage: React.FC = () => {
                 )}
               </div>
 
-              <p className="text-xs text-slate-500">
-                যোগাযোগকারী: <strong className="text-slate-700">{request.contactPerson}</strong> ({request.relationship})
-              </p>
+              {request.contactPerson && (
+                <p className="text-xs text-slate-500">
+                  যোগাযোগকারী: <strong className="text-slate-700">{request.contactPerson}</strong> {request.relationship ? `(${request.relationship})` : ''}
+                </p>
+              )}
 
               <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-600">
                 <span className="flex items-center gap-1">
@@ -184,13 +188,20 @@ export const RequestDetailPage: React.FC = () => {
 
           {/* Action box */}
           <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
-            <a
-              href={`tel:${request.contactNumber}`}
-              className="px-5 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-700/60 transition-colors"
-            >
-              <Phone className="w-4 h-4" />
-              কল করুন ({request.contactNumber})
-            </a>
+            {request.contactNumber ? (
+              <a
+                href={`tel:${request.contactNumber}`}
+                className="px-5 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-700/60 transition-colors"
+              >
+                <Phone className="w-4 h-4" />
+                কল করুন ({request.contactNumber})
+              </a>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1 text-center max-w-xs">
+                <span className="font-semibold text-slate-800 block">রোগীর তথ্যের নিরাপত্তা নিশ্চিতকরণ</span>
+                <span>সরাসরি যোগাযোগের জন্য লগইন করুন বা সংগঠনের হটলাইনে যোগাযোগ করুন।</span>
+              </div>
+            )}
           </div>
         </div>
 

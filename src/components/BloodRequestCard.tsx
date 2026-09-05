@@ -69,7 +69,9 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
   const handleCopyShare = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const shareText = `জরুরি রক্তের প্রয়োজন!\nরোগী: ${request.patientName}\nরক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${request.requiredUnits} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\nযোগাযোগ: ${request.contactNumber}\nরক্তবন্ধন প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
+    const patientDisplay = request.patientName ? `রোগী: ${request.patientName}\n` : '';
+    const contactDisplay = request.contactNumber ? `যোগাযোগ: ${request.contactNumber}\n` : '';
+    const shareText = `জরুরি রক্তের প্রয়োজন!\n${patientDisplay}রক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${request.requiredUnits} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactDisplay}রক্তবন্ধন প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText);
       dialog.alert({
@@ -96,7 +98,7 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h3 className="font-bold text-slate-900 text-base leading-snug">
-                  {request.patientName}
+                  {request.patientName || `${request.hospital}-এ রক্ত প্রয়োজন`}
                 </h3>
                 {request.verification.isVerified && (
                   <span title="সংগঠন কর্তৃক যাচাইকৃত আবেদন" className="text-emerald-600">
@@ -160,12 +162,21 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
         </button>
 
         <div className="flex items-center gap-2">
-          <a
-            href={`tel:${request.contactNumber}`}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-          >
-            কল করুন
-          </a>
+          {request.contactNumber ? (
+            <a
+              href={`tel:${request.contactNumber}`}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+            >
+              কল করুন
+            </a>
+          ) : (
+            <Link
+              to={`/request/${request.id}`}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors"
+            >
+              বিস্তারিত দেখুন
+            </Link>
+          )}
 
           <Link
             to={`/request/${request.id}`}

@@ -1,0 +1,90 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocument() {
+      return request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('image/.*');
+    }
+
+    function isSizeUnder(maxMb) {
+      return request.resource.size < maxMb * 1024 * 1024;
+    }
+
+    function getCallerUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        getCallerUserData().role == 'super_admin' ||
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isStaff() {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        getCallerUserData().role in ['admin', 'moderator', 'volunteer']
+      );
+    }
+
+    function getCallerOrg() {
+      return getCallerUserData().organizationId;
+    }
+
+    function getDonorOrg(donorId) {
+      return firestore.exists(/databases/(default)/documents/donorPublic/$(donorId))
+        ? firestore.get(/databases/(default)/documents/donorPublic/$(donorId)).data.organizationId
+        : (firestore.exists(/databases/(default)/documents/users/$(donorId))
+            ? firestore.get(/databases/(default)/documents/users/$(donorId)).data.organizationId
+            : '');
+    }
+
+    function isDonorOwner(donorId) {
+      return isSignedIn() && (
+        request.auth.uid == donorId ||
+        (firestore.exists(/databases/(default)/documents/donorPublic/$(donorId)) &&
+         firestore.get(/databases/(default)/documents/donorPublic/$(donorId)).data.userId == request.auth.uid)
+      );
+    }
+
+    function isSameOrgStaff(donorId) {
+      return isStaff() && (
+        isSuperAdmin() ||
+        (getDonorOrg(donorId) != '' && getCallerOrg() == getDonorOrg(donorId))
+      );
+    }
+
+    // Organization public assets (logos, branding banners)
+    // Public read, write only by staff of that organization or super_admin
+    match /organizations/{orgId}/{fileName} {
+      allow read: if true;
+      allow write: if isStaff() && (isSuperAdmin() || getCallerOrg() == orgId) && isImage() && isSizeUnder(5);
+    }
+
+    // Donor profile photos
+    // Public read for donor profile display, write only by the owner donor
+    match /donors/{donorId}/{fileName} {
+      allow read: if true;
+      allow write: if isDonorOwner(donorId) && isImage() && isSizeUnder(3);
+    }
+
+    // Verification documents (NID copies, medical certificates)
+    // Non-public: Only the owner donor OR authorized staff of the SAME organization can view
+    match /verification/{donorId}/{fileName} {
+      allow read: if isDonorOwner(donorId) || isSameOrgStaff(donorId);
+      allow create, update: if isDonorOwner(donorId) && isDocument() && isSizeUnder(10);
+      allow delete: if isDonorOwner(donorId) || isSameOrgStaff(donorId);
+    }
+  }
+}
+

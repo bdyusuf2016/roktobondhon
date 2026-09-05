@@ -39,7 +39,7 @@ export type DonationType = 'Whole Blood' | 'Platelets' | 'Plasma' | 'RBC';
 export type Gender = 'male' | 'female' | 'other';
 
 export interface User {
-  id: string;
+  id: string; // Firebase Auth UID
   fullName: string;
   email?: string;
   phone: string;
@@ -47,8 +47,11 @@ export interface User {
   organizationId: string;
   branchId?: string;
   photoUrl?: string;
+  status?: 'active' | 'suspended' | 'pending';
+  phoneVerified?: boolean;
   createdAt: string;
   updatedAt: string;
+  lastLoginAt?: string;
 }
 
 export interface DonorPrivacySettings {
@@ -58,37 +61,92 @@ export interface DonorPrivacySettings {
   allowDirectContact: boolean;
 }
 
-export interface Donor {
-  id: string;
-  userId: string;
+export interface DonorPublic {
+  id: string; // doc ID (e.g. donorId)
   donorId: string; // DNR-DHM-000125
   fullName: string;
   photoUrl?: string;
   bloodGroup: BloodGroup;
-  gender: 'male' | 'female' | 'other';
-  dateOfBirth: string;
-  phone: string;
-  email?: string;
-  division: string;
+  division?: string;
+  districtId?: string;
   district: string;
+  upazilaId?: string;
   upazila: string;
-  union?: string;
+  areaId?: string;
   area: string;
+  locationLabel?: string;
   availability: boolean;
   emergencyAvailable: boolean;
   lastDonationDate?: string;
   firstDonationDate?: string;
   totalDonations: number;
   verificationStatus: VerificationStatus;
+  organizationId: string;
+  branchId?: string;
+  createdAt: string;
+}
+
+export interface DonorPrivate {
+  donorId: string;
+  userId: string;
+  phone: string;
+  email?: string;
+  gender?: 'male' | 'female' | 'other';
+  dateOfBirth?: string;
+  exactAddress?: string;
+  emergencyContact?: string;
+  adminNotes?: string;
+  verificationDocuments?: string[];
+  nidOrIdNumber?: string;
+  privacy: DonorPrivacySettings;
   verifiedBy?: string;
   verifiedAt?: string;
-  organizationId: string;
-  branchId: string;
-  privacy: DonorPrivacySettings;
-  adminNotes?: string;
-  nidOrIdNumber?: string; // Private, admin only
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Donor extends DonorPublic {
+  userId: string;
+  phone: string;
+  gender?: 'male' | 'female' | 'other';
+  dateOfBirth?: string;
+  email?: string;
+  union?: string;
+  branchId?: string;
+  exactAddress?: string;
+  emergencyContact?: string;
+  privacy: DonorPrivacySettings;
+  adminNotes?: string;
+  nidOrIdNumber?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  updatedAt: string;
+}
+
+
+export interface BloodRequestPublic {
+  id: string;
+  requestId: string; // BD-2026-000184
+  userId?: string;
+  bloodGroup: BloodGroup;
+  requiredUnits: number;
+  requiredDate: string;
+  requiredTime: string;
+  hospital: string;
+  division?: string;
+  district: string;
+  upazila: string;
+  area: string;
+  emergencyLevel: EmergencyLevel;
+  status: RequestStatus;
+  verification: {
+    isVerified: boolean;
+    verifiedBy?: string;
+    verifiedAt?: string;
+  };
+  organizationId?: string;
+  createdAt: string;
+  expiresAt?: string;
 }
 
 export interface BloodRequest {
@@ -226,6 +284,15 @@ export interface AuditLog {
   timestamp: string;
 }
 
+export interface VerificationLog {
+  id: string;
+  donorId: string;
+  verifiedBy: string;
+  status: VerificationStatus;
+  notes?: string;
+  timestamp: string;
+}
+
 export interface MatchResult {
   donor: Donor;
   matchScore: number;
@@ -278,6 +345,7 @@ export interface FundDonation {
   verifiedBy?: string;
   verifiedAt?: string;
   createdAt: string;
+  organizationId?: string;
 }
 
 export interface PaymentMethodConfig {

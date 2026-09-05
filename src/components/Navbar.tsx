@@ -20,7 +20,7 @@ import type { UserRole } from '../types';
 
 export const Navbar: React.FC = () => {
   const { config } = useOrgConfig();
-  const { currentUser, switchDemoRole, logout } = useAuth();
+  const { currentUser, switchDemoRole, logout, isDemoMode } = useAuth();
   const { notifications } = useData();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -178,49 +178,51 @@ export const Navbar: React.FC = () => {
 
           {/* Right Action Area */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Quick Demo Role Switcher Badge */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors ${currentRoleInfo.color}`}
-                title="রোল পরিবর্তন করে সিস্টেম পরীক্ষা করুন"
-              >
-                <span className="w-2 h-2 rounded-full bg-current"></span>
-                <span>{currentRoleInfo.labelBn}</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-
-              {isRoleDropdownOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
-                  onMouseLeave={() => setIsRoleDropdownOpen(false)}
+            {/* Quick Demo Role Switcher Badge (Only visible in Demo Mode) */}
+            {isDemoMode && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border border-slate-200 shadow-2xs hover:border-slate-300 transition-colors ${currentRoleInfo.color}`}
+                  title="রোল পরিবর্তন করে সিস্টেম পরীক্ষা করুন"
                 >
-                  <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 mb-1">
-                    রোল পরিবর্তন (সরাসরি টেস্ট)
+                  <span className="w-2 h-2 rounded-full bg-current"></span>
+                  <span>{currentRoleInfo.labelBn}</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+
+                {isRoleDropdownOpen && (
+                  <div
+                    className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+                    onMouseLeave={() => setIsRoleDropdownOpen(false)}
+                  >
+                    <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100 mb-1">
+                      রোল পরিবর্তন (সরাসরি টেস্ট)
+                    </div>
+                    {roles.map((r) => (
+                      <button
+                        key={r.role}
+                        type="button"
+                        onClick={() => {
+                          switchDemoRole(r.role);
+                          setIsRoleDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${currentUser?.role === r.role
+                            ? 'bg-slate-100 font-bold text-slate-900'
+                            : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                      >
+                        <span>{r.labelBn}</span>
+                        {currentUser?.role === r.role && (
+                          <span className="text-emerald-600 font-bold">✓</span>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                  {roles.map((r) => (
-                    <button
-                      key={r.role}
-                      type="button"
-                      onClick={() => {
-                        switchDemoRole(r.role);
-                        setIsRoleDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${currentUser?.role === r.role
-                          ? 'bg-slate-100 font-bold text-slate-900'
-                          : 'hover:bg-slate-50 text-slate-700'
-                        }`}
-                    >
-                      <span>{r.labelBn}</span>
-                      {currentUser?.role === r.role && (
-                        <span className="text-emerald-600 font-bold">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Notifications */}
             <Link

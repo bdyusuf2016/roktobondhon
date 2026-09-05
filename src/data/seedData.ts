@@ -344,6 +344,7 @@ export const INITIAL_FUND_DONATIONS: FundDonation[] = [
     verifiedBy: 'সুপার এডমিন',
     verifiedAt: '2026-09-01T10:30:00.000Z',
     createdAt: '2026-09-01T10:15:00.000Z',
+    organizationId: 'org-roktobondon',
   },
   {
     id: 'fdon-002',
@@ -361,6 +362,7 @@ export const INITIAL_FUND_DONATIONS: FundDonation[] = [
     verifiedBy: 'সুপার এডমিন',
     verifiedAt: '2026-09-02T14:20:00.000Z',
     createdAt: '2026-09-02T14:00:00.000Z',
+    organizationId: 'org-roktobondon',
   },
   {
     id: 'fdon-003',
@@ -379,6 +381,7 @@ export const INITIAL_FUND_DONATIONS: FundDonation[] = [
     verifiedBy: 'কবির হোসেন (মডারেটর)',
     verifiedAt: '2026-09-03T16:00:00.000Z',
     createdAt: '2026-09-03T15:30:00.000Z',
+    organizationId: 'org-roktobondon',
   },
   {
     id: 'fdon-004',
@@ -395,6 +398,7 @@ export const INITIAL_FUND_DONATIONS: FundDonation[] = [
     verifiedBy: 'সুপার এডমিন',
     verifiedAt: '2026-09-04T11:10:00.000Z',
     createdAt: '2026-09-04T10:45:00.000Z',
+    organizationId: 'org-roktobondon',
   },
 ];
 

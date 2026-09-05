@@ -5,6 +5,8 @@ import type {
   Branch,
   Donation,
   Donor,
+  DonorPublic,
+  DonorPrivate,
   DonorRequest,
   LocationItem,
   NotificationItem,
@@ -29,13 +31,37 @@ import {
   INITIAL_FUND_DONATIONS,
   INITIAL_FUND_DISBURSEMENTS,
   DEFAULT_PERMISSION_MATRIX,
-  PERMISSION_DEFINITIONS,
 } from '../data/seedData';
 import { HOSPITALS_DATA } from '../data/hospitalsData';
 import { INITIAL_LOCATIONS, INITIAL_BRANCHES } from '../services/locationService';
 import { generateBloodRequestId, generateDonorId, getLocationCode } from '../services/idGenerator';
-import { db, isFirebaseConfigured } from '../firebase/config';
-import { collection, doc, setDoc, updateDoc, getDocs } from 'firebase/firestore';
+import { db, isFirebaseConfigured, isDemoMode } from '../firebase/config';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  writeBatch,
+  serverTimestamp,
+} from 'firebase/firestore';
+import {
+  createDonorRecord,
+  updateDonorRecord,
+  verifyDonorStatus,
+} from '../services/donorService';
+import {
+  createBloodRequestRecord,
+  updateBloodRequestStatusInFirestore,
+  verifyBloodRequestInFirestore,
+} from '../services/bloodRequestService';
+import {
+  sendDonorContactRequest,
+  respondToDonorRequest,
+} from '../services/donorRequestService';
+import { recordDonationInFirestore } from '../services/donationService';
+import { recordAuditLog } from '../services/auditService';
 
 interface DataContextType {
   donors: Donor[];
@@ -91,6 +117,7 @@ interface DataContextType {
   addAuditLog: (action: string, targetType: string, targetId: string, metadata?: Record<string, any>, user?: { id: string; name: string; role: UserRole }) => void;
   markNotificationRead: (id: string) => void;
   resetDemoData: () => void;
+  migrateLocalToFirestore: () => Promise<{ success: boolean; message: string }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -115,6 +142,7 @@ const STORAGE_KEYS = {
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [donors, setDonors] = useState<Donor[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONORS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -123,6 +151,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.REQUESTS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -131,6 +160,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donorRequests, setDonorRequests] = useState<DonorRequest[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONOR_REQUESTS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -139,14 +169,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donations, setDonations] = useState<Donation[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONATIONS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return generateSeedDonations(donors, bloodRequests);
+    return generateSeedDonations(generateSeedDonors(), generateSeedRequests());
   });
 
   const [locations, setLocations] = useState<LocationItem[]>(() => {
+    if (!isDemoMode) return INITIAL_LOCATIONS;
     const saved = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -155,6 +187,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
+    if (!isDemoMode) return INITIAL_BRANCHES;
     const saved = localStorage.getItem(STORAGE_KEYS.BRANCHES);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -163,11 +196,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
+    const defaultNotif: NotificationItem[] = [
       {
         id: 'notif-welcome',
         userId: 'all',
@@ -178,9 +207,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       },
     ];
+    if (!isDemoMode) return defaultNotif;
+    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return defaultNotif;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
@@ -200,6 +236,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [hospitals, setHospitals] = useState<Hospital[]>(() => {
+    if (!isDemoMode) return HOSPITALS_DATA;
     const saved = localStorage.getItem(STORAGE_KEYS.HOSPITALS);
     if (saved) {
       try {
@@ -213,6 +250,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDonations, setFundDonations] = useState<FundDonation[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.FUND_DONATIONS);
     if (saved) {
       try {
@@ -226,6 +264,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(() => {
+    if (!isDemoMode) return INITIAL_PAYMENT_METHODS;
     const saved = localStorage.getItem(STORAGE_KEYS.PAYMENT_METHODS);
     if (saved) {
       try {
@@ -239,6 +278,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donationCauses, setDonationCauses] = useState<DonationCauseConfig[]>(() => {
+    if (!isDemoMode) return INITIAL_DONATION_CAUSES;
     const saved = localStorage.getItem(STORAGE_KEYS.DONATION_CAUSES);
     if (saved) {
       try {
@@ -252,6 +292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDisbursements, setFundDisbursements] = useState<FundDisbursement[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.FUND_DISBURSEMENTS);
     if (saved) {
       try {
@@ -265,6 +306,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [users, setUsers] = useState<User[]>(() => {
+    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.USERS);
     if (saved) {
       try {
@@ -278,6 +320,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix>(() => {
+    if (!isDemoMode) return DEFAULT_PERMISSION_MATRIX;
     const saved = localStorage.getItem(STORAGE_KEYS.PERMISSION_MATRIX);
     if (saved) {
       try {
@@ -291,65 +334,257 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync to localStorage
+  // Synchronize with Firestore when in production mode or when configured
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
+    if (!isFirebaseConfigured || !db) return;
+
+    let isMounted = true;
+    const loadFirestoreData = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Fetch public donors
+        const donorsSnap = await getDocs(collection(db, 'donorPublic'));
+        if (!donorsSnap.empty && isMounted) {
+          const loadedDonors: Donor[] = donorsSnap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              donorId: data.donorId || d.id,
+              fullName: data.fullName || 'স্বেচ্ছাসেবী রক্তদাতা',
+              photoUrl: data.photoUrl,
+              bloodGroup: data.bloodGroup,
+              division: data.division,
+              districtId: data.districtId,
+              district: data.district,
+              upazilaId: data.upazilaId,
+              upazila: data.upazila,
+              areaId: data.areaId,
+              area: data.area,
+              locationLabel: data.locationLabel,
+              availability: Boolean(data.availability),
+              emergencyAvailable: Boolean(data.emergencyAvailable),
+              lastDonationDate: data.lastDonationDate,
+              firstDonationDate: data.firstDonationDate,
+              totalDonations: data.totalDonations || 0,
+              verificationStatus: data.verificationStatus || 'pending',
+              organizationId: data.organizationId || 'org-roktobondon',
+              branchId: data.branchId || 'br-dhm',
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+              userId: data.userId || d.id,
+              phone: data.phone || '', // hidden by default in donorPublic
+              privacy: data.privacy || {
+                showPhone: false,
+                showGender: false,
+                showAge: false,
+                allowDirectContact: true,
+              },
+            };
+          });
+          setDonors(loadedDonors);
+        } else if (isDemoMode && isMounted) {
+          // If Firestore is empty and demo mode is on, fallback to local seed donors
+          setDonors((prev) => (prev.length > 0 ? prev : generateSeedDonors()));
+        }
+
+        // 2. Fetch blood requests (attempt private first, fallback to public emergency listing)
+        let loadedReqs: BloodRequest[] = [];
+        try {
+          const reqSnap = await getDocs(collection(db, 'bloodRequests'));
+          if (!reqSnap.empty && isMounted) {
+            loadedReqs = reqSnap.docs.map((d) => ({
+              id: d.id,
+              requestId: d.data().requestId || d.id,
+              ...d.data(),
+            } as BloodRequest));
+          }
+        } catch {
+          // If unauthenticated or regular donor without private read permission, fetch public emergency requests
+          try {
+            const pubReqSnap = await getDocs(collection(db, 'bloodRequestPublic'));
+            if (!pubReqSnap.empty && isMounted) {
+              loadedReqs = pubReqSnap.docs.map((d) => {
+                const data = d.data();
+                return {
+                  id: d.id,
+                  requestId: data.requestId || d.id,
+                  userId: data.userId || '',
+                  patientName: 'জরুরি রক্তের আবেদন',
+                  bloodGroup: data.bloodGroup,
+                  requiredUnits: data.requiredUnits || 1,
+                  requiredDate: data.requiredDate,
+                  requiredTime: data.requiredTime,
+                  hospital: data.hospital,
+                  division: data.division || 'Dhaka',
+                  district: data.district,
+                  upazila: data.upazila,
+                  area: data.area,
+                  contactPerson: '',
+                  contactNumber: '',
+                  relationship: '',
+                  emergencyLevel: data.emergencyLevel || 'NORMAL',
+                  notes: '',
+                  status: data.status,
+                  verification: data.verification || { isVerified: false },
+                  organizationId: data.organizationId || 'org-roktobondon',
+                  createdAt: data.createdAt || new Date().toISOString(),
+                  expiresAt: data.expiresAt,
+                } as BloodRequest;
+              });
+            }
+          } catch (pubErr) {
+            console.warn('Could not fetch public blood requests:', pubErr);
+          }
+        }
+
+        if (loadedReqs.length > 0 && isMounted) {
+          setBloodRequests(loadedReqs);
+        } else if (isDemoMode && isMounted) {
+          setBloodRequests((prev) => (prev.length > 0 ? prev : generateSeedRequests()));
+        }
+
+        // 3. Fetch donor requests
+        const dreqSnap = await getDocs(collection(db, 'donorRequests'));
+        if (!dreqSnap.empty && isMounted) {
+          setDonorRequests(dreqSnap.docs.map((d) => ({ id: d.id, ...d.data() } as DonorRequest)));
+        }
+
+        // 4. Fetch donations
+        const donSnap = await getDocs(collection(db, 'donations'));
+        if (!donSnap.empty && isMounted) {
+          setDonations(donSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Donation)));
+        }
+
+        // 5. Fetch hospitals
+        const hospSnap = await getDocs(collection(db, 'hospitals'));
+        if (!hospSnap.empty && isMounted) {
+          setHospitals(hospSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Hospital)));
+        }
+
+        // 6. Fetch fund donations (Restricted to authenticated staff or donor owner)
+        try {
+          const fundSnap = await getDocs(collection(db, 'fundDonations'));
+          if (!fundSnap.empty && isMounted) {
+            setFundDonations(fundSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FundDonation)));
+          }
+        } catch {
+          // Fund donations are private; public unauthenticated visitors read only local/demo fallbacks
+        }
+
+        // 7. Fetch payment methods
+        const paySnap = await getDocs(collection(db, 'paymentMethods'));
+        if (!paySnap.empty && isMounted) {
+          setPaymentMethods(paySnap.docs.map((d) => ({ id: d.id, ...d.data() } as PaymentMethodConfig)));
+        }
+
+        // 8. Fetch users
+        const usersSnap = await getDocs(collection(db, 'users'));
+        if (!usersSnap.empty && isMounted) {
+          setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User)));
+        }
+      } catch (err) {
+        console.warn('Firestore initial synchronization notice:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadFirestoreData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync to localStorage only in Demo Mode
+  useEffect(() => {
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
+    }
   }, [donors]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(bloodRequests));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(bloodRequests));
+    }
   }, [bloodRequests]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONOR_REQUESTS, JSON.stringify(donorRequests));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.DONOR_REQUESTS, JSON.stringify(donorRequests));
+    }
   }, [donorRequests]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
+    }
   }, [donations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
+    }
   }, [locations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(branches));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(branches));
+    }
   }, [branches]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
+    }
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+    }
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.HOSPITALS, JSON.stringify(hospitals));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.HOSPITALS, JSON.stringify(hospitals));
+    }
   }, [hospitals]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.FUND_DONATIONS, JSON.stringify(fundDonations));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.FUND_DONATIONS, JSON.stringify(fundDonations));
+    }
   }, [fundDonations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PAYMENT_METHODS, JSON.stringify(paymentMethods));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.PAYMENT_METHODS, JSON.stringify(paymentMethods));
+    }
   }, [paymentMethods]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONATION_CAUSES, JSON.stringify(donationCauses));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.DONATION_CAUSES, JSON.stringify(donationCauses));
+    }
   }, [donationCauses]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.FUND_DISBURSEMENTS, JSON.stringify(fundDisbursements));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.FUND_DISBURSEMENTS, JSON.stringify(fundDisbursements));
+    }
   }, [fundDisbursements]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    }
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(permissionMatrix));
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(permissionMatrix));
+    }
   }, [permissionMatrix]);
 
   const addAuditLog = useCallback(
@@ -361,7 +596,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user?: { id: string; name: string; role: UserRole }
     ) => {
       const newLog: AuditLog = {
-        id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         userId: user?.id || 'system',
         userName: user?.name || 'অজ্ঞাত ব্যবহারকারী',
         userRole: user?.role || 'volunteer',
@@ -372,6 +607,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: new Date().toISOString(),
       };
       setAuditLogs((prev) => [newLog, ...prev.slice(0, 99)]);
+      if (isFirebaseConfigured && !isDemoMode) {
+        recordAuditLog(action, targetType, targetId, metadata, user).catch(() => {});
+      }
     },
     []
   );
@@ -381,25 +619,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<BloodRequest> => {
     setIsLoading(true);
     try {
-      const id = `req-${Date.now()}`;
-      const requestId = generateBloodRequestId(bloodRequests.length + 101);
-      const newReq: BloodRequest = {
-        ...data,
-        id,
-        requestId,
-        status: 'active',
-        verification: {
-          isVerified: false,
-        },
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 48 * 3600000).toISOString(),
-      };
+      let newReq: BloodRequest;
+      if (isFirebaseConfigured && !isDemoMode) {
+        newReq = await createBloodRequestRecord(data);
+      } else {
+        const id = `req-${Date.now()}`;
+        const requestId = generateBloodRequestId(bloodRequests.length + 101);
+        newReq = {
+          ...data,
+          id,
+          requestId,
+          status: 'active',
+          verification: {
+            isVerified: false,
+          },
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 48 * 3600000).toISOString(),
+        };
 
-      if (isFirebaseConfigured && db) {
-        try {
-          await setDoc(doc(db, 'bloodRequests', id), newReq);
-        } catch (err) {
-          console.warn('Firestore write fallback to local', err);
+        if (isFirebaseConfigured && db) {
+          try {
+            await setDoc(doc(db, 'bloodRequests', id), newReq);
+          } catch (err) {
+            console.warn('Firestore fallback', err);
+          }
         }
       }
 
@@ -420,7 +663,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
       ]);
 
-      addAuditLog('Blood Request Created', 'BloodRequest', id, { requestId, bloodGroup: newReq.bloodGroup });
+      addAuditLog('Blood Request Created', 'BloodRequest', newReq.id, {
+        requestId: newReq.requestId,
+        bloodGroup: newReq.bloodGroup,
+      });
       return newReq;
     } finally {
       setIsLoading(false);
@@ -431,12 +677,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setBloodRequests((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status } : r))
     );
-    if (isFirebaseConfigured && db) {
-      try {
-        await updateDoc(doc(db, 'bloodRequests', id), { status });
-      } catch (e) {
-        console.warn('Firestore update error', e);
-      }
+    if (isFirebaseConfigured) {
+      await updateBloodRequestStatusInFirestore(id, status);
     }
     addAuditLog('Request Status Updated', 'BloodRequest', id, { newStatus: status });
   };
@@ -456,6 +698,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
+    if (isFirebaseConfigured) {
+      await verifyBloodRequestInFirestore(id, verifierName);
+    }
     addAuditLog('Request Verified', 'BloodRequest', id, { verifierName });
   };
 
@@ -468,21 +713,67 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const locationCode = getLocationCode(data.upazila, data.district);
       const donorId = generateDonorId(locationCode, donors.length + 101);
 
-      const newDonor: Donor = {
-        ...data,
+      const publicData: DonorPublic = {
         id,
         donorId,
-        verificationStatus: 'pending',
+        fullName: data.fullName,
+        photoUrl: data.photoUrl,
+        bloodGroup: data.bloodGroup,
+        division: data.division,
+        districtId: data.districtId,
+        district: data.district,
+        upazilaId: data.upazilaId,
+        upazila: data.upazila,
+        areaId: data.areaId,
+        area: data.area,
+        locationLabel: data.locationLabel,
+        availability: Boolean(data.availability),
+        emergencyAvailable: Boolean(data.emergencyAvailable),
+        lastDonationDate: data.lastDonationDate,
+        firstDonationDate: data.firstDonationDate,
         totalDonations: data.lastDonationDate ? 1 : 0,
+        verificationStatus: 'pending',
+        organizationId: data.organizationId || 'org-roktobondon',
+        branchId: data.branchId || 'br-dhm',
+        createdAt: new Date().toISOString(),
+      };
+
+      const privateData: DonorPrivate = {
+        donorId,
+        userId: data.userId || id,
+        phone: data.phone,
+        email: data.email,
+        gender: data.gender,
+        dateOfBirth: data.dateOfBirth,
+        exactAddress: data.exactAddress || '',
+        emergencyContact: data.emergencyContact || '',
+        adminNotes: data.adminNotes || '',
+        nidOrIdNumber: data.nidOrIdNumber || '',
+        privacy: data.privacy || {
+          showPhone: false,
+          showGender: false,
+          showAge: false,
+          allowDirectContact: true,
+        },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      if (isFirebaseConfigured && db) {
-        try {
-          await setDoc(doc(db, 'donors', id), newDonor);
-        } catch (err) {
-          console.warn('Firestore write error fallback', err);
+      let newDonor: Donor;
+      if (isFirebaseConfigured && !isDemoMode) {
+        newDonor = await createDonorRecord(publicData, privateData);
+      } else {
+        newDonor = {
+          ...publicData,
+          ...privateData,
+          updatedAt: new Date().toISOString(),
+        };
+        if (isFirebaseConfigured && db) {
+          try {
+            await createDonorRecord(publicData, privateData);
+          } catch (e) {
+            console.warn('Firestore donor fallback', e);
+          }
         }
       }
 
@@ -498,13 +789,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDonors((prev) =>
       prev.map((d) => (d.id === id ? { ...d, ...data, updatedAt: new Date().toISOString() } : d))
     );
-    if (isFirebaseConfigured && db) {
-      try {
-        await updateDoc(doc(db, 'donors', id), data);
-      } catch (e) {
-        console.warn('Firestore update error', e);
-      }
+
+    if (isFirebaseConfigured) {
+      const publicFields: Partial<DonorPublic> = {};
+      const privateFields: Partial<DonorPrivate> = {};
+
+      if (data.fullName !== undefined) publicFields.fullName = data.fullName;
+      if (data.photoUrl !== undefined) publicFields.photoUrl = data.photoUrl;
+      if (data.bloodGroup !== undefined) publicFields.bloodGroup = data.bloodGroup;
+      if (data.district !== undefined) publicFields.district = data.district;
+      if (data.upazila !== undefined) publicFields.upazila = data.upazila;
+      if (data.area !== undefined) publicFields.area = data.area;
+      if (data.availability !== undefined) publicFields.availability = data.availability;
+      if (data.emergencyAvailable !== undefined) publicFields.emergencyAvailable = data.emergencyAvailable;
+      if (data.lastDonationDate !== undefined) publicFields.lastDonationDate = data.lastDonationDate;
+      if (data.totalDonations !== undefined) publicFields.totalDonations = data.totalDonations;
+
+      if (data.phone !== undefined) privateFields.phone = data.phone;
+      if (data.email !== undefined) privateFields.email = data.email;
+      if (data.gender !== undefined) privateFields.gender = data.gender;
+      if (data.dateOfBirth !== undefined) privateFields.dateOfBirth = data.dateOfBirth;
+      if (data.exactAddress !== undefined) privateFields.exactAddress = data.exactAddress;
+      if (data.privacy !== undefined) privateFields.privacy = data.privacy;
+      if (data.adminNotes !== undefined) privateFields.adminNotes = data.adminNotes;
+
+      await updateDonorRecord(id, publicFields, privateFields);
     }
+
     addAuditLog('Donor Profile Updated', 'Donor', id);
   };
 
@@ -528,6 +839,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : d
       )
     );
+
+    if (isFirebaseConfigured) {
+      await verifyDonorStatus(donorId, status, verifierName, notes);
+    }
+
     addAuditLog(`Donor Verification: ${status}`, 'Donor', donorId, { verifierName, notes });
   };
 
@@ -537,7 +853,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     requesterUserId: string,
     matchScore: number
   ): Promise<DonorRequest> => {
-    // Check if duplicate request exists for this donor & request
     const existing = donorRequests.find(
       (r) => r.bloodRequestId === bloodRequestId && r.donorId === donor.id
     );
@@ -546,21 +861,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const bloodReq = bloodRequests.find((r) => r.id === bloodRequestId);
+    let newRequest: DonorRequest;
 
-    const newRequest: DonorRequest = {
-      id: `dreq-${Date.now()}`,
-      bloodRequestId,
-      donorId: donor.id,
-      donorUserId: donor.userId,
-      requesterUserId,
-      status: 'pending',
-      matchScore,
-      patientName: bloodReq?.patientName || 'রোগী',
-      hospital: bloodReq?.hospital || 'হাসপাতাল',
-      bloodGroup: donor.bloodGroup,
-      emergencyLevel: bloodReq?.emergencyLevel || 'NORMAL',
-      createdAt: new Date().toISOString(),
-    };
+    if (isFirebaseConfigured && !isDemoMode && bloodReq) {
+      newRequest = await sendDonorContactRequest(bloodReq, donor, requesterUserId, matchScore);
+    } else {
+      newRequest = {
+        id: `dreq-${Date.now()}`,
+        bloodRequestId,
+        donorId: donor.id,
+        donorUserId: donor.userId,
+        requesterUserId,
+        status: 'pending',
+        matchScore,
+        patientName: bloodReq?.patientName || 'রোগী',
+        hospital: bloodReq?.hospital || 'হাসপাতাল',
+        bloodGroup: donor.bloodGroup,
+        emergencyLevel: bloodReq?.emergencyLevel || 'NORMAL',
+        createdAt: new Date().toISOString(),
+      };
+    }
 
     setDonorRequests((prev) => [newRequest, ...prev]);
 
@@ -606,31 +926,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
+    if (isFirebaseConfigured) {
+      await respondToDonorRequest(requestId, status, declineReason);
+    }
+
     addAuditLog(`Donor Response: ${status}`, 'DonorRequest', requestId, { status, declineReason });
   };
 
   const recordDonation = async (donationData: Omit<Donation, 'id'>): Promise<Donation> => {
-    const id = `don-${Date.now()}`;
-    const newDonation: Donation = { ...donationData, id };
+    let newDonation: Donation;
+    if (isFirebaseConfigured && !isDemoMode) {
+      newDonation = await recordDonationInFirestore(donationData);
+    } else {
+      const id = `don-${Date.now()}`;
+      newDonation = { ...donationData, id };
+      if (isFirebaseConfigured && db) {
+        try {
+          await recordDonationInFirestore(donationData);
+        } catch (e) {
+          console.warn('Firestore donation fallback', e);
+        }
+      }
+    }
 
     setDonations((prev) => [newDonation, ...prev]);
 
     // Also update donor's totalDonations & lastDonationDate
     setDonors((prev) =>
       prev.map((d) =>
-        d.donorId === donationData.donorId || d.userId === donationData.donorUserId
+        d.donorId === donationData.donorId || d.userId === donationData.donorUserId || d.id === donationData.donorId
           ? {
               ...d,
               totalDonations: (d.totalDonations || 0) + 1,
               lastDonationDate: donationData.donationDate,
-              availability: false, // automatically set unavailable after recent donation
+              availability: false,
               updatedAt: new Date().toISOString(),
             }
           : d
       )
     );
 
-    // If there's an associated blood request, update its status to fulfilled
+    // If associated blood request exists, fulfill it
     if (donationData.requestId) {
       setBloodRequests((prev) =>
         prev.map((r) =>
@@ -639,9 +975,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : r
         )
       );
+      if (isFirebaseConfigured) {
+        updateBloodRequestStatusInFirestore(donationData.requestId, 'fulfilled').catch(() => {});
+      }
     }
 
-    addAuditLog('Donation Completed', 'Donation', id, {
+    addAuditLog('Donation Completed', 'Donation', newDonation.id, {
       donorId: donationData.donorId,
       units: donationData.units,
       hospital: donationData.hospital,
@@ -654,6 +993,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = `loc-${Date.now()}`;
     const newLoc: LocationItem = { ...locationData, id };
     setLocations((prev) => [...prev, newLoc]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'locations', id), newLoc).catch(() => {});
+    }
     addAuditLog('Location Added', 'Location', id, { upazila: newLoc.upazila });
     return newLoc;
   };
@@ -662,6 +1004,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = `br-${Date.now()}`;
     const newBranch: Branch = { ...branchData, id };
     setBranches((prev) => [...prev, newBranch]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'branches', id), newBranch).catch(() => {});
+    }
     addAuditLog('Branch Created', 'Branch', id, { nameBn: newBranch.nameBn });
     return newBranch;
   };
@@ -679,11 +1024,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id,
     };
     setHospitals((prev) => [newHospital, ...prev]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'hospitals', id), newHospital).catch(() => {});
+    }
     addAuditLog(
       `নতুন হাসপাতাল যুক্ত করা হয়েছে: ${newHospital.nameBn}`,
       'HOSPITAL',
       newHospital.id,
-      { nameBn: newHospital.nameBn, upazila: newHospital.upazila, isCommunityAdded: newHospital.isCommunityAdded }
+      { nameBn: newHospital.nameBn, upazila: newHospital.upazila }
     );
     return newHospital;
   };
@@ -692,22 +1040,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setHospitals((prev) =>
       prev.map((h) => (h.id === id ? { ...h, ...data } : h))
     );
-    addAuditLog(
-      `হাসপাতালের তথ্য আপডেট করা হয়েছে`,
-      'HOSPITAL',
-      id,
-      data
-    );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'hospitals', id), data).catch(() => {});
+    }
+    addAuditLog('হাসপাতালের তথ্য আপডেট করা হয়েছে', 'HOSPITAL', id, data);
   };
 
   const deleteHospital = async (id: string) => {
-    const target = hospitals.find((h) => h.id === id);
     setHospitals((prev) => prev.filter((h) => h.id !== id));
-    addAuditLog(
-      `হাসপাতাল মুছে ফেলা হয়েছে: ${target?.nameBn || id}`,
-      'HOSPITAL',
-      id
-    );
+    if (isFirebaseConfigured && db) {
+      deleteDoc(doc(db, 'hospitals', id)).catch(() => {});
+    }
+    addAuditLog('হাসপাতাল মুছে ফেলা হয়েছে', 'HOSPITAL', id);
   };
 
   const verifyHospital = async (id: string) => {
@@ -718,14 +1062,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : h
       )
     );
-    addAuditLog(
-      `হাসপাতাল ভেরিফাই ও অনুমোদন করা হয়েছে`,
-      'HOSPITAL',
-      id
-    );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'hospitals', id), {
+        verificationStatus: 'verified',
+        isCommunityAdded: false,
+      }).catch(() => {});
+    }
+    addAuditLog('হাসপাতাল ভেরিফাই ও অনুমোদন করা হয়েছে', 'HOSPITAL', id);
   };
 
-  // --- FINANCIAL DONATIONS ---
   const addFundDonation = async (
     donationData: Omit<FundDonation, 'id' | 'createdAt' | 'status'>
   ): Promise<FundDonation> => {
@@ -733,14 +1078,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...donationData,
       id: `fdon-${Date.now()}`,
       status: 'pending',
+      organizationId: donationData.organizationId || 'org-roktobondon',
       createdAt: new Date().toISOString(),
     };
     setFundDonations((prev) => [newDonation, ...prev]);
+    if (isFirebaseConfigured && db) {
+      const cleanData = Object.fromEntries(
+        Object.entries(newDonation).filter(([_, v]) => v !== undefined)
+      );
+      setDoc(doc(db, 'fundDonations', newDonation.id), cleanData).catch((err) => {
+        console.error('Firestore add fund donation error:', err);
+      });
+    }
     addAuditLog(
       `নতুন আর্থিক অনুদান জমা দেওয়া হয়েছে: ৳${newDonation.amount} (${newDonation.paymentMethod})`,
       'FUND_DONATION',
       newDonation.id,
-      { amount: newDonation.amount, method: newDonation.paymentMethod, donor: newDonation.donorName }
+      { amount: newDonation.amount, method: newDonation.paymentMethod }
     );
     return newDonation;
   };
@@ -753,6 +1107,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : d
       )
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'fundDonations', id), {
+        status: 'verified',
+        verifiedBy: verifierName,
+        verifiedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
     addAuditLog(`অনুদান ভেরিফাই ও অনুমোদন করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
 
@@ -760,6 +1121,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFundDonations((prev) =>
       prev.map((d) => (d.id === id ? { ...d, status: 'rejected' } : d))
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'fundDonations', id), { status: 'rejected' }).catch(() => {});
+    }
     addAuditLog(`অনুদান বাতিল/অস্বীকৃত করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
 
@@ -771,6 +1135,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `disb-${Date.now()}`,
     };
     setFundDisbursements((prev) => [newDisb, ...prev]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'fundDisbursements', newDisb.id), newDisb).catch(() => {});
+    }
     addAuditLog(
       `তহবিল থেকে ব্যয়/বিতরণ রেকর্ড করা হয়েছে: ৳${newDisb.amount} (${newDisb.title})`,
       'DISBURSEMENT',
@@ -782,6 +1149,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteFundDisbursement = async (id: string) => {
     setFundDisbursements((prev) => prev.filter((d) => d.id !== id));
+    if (isFirebaseConfigured && db) {
+      deleteDoc(doc(db, 'fundDisbursements', id)).catch(() => {});
+    }
     addAuditLog(`ব্যয় রেকর্ড মুছে ফেলা হয়েছে: ${id}`, 'DISBURSEMENT', id);
   };
 
@@ -789,6 +1159,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPaymentMethods((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...data } : m))
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'paymentMethods', id), data).catch(() => {});
+    }
     addAuditLog(`পেমেন্ট মেথড আপডেট করা হয়েছে: ${id}`, 'PAYMENT_METHOD', id, data);
   };
 
@@ -800,12 +1173,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `pay-${Date.now()}`,
     };
     setPaymentMethods((prev) => [...prev, newMethod]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'paymentMethods', newMethod.id), newMethod).catch(() => {});
+    }
     addAuditLog(`নতুন পেমেন্ট মেথড যুক্ত করা হয়েছে: ${newMethod.nameBn}`, 'PAYMENT_METHOD', newMethod.id);
     return newMethod;
   };
 
   const deletePaymentMethod = async (id: string) => {
     setPaymentMethods((prev) => prev.filter((m) => m.id !== id));
+    if (isFirebaseConfigured && db) {
+      deleteDoc(doc(db, 'paymentMethods', id)).catch(() => {});
+    }
     addAuditLog(`পেমেন্ট মেথড মুছে ফেলা হয়েছে: ${id}`, 'PAYMENT_METHOD', id);
   };
 
@@ -813,6 +1192,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDonationCauses((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...data } : c))
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'donationCauses', id), data).catch(() => {});
+    }
     addAuditLog(`অনুদান খাত আপডেট করা হয়েছে: ${id}`, 'DONATION_CAUSE', id, data);
   };
 
@@ -824,17 +1206,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `cause-${Date.now()}`,
     };
     setDonationCauses((prev) => [...prev, newCause]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'donationCauses', newCause.id), newCause).catch(() => {});
+    }
     addAuditLog(`নতুন অনুদান খাত যুক্ত করা হয়েছে: ${newCause.nameBn}`, 'DONATION_CAUSE', newCause.id);
     return newCause;
   };
 
-  // --- USER MANAGEMENT ---
   const updateUserRole = async (userId: string, newRole: UserRole) => {
     setUsers((prev) =>
       prev.map((u) =>
         u.id === userId ? { ...u, role: newRole, updatedAt: new Date().toISOString() } : u
       )
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'users', userId), {
+        role: newRole,
+        updatedAt: new Date().toISOString(),
+        serverUpdatedAt: serverTimestamp(),
+      }).catch(() => {});
+    }
     addAuditLog(`ব্যবহারকারীর রোল পরিবর্তন করা হয়েছে: ${userId} -> ${newRole}`, 'USER', userId, { newRole });
   };
 
@@ -844,6 +1235,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         u.id === userId ? { ...u, ...data, updatedAt: new Date().toISOString() } : u
       )
     );
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, 'users', userId), {
+        ...data,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
     addAuditLog(`ব্যবহারকারীর তথ্য আপডেট করা হয়েছে: ${userId}`, 'USER', userId, data);
   };
 
@@ -857,16 +1254,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
     setUsers((prev) => [newUser, ...prev]);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, 'users', newUser.id), newUser).catch(() => {});
+    }
     addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${newUser.fullName} (${newUser.role})`, 'USER', newUser.id);
     return newUser;
   };
 
   const deleteUser = async (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    if (isFirebaseConfigured && db) {
+      deleteDoc(doc(db, 'users', userId)).catch(() => {});
+    }
     addAuditLog(`ব্যবহারকারী মুছে ফেলা হয়েছে: ${userId}`, 'USER', userId);
   };
 
-  // --- ROLE & PERMISSION MATRIX MANAGEMENT ---
   const updateRolePermission = async (role: UserRole, permission: PermissionKey, allowed: boolean) => {
     setPermissionMatrix((prev) => ({
       ...prev,
@@ -892,7 +1294,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return Boolean(permissionMatrix[role]?.[permission]);
   };
 
-  // --- DATA BACKUP & RESTORE ---
   const exportBackupData = (): string => {
     const savedOrgConfig = localStorage.getItem('roktobondon_org_config');
     let orgConfig;
@@ -976,7 +1377,119 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Migrate current local seed state into Firestore with donorPublic / donorPrivate partitioning
+   */
+  const migrateLocalToFirestore = async (): Promise<{ success: boolean; message: string }> => {
+    if (!isFirebaseConfigured || !db) {
+      return { success: false, message: 'Firebase কনফিগার করা নেই। .env ভেরিয়েবল চেক করুন।' };
+    }
+
+    try {
+      setIsLoading(true);
+      const batch = writeBatch(db);
+
+      // Seed donors partitioned
+      for (const d of donors) {
+        const pubRef = doc(db, 'donorPublic', d.id);
+        const privRef = doc(db, 'donorPrivate', d.id);
+
+        batch.set(pubRef, {
+          id: d.id,
+          donorId: d.donorId,
+          fullName: d.fullName,
+          photoUrl: d.photoUrl || '',
+          bloodGroup: d.bloodGroup,
+          district: d.district,
+          upazila: d.upazila,
+          area: d.area,
+          availability: d.availability,
+          emergencyAvailable: d.emergencyAvailable,
+          lastDonationDate: d.lastDonationDate || '',
+          totalDonations: d.totalDonations || 0,
+          verificationStatus: d.verificationStatus,
+          organizationId: d.organizationId || 'org-roktobondon',
+          branchId: d.branchId || 'br-dhm',
+          createdAt: d.createdAt || new Date().toISOString(),
+        });
+
+        batch.set(privRef, {
+          donorId: d.donorId,
+          userId: d.userId || d.id,
+          phone: d.phone || '',
+          email: d.email || '',
+          gender: d.gender || 'male',
+          dateOfBirth: d.dateOfBirth || '',
+          exactAddress: d.exactAddress || '',
+          privacy: d.privacy,
+          adminNotes: d.adminNotes || '',
+          createdAt: d.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      // Seed blood requests (both private and public-safe collections)
+      for (const req of bloodRequests) {
+        const reqRef = doc(db, 'bloodRequests', req.id);
+        batch.set(reqRef, req);
+
+        const pubRef = doc(db, 'bloodRequestPublic', req.id);
+        batch.set(pubRef, {
+          id: req.id,
+          requestId: req.requestId,
+          userId: req.userId,
+          bloodGroup: req.bloodGroup,
+          requiredUnits: req.requiredUnits,
+          division: req.division,
+          district: req.district,
+          upazila: req.upazila,
+          area: req.area,
+          emergencyLevel: req.emergencyLevel,
+          requiredDate: req.requiredDate,
+          requiredTime: req.requiredTime,
+          hospital: req.hospital,
+          status: req.status,
+          verification: req.verification,
+          organizationId: req.organizationId || 'org-roktobondon',
+          createdAt: req.createdAt,
+          expiresAt: req.expiresAt,
+        });
+      }
+
+      // Seed hospitals
+      for (const hosp of hospitals) {
+        const hospRef = doc(db, 'hospitals', hosp.id);
+        batch.set(hospRef, hosp);
+      }
+
+      // Seed payment methods
+      for (const pay of paymentMethods) {
+        const payRef = doc(db, 'paymentMethods', pay.id);
+        batch.set(payRef, pay);
+      }
+
+      // Seed donation causes
+      for (const cause of donationCauses) {
+        const causeRef = doc(db, 'donationCauses', cause.id);
+        batch.set(causeRef, cause);
+      }
+
+      await batch.commit();
+      addAuditLog('ডেটা সফলভাবে ফায়ারবেজ ক্লাউড ফায়ারস্টোরে মাইগ্রেট করা হয়েছে', 'MIGRATION', 'FIRESTORE');
+      return { success: true, message: 'সকল লোকাল ডেটা ফায়ারস্টোর ক্লাউডে সফলভাবে সেভ করা হয়েছে!' };
+    } catch (err: any) {
+      console.error('Migration failed:', err);
+      return { success: false, message: err.message || 'ফায়ারস্টোরে মাইগ্রেশন ব্যর্থ হয়েছে।' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetDemoData = () => {
+    if (!isDemoMode) {
+      console.warn('resetDemoData is strictly disabled in production mode');
+      return;
+    }
     const seedDonors = generateSeedDonors();
     const seedRequests = generateSeedRequests();
     const seedDonations = generateSeedDonations(seedDonors, seedRequests);
@@ -1079,6 +1592,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addAuditLog,
         markNotificationRead,
         resetDemoData,
+        migrateLocalToFirestore,
       }}
     >
       {children}

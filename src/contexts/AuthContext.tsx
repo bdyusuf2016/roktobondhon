@@ -1,25 +1,39 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
 import { INITIAL_DEMO_USERS } from '../data/seedData';
-import { auth, isFirebaseConfigured } from '../firebase/config';
+import { auth, isFirebaseConfigured, isDemoMode } from '../firebase/config';
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
   type User as FirebaseUser,
+  type ConfirmationResult,
 } from 'firebase/auth';
+import {
+  signInEmail,
+  registerEmail,
+  signOutUser,
+  subscribeToAuth,
+  sendFirebasePhoneOtp,
+  confirmFirebasePhoneOtp,
+  signInGoogle,
+} from '../services/authService';
+import {
+  getUserProfile,
+  createUserProfile,
+  updateUserProfile as updateFirebaseUserProfile,
+} from '../services/userService';
 
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
   isLoading: boolean;
+  isDemoMode: boolean;
+  sendPhoneOtp: (phoneNumber: string) => Promise<ConfirmationResult>;
+  loginWithPhoneOtp: (phone: string, otp: string, confirmation?: ConfirmationResult) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  loginWithPhoneOtp: (phone: string, otp: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (fullName: string, email: string, phone: string, role: UserRole, pass?: string) => Promise<User>;
   logout: () => Promise<void>;
   switchDemoRole: (role: UserRole) => void;
-  updateCurrentUser: (data: Partial<User>) => void;
+  updateCurrentUser: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,65 +42,147 @@ const AUTH_STORAGE_KEY = 'roktobondon_current_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    // In production (!isDemoMode), do NOT load any user from localStorage
+    if (!isDemoMode) {
+      return null;
+    }
+
+    // In demo mode only, load cached user or default to super_admin for full exploratory preview
     const saved = localStorage.getItem(AUTH_STORAGE_KEY);
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        console.error('Failed to parse cached user', e);
+        console.error('Failed to parse cached demo user', e);
       }
     }
-    // Default to a verified donor/super_admin or initial demo user for instant accessibility
-    return INITIAL_DEMO_USERS[0]; // super_admin by default for full preview access, user can switch freely
+    return INITIAL_DEMO_USERS[0];
   });
 
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  // Sync current user to local storage in Demo Mode only
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (isDemoMode) {
+      if (currentUser) {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
     }
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
-  // Hook Firebase Auth if configured
+  // Listen to Firebase Auth state
   useEffect(() => {
-    if (isFirebaseConfigured && auth) {
-      const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-        setFirebaseUser(fbUser);
-        if (fbUser && !currentUser) {
-          const matched = INITIAL_DEMO_USERS.find((u) => u.email === fbUser.email);
-          if (matched) {
-            setCurrentUser(matched);
+    if (!isFirebaseConfigured || !auth) return;
+
+    const unsubscribe = subscribeToAuth(async (fbUser) => {
+      setFirebaseUser(fbUser);
+      if (fbUser) {
+        // Fetch or create profile in Firestore
+        try {
+          const profile = await getUserProfile(fbUser.uid);
+          if (profile) {
+            setCurrentUser(profile);
           } else {
-            setCurrentUser({
-              id: fbUser.uid,
+            // New user registration in Firestore
+            const newProfile = await createUserProfile(fbUser.uid, {
               fullName: fbUser.displayName || 'সম্মানিত সদস্য',
+              phone: fbUser.phoneNumber || '',
               email: fbUser.email || undefined,
-              phone: fbUser.phoneNumber || '+8801700000000',
               role: 'donor',
-              organizationId: 'org-roktobondon',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
+              photoUrl: fbUser.photoURL || undefined,
+              phoneVerified: Boolean(fbUser.phoneNumber),
             });
+            setCurrentUser(newProfile);
           }
+        } catch (err) {
+          console.error('Error synchronizing auth user profile:', err);
         }
-      });
-      return () => unsubscribe();
+      } else if (!isDemoMode) {
+        // User logged out in production
+        setCurrentUser(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const sendPhoneOtp = async (phoneNumber: string): Promise<ConfirmationResult> => {
+    if (isDemoMode) {
+      // Mock confirmation result for demo mode
+      return {
+        verificationId: 'mock-verification-id',
+        confirm: async () => ({
+          user: {
+            uid: `demo-user-${Date.now()}`,
+            phoneNumber,
+          } as FirebaseUser,
+          providerId: 'phone',
+          operationType: 'signIn',
+        }),
+      } as unknown as ConfirmationResult;
     }
-  }, [currentUser]);
+    return await sendFirebasePhoneOtp(phoneNumber);
+  };
+
+  const loginWithPhoneOtp = async (phone: string, otp: string, confirmation?: ConfirmationResult) => {
+    setIsLoading(true);
+    try {
+      if (isDemoMode) {
+        if (otp.length < 4) {
+          throw new Error('অনুগ্রহ করে সঠিক ৪-৬ ডিজিটের ওটিপি (OTP) প্রদান করুন');
+        }
+        const matched = INITIAL_DEMO_USERS.find((u) => u.phone === phone) || {
+          id: `user-phone-${Date.now()}`,
+          fullName: 'মোবাইল রক্তদাতা',
+          phone,
+          role: 'donor' as UserRole,
+          organizationId: 'org-roktobondon',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentUser(matched);
+        return;
+      }
+
+      // Real Firebase OTP Confirmation
+      const fbUser = await confirmFirebasePhoneOtp(confirmation, otp);
+      setFirebaseUser(fbUser);
+
+      // Load or create Firestore user profile
+      const profile = await getUserProfile(fbUser.uid);
+      if (profile) {
+        setCurrentUser(profile);
+      } else {
+        const newProfile = await createUserProfile(fbUser.uid, {
+          fullName: fbUser.displayName || 'মোবাইল ব্যবহারকারী',
+          phone: fbUser.phoneNumber || phone,
+          role: 'donor',
+          phoneVerified: true,
+        });
+        setCurrentUser(newProfile);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loginWithEmail = async (email: string, pass: string) => {
     setIsLoading(true);
     try {
       if (isFirebaseConfigured && auth) {
-        const cred = await signInWithEmailAndPassword(auth, email, pass);
-        setFirebaseUser(cred.user);
+        const fbUser = await signInEmail(email, pass);
+        setFirebaseUser(fbUser);
+        const profile = await getUserProfile(fbUser.uid);
+        if (profile) {
+          setCurrentUser(profile);
+          return;
+        }
       }
 
-      // Match demo or existing user
+      // Demo or local fallback
       const matched = INITIAL_DEMO_USERS.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || {
         id: `user-${Date.now()}`,
         fullName: email.split('@')[0],
@@ -103,24 +199,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithPhoneOtp = async (phone: string, otp: string) => {
+  const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      // Simulate/Validate OTP (any 6 digit OTP like 123456)
-      if (otp.length < 4) {
-        throw new Error('অনুগ্রহ করে সঠিক ৪-৬ ডিজিটের ওটিপি (OTP) প্রদান করুন');
+      if (isFirebaseConfigured && auth) {
+        const fbUser = await signInGoogle();
+        setFirebaseUser(fbUser);
+        const profile = await getUserProfile(fbUser.uid);
+        if (profile) {
+          setCurrentUser(profile);
+        } else {
+          const newProfile = await createUserProfile(fbUser.uid, {
+            fullName: fbUser.displayName || 'গুগল ব্যবহারকারী',
+            phone: fbUser.phoneNumber || '',
+            email: fbUser.email || undefined,
+            role: 'donor',
+            photoUrl: fbUser.photoURL || undefined,
+            phoneVerified: Boolean(fbUser.phoneNumber),
+          });
+          setCurrentUser(newProfile);
+        }
+      } else {
+        // Fallback demo user
+        setCurrentUser(INITIAL_DEMO_USERS[0]);
       }
-
-      const matched = INITIAL_DEMO_USERS.find((u) => u.phone === phone) || {
-        id: `user-phone-${Date.now()}`,
-        fullName: 'মোবাইল ব্যবহারকারী',
-        phone,
-        role: 'donor' as UserRole,
-        organizationId: 'org-roktobondon',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setCurrentUser(matched);
     } finally {
       setIsLoading(false);
     }
@@ -136,8 +238,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       if (isFirebaseConfigured && auth && email && pass) {
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        setFirebaseUser(cred.user);
+        const fbUser = await registerEmail(email, pass);
+        setFirebaseUser(fbUser);
+        const profile = await createUserProfile(fbUser.uid, {
+          fullName,
+          phone,
+          email,
+          role,
+        });
+        setCurrentUser(profile);
+        return profile;
       }
 
       const newUser: User = {
@@ -159,19 +269,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    if (isFirebaseConfigured && auth) {
-      try {
-        await firebaseSignOut(auth);
-      } catch (err) {
-        console.warn('Firebase signOut error', err);
-      }
+    setIsLoading(true);
+    try {
+      await signOutUser();
+    } finally {
+      setFirebaseUser(null);
+      setCurrentUser(null);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      setIsLoading(false);
     }
-    setFirebaseUser(null);
-    setCurrentUser(null);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
   const switchDemoRole = (role: UserRole) => {
+    if (!isDemoMode) {
+      console.warn('Demo role switching is disabled in production.');
+      return;
+    }
     const demo = INITIAL_DEMO_USERS.find((u) => u.role === role);
     if (demo) {
       setCurrentUser(demo);
@@ -180,8 +293,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateCurrentUser = (data: Partial<User>) => {
-    setCurrentUser((prev) => (prev ? { ...prev, ...data, updatedAt: new Date().toISOString() } : null));
+  const updateCurrentUser = async (data: Partial<User>) => {
+    if (currentUser) {
+      const updated = { ...currentUser, ...data, updatedAt: new Date().toISOString() };
+      setCurrentUser(updated);
+
+      if (isFirebaseConfigured && !isDemoMode) {
+        try {
+          await updateFirebaseUserProfile(currentUser.id, {
+            fullName: data.fullName,
+            photoUrl: data.photoUrl,
+            email: data.email,
+            phone: data.phone,
+          });
+        } catch (err) {
+          console.error('Failed to sync profile update to Firestore:', err);
+        }
+      }
+    }
   };
 
   return (
@@ -190,8 +319,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         firebaseUser,
         isLoading,
-        loginWithEmail,
+        isDemoMode,
+        sendPhoneOtp,
         loginWithPhoneOtp,
+        loginWithEmail,
+        loginWithGoogle,
         register,
         logout,
         switchDemoRole,

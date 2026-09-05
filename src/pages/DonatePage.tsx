@@ -145,6 +145,7 @@ export const DonatePage: React.FC = () => {
         area: area.trim(),
         message: message.trim() || undefined,
         isAnonymous,
+        organizationId: 'org-roktobondon',
       });
 
       setSubmittedDonation(created);
