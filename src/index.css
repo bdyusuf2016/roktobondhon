@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.012em;
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
+/* Geometric Balance Architectural Backgrounds */
+.geometric-dots {
+  background-image: radial-gradient(rgba(15, 23, 42, 0.07) 1.25px, transparent 1.25px);
+  background-size: 20px 20px;
+}
+
+.geometric-dots-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1.25px, transparent 1.25px);
+  background-size: 20px 20px;
+}
+
+.geometric-grid-subtle {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+}
+
+.geometric-grid-subtle-dark {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}

@@ -1,0 +1,22 @@
+{
+  "short_name": "রক্তবন্ধন",
+  "name": "রক্তবন্ধন (RoktoBondon) - রক্তদান প্ল্যাটফর্ম",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' fill='%23dc2626'><path d='M96 170.8l-11.6-10.56C43.2 122.88 16 98.24 16 68 16 43.36 35.36 24 60 24c13.92 0 27.28 6.48 36 16.72C104.72 30.48 118.08 24 132 24c24.64 0 44 19.36 44 44 0 30.24-27.2 54.88-68.4 92.32L96 170.8z'/></svg>",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23dc2626'><path d='M256 455.5l-30.9-28.16C115.2 327.68 42.67 261.97 42.67 181.33 42.67 115.63 94.29 64 160 64c37.12 0 72.75 17.28 96 44.59C279.25 81.28 314.88 64 352 64c65.71 0 117.33 51.63 117.33 117.33 0 80.64-72.53 146.35-182.4 246.19L256 455.5z'/></svg>",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#dc2626",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/"
+}

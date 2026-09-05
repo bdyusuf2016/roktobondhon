@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? getUserData().role
+        : 'public';
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        getUserRole() == 'super_admin' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && request.auth.token.email == 'mdyusufcbc@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (isSignedIn() && getUserRole() == 'admin');
+    }
+
+    function isModerator() {
+      return isAdmin() || (isSignedIn() && getUserRole() == 'moderator');
+    }
+
+    function isVolunteer() {
+      return isModerator() || (isSignedIn() && getUserRole() == 'volunteer');
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isVolunteer();
+      allow create: if isOwner(userId) &&
+        (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role in ['donor', 'recipient']);
+      allow update: if isOwner(userId) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'organizationId']))
+        || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Donors collection
+    // Public can list and get privacy-safe donor profiles
+    // Private fields (NID, exact address, private contact) are protected
+    match /donors/{donorId} {
+      allow read: if true; // Public listing for emergency blood matching
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid &&
+        request.resource.data.verificationStatus == 'pending';
+      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verificationStatus', 'verifiedBy', 'verifiedAt', 'totalDonations']))
+        || isModerator();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Blood Requests
+    match /bloodRequests/{requestId} {
+      allow read: if true; // Blood requests need to be visible to donors and public
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isVolunteer();
+      allow delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+    }
+
+    // Donor Requests (Matching notifications & invitations)
+    match /donorRequests/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.donorUserId == request.auth.uid ||
+        resource.data.requesterUserId == request.auth.uid ||
+        isVolunteer()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.donorUserId == request.auth.uid ||
+        resource.data.requesterUserId == request.auth.uid ||
+        isVolunteer()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Donations history
+    match /donations/{donationId} {
+      allow read: if isSignedIn() && (resource.data.donorUserId == request.auth.uid || isVolunteer());
+      allow create: if isVolunteer();
+      allow update: if isVolunteer();
+      allow delete: if isAdmin();
+    }
+
+    // Organization & Branch Hierarchy
+    match /organizations/{orgId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /branches/{branchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Locations (Configurable districts, upazilas, unions)
+    match /locations/{locationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Hospitals & Blood Banks
+    match /hospitals/{hospitalId} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+
+    match /bloodBanks/{bankId} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+
+    // Volunteers
+    match /volunteers/{volunteerId} {
+      allow read: if isVolunteer();
+      allow write: if isAdmin();
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Audit logs & Verification logs
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Immutable logs
+    }
+
+    match /verificationLogs/{logId} {
+      allow read: if isVolunteer();
+      allow create: if isVolunteer();
+      allow update, delete: if false;
+    }
+
+    // System settings
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+  }
+}
