@@ -1,29 +1,22 @@
 # RoktoBondhon — Production Deployment Checklist
 
-Use this checklist prior to launching the platform live on GitHub Pages or custom domain with Firebase.
+Use this checklist prior to launching the platform live on GitHub Pages or custom domain with Supabase.
 
 ---
 
-## 1. Firebase Project Configuration
-- [ ] Create or select Firebase Project in [Firebase Console](https://console.firebase.google.com/).
-- [ ] **Authentication Providers**:
-  - [ ] Enable **Phone Authentication** (under *Authentication* > *Sign-in method*).
-  - [ ] Enable **Google Sign-In** (under *Authentication* > *Sign-in method*).
-  - [ ] Enable **Email/Password** (under *Authentication* > *Sign-in method*).
-  - [ ] Add your production domains (e.g. `your-username.github.io` or custom domain) to **Authorized Domains**.
-- [ ] **Cloud Firestore**:
-  - [ ] Initialize Firestore in **Production Mode**.
-  - [ ] Deploy security rules: `firebase deploy --only firestore:rules`.
-  - [ ] Deploy composite indexes: `firebase deploy --only firestore:indexes`.
-- [ ] **Cloud Storage**:
-  - [ ] Initialize Storage bucket.
-  - [ ] Deploy storage rules: `firebase deploy --only storage`.
+## 1. Supabase Project Configuration
+- [ ] Create or select Supabase Project in [Supabase Dashboard](https://supabase.com/).
+- [ ] **SQL Schema**:
+  - [ ] Open **SQL Editor** in Supabase.
+  - [ ] Run `supabase/schema.sql` to initialize all PostgreSQL tables, indexes, and RLS policies.
+- [ ] **Storage Buckets**:
+  - [ ] Verify `avatars`, `verification-docs`, and `assets` buckets exist in Storage.
 
 ---
 
 ## 2. Environment Variables & Demo Mode
-- [ ] Set `VITE_DEMO_MODE=false` in your production environment.
-- [ ] Provide all `VITE_FIREBASE_*` environment keys in `.env` (or GitHub Actions Repository Secrets).
+- [ ] Set `VITE_DEMO_MODE=false` in your production environment (or `.env`).
+- [ ] Provide `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` or GitHub Actions Repository Secrets.
 - [ ] Ensure `.env` is listed in `.gitignore` and never committed to source control.
 
 ---
@@ -33,24 +26,17 @@ Use this checklist prior to launching the platform live on GitHub Pages or custo
   ```bash
   npm run seed
   ```
-- [ ] Verify in Firestore console that collections are created:
-  - `donorPublic` & `donorPrivate`
-  - `bloodRequests`
+- [ ] Verify in Supabase Table Editor that tables are populated:
+  - `donors`
+  - `blood_requests`
   - `hospitals`
-  - `branches` & `locations`
-  - `paymentMethods` & `donationCauses`
+  - `blood_camps`
+  - `payment_methods`
   - `users`
 
 ---
 
-## 4. Super Admin Promotion
-- [ ] Log in with your production phone or Google account.
-- [ ] In the Firebase Console under `users/{your-uid}`, set `role: "super_admin"`.
-- [ ] Create a document in `admins/{your-uid}` to grant super administrator privileges.
-
----
-
-## 5. Build & CI/CD Validation
+## 4. Build & CI/CD Validation
 - [ ] Run type check: `npm run lint` (must pass with 0 errors).
 - [ ] Run production build: `npm run build` (must pass with 0 errors).
 - [ ] Push to `main` branch and verify that GitHub Actions (`.github/workflows/deploy.yml`) builds and deploys successfully.

@@ -39,7 +39,7 @@ export type DonationType = 'Whole Blood' | 'Platelets' | 'Plasma' | 'RBC';
 export type Gender = 'male' | 'female' | 'other';
 
 export interface User {
-  id: string; // Firebase Auth UID
+  id: string; // User ID (Auth UID)
   fullName: string;
   email?: string;
   phone: string;

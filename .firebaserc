@@ -1,8 +1,0 @@
-{
-  "projects": {
-    "default": "roktobondon-app",
-    "production": "blood-donor-app-6ec9d"
-  },
-  "targets": {},
-  "etags": {}
-}
