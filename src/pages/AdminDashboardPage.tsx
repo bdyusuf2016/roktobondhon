@@ -39,7 +39,7 @@ import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDialog } from '../contexts/DialogContext';
-import { isDemoMode } from '../firebase/config';
+import { isDemoMode } from '../supabase/config';
 import { PERMISSION_DEFINITIONS } from '../data/seedData';
 import type {
   BloodGroup,

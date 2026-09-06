@@ -1,20 +1,22 @@
-import {
-  doc,
-  getDocs,
-  setDoc,
-  collection,
-  query,
-  orderBy,
-  limit,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase/config';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
 import type { AuditLog, UserRole } from '../types';
 
-const AUDIT_COLLECTION = 'auditLogs';
+function mapAuditLogRow(row: any): AuditLog {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userRole: (row.user_role as UserRole) || 'volunteer',
+    action: row.action,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
+    timestamp: row.timestamp || new Date().toISOString(),
+  };
+}
 
 /**
- * Record an immutable audit log entry in Firestore
+ * Record an immutable audit log entry in Supabase
  */
 export async function recordAuditLog(
   action: string,
@@ -36,15 +38,21 @@ export async function recordAuditLog(
     timestamp: new Date().toISOString(),
   };
 
-  if (isFirebaseConfigured && db) {
+  if (isSupabaseConfigured && supabase) {
     try {
-      const ref = doc(db, AUDIT_COLLECTION, id);
-      await setDoc(ref, {
-        ...log,
-        serverTimestamp: serverTimestamp(),
+      await supabase.from('audit_logs').insert({
+        id: log.id,
+        user_id: log.userId,
+        user_name: log.userName,
+        user_role: log.userRole,
+        action: log.action,
+        target_type: log.targetType,
+        target_id: log.targetId,
+        metadata: log.metadata,
+        timestamp: log.timestamp,
       });
     } catch (err) {
-      console.warn('Failed to record audit log in Firestore:', err);
+      console.warn('Failed to record audit log in Supabase:', err);
     }
   }
 
@@ -55,17 +63,22 @@ export async function recordAuditLog(
  * Fetch latest audit logs (admin access)
  */
 export async function getAuditLogsFromFirestore(limitCount: number = 100): Promise<AuditLog[]> {
-  if (!isFirebaseConfigured || !db) return [];
+  if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const q = query(
-      collection(db, AUDIT_COLLECTION),
-      orderBy('timestamp', 'desc'),
-      limit(limitCount)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditLog));
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(limitCount);
+
+    if (error) {
+      console.error('Error fetching audit logs from Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map(mapAuditLogRow);
   } catch (err) {
-    console.error('Error fetching audit logs:', err);
+    console.error('Exception fetching audit logs:', err);
     return [];
   }
 }

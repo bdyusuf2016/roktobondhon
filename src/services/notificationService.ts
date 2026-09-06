@@ -1,38 +1,39 @@
-import {
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase/config';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
 import type { NotificationItem } from '../types';
 
-const NOTIFICATIONS_COLLECTION = 'notifications';
+function mapNotificationRow(row: any): NotificationItem {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    message: row.message,
+    type: row.type || 'system',
+    link: row.link || undefined,
+    isRead: Boolean(row.is_read),
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
 
 /**
  * Fetch notifications for a user (or broadcast 'all')
  */
 export async function getUserNotificationsFromFirestore(userId: string): Promise<NotificationItem[]> {
-  if (!isFirebaseConfigured || !db) return [];
+  if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const q1 = query(collection(db, NOTIFICATIONS_COLLECTION), where('userId', '==', userId));
-    const q2 = query(collection(db, NOTIFICATIONS_COLLECTION), where('userId', '==', 'all'));
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .in('user_id', [userId, 'all'])
+      .order('created_at', { ascending: false });
 
-    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-    const map = new Map<string, NotificationItem>();
+    if (error) {
+      console.error('Error fetching notifications from Supabase:', error);
+      return [];
+    }
 
-    snap1.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() } as NotificationItem));
-    snap2.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() } as NotificationItem));
-
-    return Array.from(map.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    return (data || []).map(mapNotificationRow);
   } catch (err) {
-    console.error('Error fetching notifications:', err);
+    console.error('Exception fetching notifications:', err);
     return [];
   }
 }
@@ -49,12 +50,21 @@ export async function sendNotificationToFirestore(
     id,
   };
 
-  if (isFirebaseConfigured && db) {
-    const ref = doc(db, NOTIFICATIONS_COLLECTION, id);
-    await setDoc(ref, {
-      ...item,
-      serverCreatedAt: serverTimestamp(),
-    });
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('notifications').insert({
+        id: item.id,
+        user_id: item.userId,
+        title: item.title,
+        message: item.message,
+        type: item.type,
+        link: item.link || null,
+        is_read: item.isRead,
+        created_at: item.createdAt,
+      });
+    } catch (err) {
+      console.error('Error inserting notification in Supabase:', err);
+    }
   }
 
   return item;
@@ -64,10 +74,13 @@ export async function sendNotificationToFirestore(
  * Mark notification as read
  */
 export async function markNotificationAsReadInFirestore(id: string): Promise<void> {
-  if (!isFirebaseConfigured || !db) return;
-  const ref = doc(db, NOTIFICATIONS_COLLECTION, id);
-  await updateDoc(ref, {
-    isRead: true,
-    serverUpdatedAt: serverTimestamp(),
-  });
+  if (!isSupabaseConfigured || !supabase) return;
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error marking notification read in Supabase:', error);
+  }
 }

@@ -29,6 +29,9 @@ import { LoginPage } from './pages/LoginPage';
 import { ModalShowcasePage } from './pages/ModalShowcasePage';
 import { HospitalDirectoryPage } from './pages/HospitalDirectoryPage';
 import { DonatePage } from './pages/DonatePage';
+import { CertificatePage } from './pages/CertificatePage';
+import { BloodCampsPage } from './pages/BloodCampsPage';
+import { HealthEligibilityPage } from './pages/HealthEligibilityPage';
 
 export default function App() {
   return (
@@ -49,6 +52,9 @@ export default function App() {
                     <Route path="/request/:id" element={<RequestDetailPage />} />
                     <Route path="/become-donor" element={<BecomeDonorPage />} />
                     <Route path="/donor/:id" element={<DonorProfilePage />} />
+                    <Route path="/camps" element={<BloodCampsPage />} />
+                    <Route path="/certificate" element={<CertificatePage />} />
+                    <Route path="/health-checker" element={<HealthEligibilityPage />} />
                     <Route path="/notifications" element={<NotificationsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/admin" element={<AdminDashboardPage />} />

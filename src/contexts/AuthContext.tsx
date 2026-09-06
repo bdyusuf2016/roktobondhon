@@ -1,33 +1,30 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
 import { INITIAL_DEMO_USERS } from '../data/seedData';
-import { auth, isFirebaseConfigured, isDemoMode } from '../firebase/config';
-import {
-  type User as FirebaseUser,
-  type ConfirmationResult,
-} from 'firebase/auth';
+import { supabase, isSupabaseConfigured, isDemoMode } from '../supabase/config';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import {
   signInEmail,
   registerEmail,
   signOutUser,
   subscribeToAuth,
-  sendFirebasePhoneOtp,
-  confirmFirebasePhoneOtp,
+  sendSupabasePhoneOtp,
+  confirmSupabasePhoneOtp,
   signInGoogle,
 } from '../services/authService';
 import {
   getUserProfile,
   createUserProfile,
-  updateUserProfile as updateFirebaseUserProfile,
+  updateUserProfile as updateSupabaseUserProfile,
 } from '../services/userService';
 
 interface AuthContextType {
   currentUser: User | null;
-  firebaseUser: FirebaseUser | null;
+  supabaseUser: SupabaseUser | null;
   isLoading: boolean;
   isDemoMode: boolean;
-  sendPhoneOtp: (phoneNumber: string) => Promise<ConfirmationResult>;
-  loginWithPhoneOtp: (phone: string, otp: string, confirmation?: ConfirmationResult) => Promise<void>;
+  sendPhoneOtp: (phoneNumber: string) => Promise<boolean>;
+  loginWithPhoneOtp: (phone: string, otp: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   register: (fullName: string, email: string, phone: string, role: UserRole, pass?: string) => Promise<User>;
@@ -59,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_DEMO_USERS[0];
   });
 
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Sync current user to local storage in Demo Mode only
@@ -73,27 +70,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser, isDemoMode]);
 
-  // Listen to Firebase Auth state
+  // Listen to Supabase Auth state
   useEffect(() => {
-    if (!isFirebaseConfigured || !auth) return;
+    if (!isSupabaseConfigured || !supabase) return;
 
-    const unsubscribe = subscribeToAuth(async (fbUser) => {
-      setFirebaseUser(fbUser);
-      if (fbUser) {
-        // Fetch or create profile in Firestore
+    const unsubscribe = subscribeToAuth(async (sbUser) => {
+      setSupabaseUser(sbUser);
+      if (sbUser) {
         try {
-          const profile = await getUserProfile(fbUser.uid);
+          const profile = await getUserProfile(sbUser.id);
           if (profile) {
             setCurrentUser(profile);
           } else {
-            // New user registration in Firestore
-            const newProfile = await createUserProfile(fbUser.uid, {
-              fullName: fbUser.displayName || 'সম্মানিত সদস্য',
-              phone: fbUser.phoneNumber || '',
-              email: fbUser.email || undefined,
+            // New user registration in Supabase
+            const newProfile = await createUserProfile(sbUser.id, {
+              fullName: sbUser.user_metadata?.full_name || 'সম্মানিত সদস্য',
+              phone: sbUser.phone || '',
+              email: sbUser.email || undefined,
               role: 'donor',
-              photoUrl: fbUser.photoURL || undefined,
-              phoneVerified: Boolean(fbUser.phoneNumber),
+              photoUrl: sbUser.user_metadata?.avatar_url || undefined,
+              phoneVerified: Boolean(sbUser.phone),
             });
             setCurrentUser(newProfile);
           }
@@ -109,25 +105,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const sendPhoneOtp = async (phoneNumber: string): Promise<ConfirmationResult> => {
+  const sendPhoneOtp = async (phoneNumber: string): Promise<boolean> => {
     if (isDemoMode) {
-      // Mock confirmation result for demo mode
-      return {
-        verificationId: 'mock-verification-id',
-        confirm: async () => ({
-          user: {
-            uid: `demo-user-${Date.now()}`,
-            phoneNumber,
-          } as FirebaseUser,
-          providerId: 'phone',
-          operationType: 'signIn',
-        }),
-      } as unknown as ConfirmationResult;
+      return true;
     }
-    return await sendFirebasePhoneOtp(phoneNumber);
+    return await sendSupabasePhoneOtp(phoneNumber);
   };
 
-  const loginWithPhoneOtp = async (phone: string, otp: string, confirmation?: ConfirmationResult) => {
+  const loginWithPhoneOtp = async (phone: string, otp: string) => {
     setIsLoading(true);
     try {
       if (isDemoMode) {
@@ -147,18 +132,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Real Firebase OTP Confirmation
-      const fbUser = await confirmFirebasePhoneOtp(confirmation, otp);
-      setFirebaseUser(fbUser);
+      // Real Supabase OTP Verification
+      const sbUser = await confirmSupabasePhoneOtp(phone, otp);
+      setSupabaseUser(sbUser);
 
-      // Load or create Firestore user profile
-      const profile = await getUserProfile(fbUser.uid);
+      // Load or create user profile
+      const profile = await getUserProfile(sbUser.id);
       if (profile) {
         setCurrentUser(profile);
       } else {
-        const newProfile = await createUserProfile(fbUser.uid, {
-          fullName: fbUser.displayName || 'মোবাইল ব্যবহারকারী',
-          phone: fbUser.phoneNumber || phone,
+        const newProfile = await createUserProfile(sbUser.id, {
+          fullName: sbUser.user_metadata?.full_name || 'মোবাইল ব্যবহারকারী',
+          phone: sbUser.phone || phone,
           role: 'donor',
           phoneVerified: true,
         });
@@ -172,10 +157,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithEmail = async (email: string, pass: string) => {
     setIsLoading(true);
     try {
-      if (isFirebaseConfigured && auth) {
-        const fbUser = await signInEmail(email, pass);
-        setFirebaseUser(fbUser);
-        const profile = await getUserProfile(fbUser.uid);
+      if (isSupabaseConfigured && supabase) {
+        const sbUser = await signInEmail(email, pass);
+        setSupabaseUser(sbUser);
+        const profile = await getUserProfile(sbUser.id);
         if (profile) {
           setCurrentUser(profile);
           return;
@@ -202,23 +187,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     setIsLoading(true);
     try {
-      if (isFirebaseConfigured && auth) {
-        const fbUser = await signInGoogle();
-        setFirebaseUser(fbUser);
-        const profile = await getUserProfile(fbUser.uid);
-        if (profile) {
-          setCurrentUser(profile);
-        } else {
-          const newProfile = await createUserProfile(fbUser.uid, {
-            fullName: fbUser.displayName || 'গুগল ব্যবহারকারী',
-            phone: fbUser.phoneNumber || '',
-            email: fbUser.email || undefined,
-            role: 'donor',
-            photoUrl: fbUser.photoURL || undefined,
-            phoneVerified: Boolean(fbUser.phoneNumber),
-          });
-          setCurrentUser(newProfile);
-        }
+      if (isSupabaseConfigured && supabase) {
+        await signInGoogle();
       } else {
         // Fallback demo user
         setCurrentUser(INITIAL_DEMO_USERS[0]);
@@ -237,10 +207,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<User> => {
     setIsLoading(true);
     try {
-      if (isFirebaseConfigured && auth && email && pass) {
-        const fbUser = await registerEmail(email, pass);
-        setFirebaseUser(fbUser);
-        const profile = await createUserProfile(fbUser.uid, {
+      if (isSupabaseConfigured && supabase && email && pass) {
+        const sbUser = await registerEmail(email, pass);
+        setSupabaseUser(sbUser);
+        const profile = await createUserProfile(sbUser.id, {
           fullName,
           phone,
           email,
@@ -273,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signOutUser();
     } finally {
-      setFirebaseUser(null);
+      setSupabaseUser(null);
       setCurrentUser(null);
       localStorage.removeItem(AUTH_STORAGE_KEY);
       setIsLoading(false);
@@ -298,16 +268,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updated = { ...currentUser, ...data, updatedAt: new Date().toISOString() };
       setCurrentUser(updated);
 
-      if (isFirebaseConfigured && !isDemoMode) {
+      if (isSupabaseConfigured && !isDemoMode) {
         try {
-          await updateFirebaseUserProfile(currentUser.id, {
+          await updateSupabaseUserProfile(currentUser.id, {
             fullName: data.fullName,
             photoUrl: data.photoUrl,
             email: data.email,
             phone: data.phone,
           });
         } catch (err) {
-          console.error('Failed to sync profile update to Firestore:', err);
+          console.error('Failed to sync profile update to Supabase:', err);
         }
       }
     }
@@ -317,7 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         currentUser,
-        firebaseUser,
+        supabaseUser,
         isLoading,
         isDemoMode,
         sendPhoneOtp,

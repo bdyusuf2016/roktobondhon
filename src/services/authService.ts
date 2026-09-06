@@ -1,63 +1,14 @@
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as fbSignOut,
-  onAuthStateChanged,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  signInWithPopup,
-  GoogleAuthProvider,
-  type User as FirebaseUser,
-  type ConfirmationResult,
-} from 'firebase/auth';
-import { auth, isFirebaseConfigured } from '../firebase/config';
-
-// Store recaptcha verifier on window if necessary
-declare global {
-  interface Window {
-    recaptchaVerifier?: RecaptchaVerifier;
-    confirmationResult?: ConfirmationResult;
-  }
-}
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
 
 /**
- * Initialize invisible or visible reCAPTCHA verifier for Phone Auth
+ * Send Phone OTP via Supabase Auth
  */
-export function setupRecaptcha(containerId: string = 'recaptcha-container'): RecaptchaVerifier | null {
-  if (!isFirebaseConfigured || !auth) return null;
-  try {
-    if (window.recaptchaVerifier) {
-      window.recaptchaVerifier.clear();
-    }
-    const verifier = new RecaptchaVerifier(auth, containerId, {
-      size: 'invisible',
-      callback: () => {
-        // reCAPTCHA solved
-      },
-      'expired-callback': () => {
-        console.warn('reCAPTCHA expired, please try again.');
-      },
-    });
-    window.recaptchaVerifier = verifier;
-    return verifier;
-  } catch (err) {
-    console.error('Failed to setup reCAPTCHA:', err);
-    return null;
-  }
-}
-
-/**
- * Send Phone OTP via Firebase Auth
- */
-export async function sendFirebasePhoneOtp(
-  phoneNumber: string,
-  verifier?: RecaptchaVerifier | null
-): Promise<ConfirmationResult> {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Firebase Authentication কনফিগার করা নেই।');
+export async function sendSupabasePhoneOtp(phoneNumber: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
 
-  // Format phone number to E.164 (+880...) if it starts with 01
   let formattedPhone = phoneNumber.trim();
   if (formattedPhone.startsWith('01')) {
     formattedPhone = `+88${formattedPhone}`;
@@ -65,85 +16,128 @@ export async function sendFirebasePhoneOtp(
     formattedPhone = `+${formattedPhone}`;
   }
 
-  const appVerifier = verifier || window.recaptchaVerifier || setupRecaptcha('recaptcha-container');
-  if (!appVerifier) {
-    throw new Error('reCAPTCHA ভেরিফায়ার চালু করা যায়নি। পৃষ্ঠাটি রিফ্রেশ করুন।');
+  const { error } = await supabase.auth.signInWithOtp({
+    phone: formattedPhone,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'মোবাইলে ওটিপি পাঠাতে সমস্যা হয়েছে।');
   }
 
-  const confirmation = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
-  window.confirmationResult = confirmation;
-  return confirmation;
+  return true;
 }
 
 /**
- * Confirm Phone OTP Code
+ * Verify Phone OTP Code
  */
-export async function confirmFirebasePhoneOtp(
-  confirmation: ConfirmationResult | undefined,
+export async function confirmSupabasePhoneOtp(
+  phoneNumber: string,
   otpCode: string
-): Promise<FirebaseUser> {
-  const activeConfirmation = confirmation || window.confirmationResult;
-  if (!activeConfirmation) {
-    throw new Error('ওটিপি সেশন পাওয়া যায়নি। অনুগ্রহ করে পুনরায় ওটিপি পাঠান।');
+): Promise<SupabaseUser> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
-  const result = await activeConfirmation.confirm(otpCode);
-  return result.user;
+
+  let formattedPhone = phoneNumber.trim();
+  if (formattedPhone.startsWith('01')) {
+    formattedPhone = `+88${formattedPhone}`;
+  } else if (!formattedPhone.startsWith('+')) {
+    formattedPhone = `+${formattedPhone}`;
+  }
+
+  const { data, error } = await supabase.auth.verifyOtp({
+    phone: formattedPhone,
+    token: otpCode.trim(),
+    type: 'sms',
+  });
+
+  if (error || !data.user) {
+    throw new Error(error?.message || 'ওটিপি যাচাই ব্যর্থ হয়েছে। সঠিক কোড দিন।');
+  }
+
+  return data.user;
 }
 
 /**
  * Sign in with Email and Password
  */
-export async function signInEmail(email: string, pass: string): Promise<FirebaseUser> {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Firebase Authentication কনফিগার করা নেই।');
+export async function signInEmail(email: string, pass: string): Promise<SupabaseUser> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
-  const cred = await signInWithEmailAndPassword(auth, email, pass);
-  return cred.user;
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password: pass,
+  });
+
+  if (error || !data.user) {
+    throw new Error(error?.message || 'লগইন ব্যর্থ হয়েছে। সঠিক ইমেইল ও পাসওয়ার্ড দিন।');
+  }
+
+  return data.user;
 }
 
 /**
- * Create user with Email and Password
+ * Register user with Email and Password
  */
-export async function registerEmail(email: string, pass: string): Promise<FirebaseUser> {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Firebase Authentication কনফিগার করা নেই।');
+export async function registerEmail(email: string, pass: string): Promise<SupabaseUser> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
-  const cred = await createUserWithEmailAndPassword(auth, email, pass);
-  return cred.user;
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password: pass,
+  });
+
+  if (error || !data.user) {
+    throw new Error(error?.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
+  }
+
+  return data.user;
 }
 
 /**
- * Sign in with Google Popup
+ * Sign in with Google OAuth
  */
-export async function signInGoogle(): Promise<FirebaseUser> {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Firebase Authentication কনফিগার করা নেই।');
+export async function signInGoogle(): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
-  const provider = new GoogleAuthProvider();
-  const cred = await signInWithPopup(auth, provider);
-  return cred.user;
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'গুগল দিয়ে লগইন ব্যর্থ হয়েছে।');
+  }
 }
 
 /**
- * Sign out
+ * Sign out user
  */
 export async function signOutUser(): Promise<void> {
-  if (isFirebaseConfigured && auth) {
-    await fbSignOut(auth);
+  if (isSupabaseConfigured && supabase) {
+    await supabase.auth.signOut();
   }
-  if (window.recaptchaVerifier) {
-    window.recaptchaVerifier.clear();
-    window.recaptchaVerifier = undefined;
-  }
-  window.confirmationResult = undefined;
 }
 
 /**
  * Subscribe to Auth State Changes
  */
-export function subscribeToAuth(callback: (user: FirebaseUser | null) => void): () => void {
-  if (isFirebaseConfigured && auth) {
-    return onAuthStateChanged(auth, callback);
+export function subscribeToAuth(callback: (user: SupabaseUser | null) => void): () => void {
+  if (isSupabaseConfigured && supabase) {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user || null);
+    });
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }
   callback(null);
   return () => {};

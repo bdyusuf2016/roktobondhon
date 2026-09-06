@@ -21,6 +21,7 @@ import { useDialog } from '../contexts/DialogContext';
 import { findCompatibleDonors } from '../services/matchingService';
 import { DonorCard } from '../components/DonorCard';
 import { RequestDonorModal } from '../components/RequestDonorModal';
+import { EmergencyBroadcastModal } from '../components/EmergencyBroadcastModal';
 import type { Donor } from '../types';
 
 export const RequestDetailPage: React.FC = () => {
@@ -29,6 +30,8 @@ export const RequestDetailPage: React.FC = () => {
   const { bloodRequests, donors, updateBloodRequestStatus, verifyBloodRequest } = useData();
   const { currentUser } = useAuth();
   const dialog = useDialog();
+
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
 
   const [selectedDonorForModal, setSelectedDonorForModal] = useState<{
     donor: Donor;
@@ -103,11 +106,18 @@ export const RequestDetailPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleShare}
-            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200"
+            onClick={() => setShowBroadcastModal(true)}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />
-            শেয়ার করুন
+            সোশ্যাল ব্রডকাস্ট কিট (WhatsApp)
+          </button>
+          <button
+            type="button"
+            onClick={handleShare}
+            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
+          >
+            কপি
           </button>
 
           {isPrivileged && (
@@ -274,6 +284,14 @@ export const RequestDetailPage: React.FC = () => {
           matchScore={selectedDonorForModal.score}
           onClose={() => setSelectedDonorForModal(null)}
           onSuccess={() => setSelectedDonorForModal(null)}
+        />
+      )}
+
+      {showBroadcastModal && request && (
+        <EmergencyBroadcastModal
+          request={request}
+          isOpen={showBroadcastModal}
+          onClose={() => setShowBroadcastModal(false)}
         />
       )}
     </div>

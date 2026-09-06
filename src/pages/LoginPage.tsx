@@ -4,7 +4,6 @@ import { LogIn, Phone, Mail, Droplets, ShieldCheck, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 import type { UserRole } from '../types';
-import type { ConfirmationResult } from 'firebase/auth';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +14,6 @@ export const LoginPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,8 +30,7 @@ export const LoginPage: React.FC = () => {
       }
       setIsLoading(true);
       try {
-        const confirmation = await sendPhoneOtp(phone);
-        setConfirmationResult(confirmation);
+        await sendPhoneOtp(phone);
         setOtpSent(true);
         if (isDemoMode) {
           setOtp('123456'); // Pre-fill mock OTP in demo mode only
@@ -53,7 +50,7 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await loginWithPhoneOtp(phone, otp, confirmationResult || undefined);
+      await loginWithPhoneOtp(phone, otp);
       navigate('/profile');
     } catch (err: any) {
       setError(err.message || 'ওটিপি যাচাই ব্যর্থ হয়েছে। সঠিক কোড দিন।');
@@ -205,7 +202,6 @@ export const LoginPage: React.FC = () => {
                 onClick={() => {
                   setOtpSent(false);
                   setOtp('');
-                  setConfirmationResult(null);
                 }}
                 className="w-full text-center text-[11px] text-slate-500 hover:text-red-600 font-semibold pt-1"
               >

@@ -382,3 +382,54 @@ export interface DonationCauseConfig {
   isActive: boolean;
 }
 
+export interface BloodCamp {
+  id: string;
+  titleBn: string;
+  titleEn: string;
+  organizerName: string;
+  partnerHospital?: string;
+  division: string;
+  district: string;
+  upazila: string;
+  venueAddress: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  startTime: string; // e.g. "09:00 AM"
+  endTime: string; // e.g. "05:00 PM"
+  targetUnits: number;
+  collectedUnits?: number;
+  contactPerson: string;
+  contactPhone: string;
+  bannerUrl?: string;
+  descriptionBn: string;
+  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  registeredCount: number;
+  mapUrl?: string;
+  createdAt: string;
+}
+
+export interface CampRegistration {
+  id: string;
+  campId: string;
+  campTitle: string;
+  donorName: string;
+  phone: string;
+  bloodGroup: BloodGroup;
+  preferredTime?: string;
+  userId?: string;
+  status: 'registered' | 'donated' | 'cancelled';
+  createdAt: string;
+}
+
+export interface DonorBadge {
+  id: string;
+  titleBn: string;
+  titleEn: string;
+  level: 'bronze' | 'silver' | 'gold' | 'platinum' | 'legend';
+  minDonations: number;
+  iconName: string;
+  descriptionBn: string;
+  color: string;
+}
+
+

@@ -244,6 +244,71 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
+      {/* New Interactive Feature Cards: Camps, Certificate, AI Screener */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Card 1: Blood Camps */}
+          <Link
+            to="/camps"
+            className="group relative bg-gradient-to-br from-red-600 to-rose-700 text-white rounded-3xl p-6 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col justify-between"
+          >
+            <div className="space-y-2 relative z-10">
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-white/20 uppercase tracking-wider">
+                🎪 বিশেষ ইভেন্ট
+              </span>
+              <h3 className="text-xl font-black text-white pt-2">স্বেচ্ছায় রক্তদান ক্যাম্প</h3>
+              <p className="text-xs text-rose-100 leading-relaxed">
+                ধামরাই, সাভার ও মানিকগঞ্জে আয়োজিত আসন্ন ব্লাড ড্রাইভ ও ক্যাম্পে রক্ত দিতে প্রি-রেজিস্ট্রেশন করুন।
+              </p>
+            </div>
+            <div className="pt-6 flex items-center justify-between text-xs font-bold text-white relative z-10">
+              <span>ক্যাম্প সূচি দেখুন</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Card 2: Certificate & Badges */}
+          <Link
+            to="/certificate"
+            className="group relative bg-gradient-to-br from-amber-600 to-orange-700 text-white rounded-3xl p-6 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col justify-between"
+          >
+            <div className="space-y-2 relative z-10">
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-white/20 uppercase tracking-wider">
+                🏆 ডিজিটাল সম্মাননা
+              </span>
+              <h3 className="text-xl font-black text-white pt-2">রক্তদাতা সার্টিফিকেট ও ব্যাজ</h3>
+              <p className="text-xs text-amber-100 leading-relaxed">
+                আপনার রক্তদানের সংখ্যা অনুযায়ী অফিশিয়াল প্রশংসাপত্র ও স্মার্ট ডোনার আইডি কার্ড ডাউনলোড করুন।
+              </p>
+            </div>
+            <div className="pt-6 flex items-center justify-between text-xs font-bold text-white relative z-10">
+              <span>সনদপত্র সংগ্রহ করুন</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Card 3: AI Health Screener */}
+          <Link
+            to="/health-checker"
+            className="group relative bg-gradient-to-br from-indigo-700 to-slate-900 text-white rounded-3xl p-6 shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col justify-between"
+          >
+            <div className="space-y-2 relative z-10">
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-white/20 uppercase tracking-wider">
+                ✨ Gemini AI চালিত
+              </span>
+              <h3 className="text-xl font-black text-white pt-2">AI রক্তদান যোগ্যতা চেকার</h3>
+              <p className="text-xs text-indigo-100 leading-relaxed">
+                মাত্র ১ মিনিটে স্বাস্থ্য প্রশ্নের উত্তর দিয়ে নিশ্চিত হোন আপনি আজ রক্তদানের জন্য প্রস্তুত কিনা।
+              </p>
+            </div>
+            <div className="pt-6 flex items-center justify-between text-xs font-bold text-white relative z-10">
+              <span>স্বাস্থ্য পরীক্ষা করুন</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* Live Blood Requests Stream */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">

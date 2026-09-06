@@ -1,48 +1,47 @@
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase/config';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
 import type { User, UserRole } from '../types';
 
-const USERS_COLLECTION = 'users';
+/**
+ * Convert database row (snake_case) to User interface (camelCase)
+ */
+function mapUserRow(row: any): User {
+  return {
+    id: row.id,
+    fullName: row.full_name || 'সদস্য',
+    phone: row.phone || '',
+    email: row.email || undefined,
+    role: (row.role as UserRole) || 'donor',
+    organizationId: row.organization_id || 'org-roktobondon',
+    branchId: row.branch_id || undefined,
+    photoUrl: row.photo_url || undefined,
+    status: row.status || 'active',
+    phoneVerified: Boolean(row.phone_verified),
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+    lastLoginAt: row.last_login_at || undefined,
+  };
+}
 
 /**
- * Fetch user profile from Firestore: users/{uid}
+ * Fetch user profile from Supabase: users table
  */
 export async function getUserProfile(uid: string): Promise<User | null> {
-  if (!isFirebaseConfigured || !db) return null;
+  if (!isSupabaseConfigured || !supabase) return null;
   try {
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      return {
-        id: snap.id,
-        fullName: data.fullName || 'নাম পাওয়া যায়নি',
-        phone: data.phone || '',
-        email: data.email,
-        role: (data.role as UserRole) || 'donor',
-        organizationId: data.organizationId || 'org-roktobondon',
-        branchId: data.branchId,
-        photoUrl: data.photoUrl,
-        status: data.status || 'active',
-        phoneVerified: data.phoneVerified ?? false,
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: data.updatedAt || new Date().toISOString(),
-        lastLoginAt: data.lastLoginAt,
-      };
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching user profile from Supabase:', error);
+      return null;
     }
-    return null;
+
+    return data ? mapUserRow(data) : null;
   } catch (err) {
-    console.error('Error fetching user profile from Firestore:', err);
+    console.error('Exception in getUserProfile:', err);
     return null;
   }
 }
@@ -68,7 +67,6 @@ export async function createUserProfile(
     fullName: profile.fullName,
     phone: profile.phone,
     email: profile.email,
-    // Regular sign-up can only assign 'donor' or 'recipient' role; never admin/super_admin
     role: profile.role && ['donor', 'recipient'].includes(profile.role) ? profile.role : 'donor',
     organizationId: profile.organizationId || 'org-roktobondon',
     branchId: profile.branchId,
@@ -80,16 +78,27 @@ export async function createUserProfile(
     lastLoginAt: new Date().toISOString(),
   };
 
-  if (isFirebaseConfigured && db) {
+  if (isSupabaseConfigured && supabase) {
     try {
-      const userRef = doc(db, USERS_COLLECTION, uid);
-      await setDoc(userRef, {
-        ...newUser,
-        serverCreatedAt: serverTimestamp(),
-        serverUpdatedAt: serverTimestamp(),
+      const { error } = await supabase.from('users').upsert({
+        id: uid,
+        full_name: newUser.fullName,
+        phone: newUser.phone,
+        email: newUser.email || null,
+        role: newUser.role,
+        organization_id: newUser.organizationId,
+        branch_id: newUser.branchId || null,
+        photo_url: newUser.photoUrl || null,
+        status: newUser.status,
+        phone_verified: newUser.phoneVerified,
+        updated_at: new Date().toISOString(),
       });
+
+      if (error) {
+        console.error('Error creating user profile in Supabase:', error);
+      }
     } catch (err) {
-      console.error('Error creating user profile in Firestore:', err);
+      console.error('Exception creating user profile:', err);
     }
   }
 
@@ -97,26 +106,31 @@ export async function createUserProfile(
 }
 
 /**
- * Update allowed self profile fields (fullName, photoUrl, etc.).
- * Role, organizationId, and branchId are strictly excluded from client self-updates.
+ * Update allowed self profile fields (fullName, photoUrl, etc.)
  */
 export async function updateUserProfile(
   uid: string,
   allowedUpdates: Partial<Pick<User, 'fullName' | 'photoUrl' | 'email' | 'phone'>>
 ): Promise<void> {
-  if (!isFirebaseConfigured || !db) return;
-  const userRef = doc(db, USERS_COLLECTION, uid);
-  await updateDoc(userRef, {
-    ...allowedUpdates,
-    updatedAt: new Date().toISOString(),
-    serverUpdatedAt: serverTimestamp(),
-  });
+  if (!isSupabaseConfigured || !supabase) return;
+  const dbUpdates: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (allowedUpdates.fullName !== undefined) dbUpdates.full_name = allowedUpdates.fullName;
+  if (allowedUpdates.photoUrl !== undefined) dbUpdates.photo_url = allowedUpdates.photoUrl;
+  if (allowedUpdates.email !== undefined) dbUpdates.email = allowedUpdates.email;
+  if (allowedUpdates.phone !== undefined) dbUpdates.phone = allowedUpdates.phone;
+
+  const { error } = await supabase.from('users').update(dbUpdates).eq('id', uid);
+  if (error) {
+    console.error('Error updating user profile in Supabase:', error);
+  }
 }
 
 /**
  * Update user role (Privileged Admin Operation)
  */
-export async function updateUserRoleInFirestore(
+export async function updateUserRoleInSupabase(
   targetUserId: string,
   newRole: UserRole,
   adminUser: { id: string; role: UserRole }
@@ -125,46 +139,40 @@ export async function updateUserRoleInFirestore(
     throw new Error('রোল পরিবর্তন করার জন্য পর্যাপ্ত প্রশাসনিক অনুমতি নেই।');
   }
 
-  if (!isFirebaseConfigured || !db) return;
+  if (!isSupabaseConfigured || !supabase) return;
 
-  const userRef = doc(db, USERS_COLLECTION, targetUserId);
-  await updateDoc(userRef, {
-    role: newRole,
-    updatedAt: new Date().toISOString(),
-    serverUpdatedAt: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('users')
+    .update({
+      role: newRole,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', targetUserId);
+
+  if (error) {
+    throw new Error(error.message || 'রোল আপডেট করতে সমস্যা হয়েছে।');
+  }
 }
 
 /**
  * List users belonging to an organization
  */
 export async function listOrganizationUsers(organizationId: string): Promise<User[]> {
-  if (!isFirebaseConfigured || !db) return [];
+  if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const q = query(
-      collection(db, USERS_COLLECTION),
-      where('organizationId', '==', organizationId)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((docSnap) => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        fullName: data.fullName || 'সদস্য',
-        phone: data.phone || '',
-        email: data.email,
-        role: (data.role as UserRole) || 'donor',
-        organizationId: data.organizationId || organizationId,
-        branchId: data.branchId,
-        photoUrl: data.photoUrl,
-        status: data.status || 'active',
-        phoneVerified: data.phoneVerified ?? false,
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: data.updatedAt || new Date().toISOString(),
-      };
-    });
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('organization_id', organizationId);
+
+    if (error) {
+      console.error('Failed to list organization users:', error);
+      return [];
+    }
+
+    return (data || []).map(mapUserRow);
   } catch (err) {
-    console.error('Failed to list organization users:', err);
+    console.error('Exception listing organization users:', err);
     return [];
   }
 }

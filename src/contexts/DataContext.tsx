@@ -20,6 +20,9 @@ import type {
   User,
   RolePermissionMatrix,
   PermissionKey,
+  BloodCamp,
+  CampRegistration,
+  DonorBadge,
 } from '../types';
 import {
   generateSeedDonors,
@@ -31,30 +34,24 @@ import {
   INITIAL_FUND_DONATIONS,
   INITIAL_FUND_DISBURSEMENTS,
   DEFAULT_PERMISSION_MATRIX,
+  INITIAL_BLOOD_CAMPS,
+  DONOR_BADGES_LIST,
 } from '../data/seedData';
 import { HOSPITALS_DATA } from '../data/hospitalsData';
 import { INITIAL_LOCATIONS, INITIAL_BRANCHES } from '../services/locationService';
 import { generateBloodRequestId, generateDonorId, getLocationCode } from '../services/idGenerator';
-import { db, isFirebaseConfigured, isDemoMode } from '../firebase/config';
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  getDocs,
-  writeBatch,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase, isSupabaseConfigured, isDemoMode } from '../supabase/config';
 import {
   createDonorRecord,
   updateDonorRecord,
   verifyDonorStatus,
+  mapDonorRow,
 } from '../services/donorService';
 import {
   createBloodRequestRecord,
   updateBloodRequestStatusInFirestore,
   verifyBloodRequestInFirestore,
+  mapBloodRequestRow,
 } from '../services/bloodRequestService';
 import {
   sendDonorContactRequest,
@@ -78,6 +75,9 @@ interface DataContextType {
   donationCauses: DonationCauseConfig[];
   fundDisbursements: FundDisbursement[];
   users: User[];
+  bloodCamps: BloodCamp[];
+  campRegistrations: CampRegistration[];
+  donorBadges: DonorBadge[];
   permissionMatrix: RolePermissionMatrix;
   updateRolePermission: (role: UserRole, permission: PermissionKey, allowed: boolean) => Promise<void>;
   resetPermissionMatrix: () => void;
@@ -92,6 +92,10 @@ interface DataContextType {
   sendDonorRequest: (bloodRequestId: string, donor: Donor, requesterUserId: string, matchScore: number) => Promise<DonorRequest>;
   respondDonorRequest: (requestId: string, status: 'accepted' | 'maybe' | 'declined', declineReason?: string) => Promise<void>;
   recordDonation: (donation: Omit<Donation, 'id'>) => Promise<Donation>;
+  addBloodCamp: (camp: Omit<BloodCamp, 'id' | 'createdAt' | 'registeredCount'>) => Promise<BloodCamp>;
+  updateBloodCamp: (id: string, data: Partial<BloodCamp>) => Promise<void>;
+  deleteBloodCamp: (id: string) => Promise<void>;
+  registerForCamp: (registration: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>) => Promise<CampRegistration>;
   addLocation: (location: Omit<LocationItem, 'id'>) => Promise<LocationItem>;
   addBranch: (branch: Omit<Branch, 'id'>) => Promise<Branch>;
   addHospital: (hospital: Omit<Hospital, 'id'>) => Promise<Hospital>;
@@ -118,6 +122,7 @@ interface DataContextType {
   markNotificationRead: (id: string) => void;
   resetDemoData: () => void;
   migrateLocalToFirestore: () => Promise<{ success: boolean; message: string }>;
+  migrateLocalToSupabase?: () => Promise<{ success: boolean; message: string }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -137,6 +142,8 @@ const STORAGE_KEYS = {
   DONATION_CAUSES: 'roktobondon_donation_causes_v1',
   FUND_DISBURSEMENTS: 'roktobondon_fund_disbursements_v1',
   USERS: 'roktobondon_users_v1',
+  BLOOD_CAMPS: 'roktobondon_blood_camps_v1',
+  CAMP_REGISTRATIONS: 'roktobondon_camp_registrations_v1',
   PERMISSION_MATRIX: 'roktobondon_permission_matrix_v1',
 };
 
@@ -332,171 +339,217 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return DEFAULT_PERMISSION_MATRIX;
   });
 
+  const [bloodCamps, setBloodCamps] = useState<BloodCamp[]>(() => {
+    if (!isDemoMode) return INITIAL_BLOOD_CAMPS;
+    const saved = localStorage.getItem(STORAGE_KEYS.BLOOD_CAMPS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return INITIAL_BLOOD_CAMPS;
+  });
+
+  const [campRegistrations, setCampRegistrations] = useState<CampRegistration[]>(() => {
+    if (!isDemoMode) return [];
+    const saved = localStorage.getItem(STORAGE_KEYS.CAMP_REGISTRATIONS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return [];
+  });
+
+  const donorBadges = DONOR_BADGES_LIST;
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Synchronize with Firestore when in production mode or when configured
+  // Synchronize with Supabase when in production mode or when configured
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) return;
+    if (!isSupabaseConfigured || !supabase) return;
 
     let isMounted = true;
-    const loadFirestoreData = async () => {
+    const loadSupabaseData = async () => {
       setIsLoading(true);
       try {
-        // 1. Fetch public donors
-        const donorsSnap = await getDocs(collection(db, 'donorPublic'));
-        if (!donorsSnap.empty && isMounted) {
-          const loadedDonors: Donor[] = donorsSnap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              donorId: data.donorId || d.id,
-              fullName: data.fullName || 'স্বেচ্ছাসেবী রক্তদাতা',
-              photoUrl: data.photoUrl,
-              bloodGroup: data.bloodGroup,
-              division: data.division,
-              districtId: data.districtId,
-              district: data.district,
-              upazilaId: data.upazilaId,
-              upazila: data.upazila,
-              areaId: data.areaId,
-              area: data.area,
-              locationLabel: data.locationLabel,
-              availability: Boolean(data.availability),
-              emergencyAvailable: Boolean(data.emergencyAvailable),
-              lastDonationDate: data.lastDonationDate,
-              firstDonationDate: data.firstDonationDate,
-              totalDonations: data.totalDonations || 0,
-              verificationStatus: data.verificationStatus || 'pending',
-              organizationId: data.organizationId || 'org-roktobondon',
-              branchId: data.branchId || 'br-dhm',
-              createdAt: data.createdAt || new Date().toISOString(),
-              updatedAt: data.updatedAt || new Date().toISOString(),
-              userId: data.userId || d.id,
-              phone: data.phone || '', // hidden by default in donorPublic
-              privacy: data.privacy || {
-                showPhone: false,
-                showGender: false,
-                showAge: false,
-                allowDirectContact: true,
-              },
-            };
-          });
-          setDonors(loadedDonors);
+        // 1. Fetch donors
+        const { data: donorsData } = await supabase.from('donors').select('*');
+        if (donorsData && donorsData.length > 0 && isMounted) {
+          setDonors(donorsData.map(mapDonorRow));
         } else if (isDemoMode && isMounted) {
-          // If Firestore is empty and demo mode is on, fallback to local seed donors
           setDonors((prev) => (prev.length > 0 ? prev : generateSeedDonors()));
         }
 
-        // 2. Fetch blood requests (attempt private first, fallback to public emergency listing)
-        let loadedReqs: BloodRequest[] = [];
-        try {
-          const reqSnap = await getDocs(collection(db, 'bloodRequests'));
-          if (!reqSnap.empty && isMounted) {
-            loadedReqs = reqSnap.docs.map((d) => ({
-              id: d.id,
-              requestId: d.data().requestId || d.id,
-              ...d.data(),
-            } as BloodRequest));
-          }
-        } catch {
-          // If unauthenticated or regular donor without private read permission, fetch public emergency requests
-          try {
-            const pubReqSnap = await getDocs(collection(db, 'bloodRequestPublic'));
-            if (!pubReqSnap.empty && isMounted) {
-              loadedReqs = pubReqSnap.docs.map((d) => {
-                const data = d.data();
-                return {
-                  id: d.id,
-                  requestId: data.requestId || d.id,
-                  userId: data.userId || '',
-                  patientName: 'জরুরি রক্তের আবেদন',
-                  bloodGroup: data.bloodGroup,
-                  requiredUnits: data.requiredUnits || 1,
-                  requiredDate: data.requiredDate,
-                  requiredTime: data.requiredTime,
-                  hospital: data.hospital,
-                  division: data.division || 'Dhaka',
-                  district: data.district,
-                  upazila: data.upazila,
-                  area: data.area,
-                  contactPerson: '',
-                  contactNumber: '',
-                  relationship: '',
-                  emergencyLevel: data.emergencyLevel || 'NORMAL',
-                  notes: '',
-                  status: data.status,
-                  verification: data.verification || { isVerified: false },
-                  organizationId: data.organizationId || 'org-roktobondon',
-                  createdAt: data.createdAt || new Date().toISOString(),
-                  expiresAt: data.expiresAt,
-                } as BloodRequest;
-              });
-            }
-          } catch (pubErr) {
-            console.warn('Could not fetch public blood requests:', pubErr);
-          }
-        }
-
-        if (loadedReqs.length > 0 && isMounted) {
-          setBloodRequests(loadedReqs);
+        // 2. Fetch blood requests
+        const { data: reqsData } = await supabase
+          .from('blood_requests')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (reqsData && reqsData.length > 0 && isMounted) {
+          setBloodRequests(reqsData.map(mapBloodRequestRow));
         } else if (isDemoMode && isMounted) {
           setBloodRequests((prev) => (prev.length > 0 ? prev : generateSeedRequests()));
         }
 
         // 3. Fetch donor requests
-        const dreqSnap = await getDocs(collection(db, 'donorRequests'));
-        if (!dreqSnap.empty && isMounted) {
-          setDonorRequests(dreqSnap.docs.map((d) => ({ id: d.id, ...d.data() } as DonorRequest)));
+        const { data: dreqsData } = await supabase.from('donor_requests').select('*');
+        if (dreqsData && isMounted) {
+          setDonorRequests(
+            dreqsData.map((row) => ({
+              id: row.id,
+              bloodRequestId: row.blood_request_id,
+              donorId: row.donor_id,
+              donorUserId: row.donor_user_id,
+              requesterUserId: row.requester_user_id,
+              status: row.status,
+              declineReason: row.decline_reason,
+              matchScore: Number(row.match_score) || 85,
+              patientName: row.patient_name,
+              hospital: row.hospital,
+              bloodGroup: row.blood_group,
+              emergencyLevel: row.emergency_level,
+              respondedAt: row.responded_at,
+              createdAt: row.created_at,
+            }))
+          );
         }
 
         // 4. Fetch donations
-        const donSnap = await getDocs(collection(db, 'donations'));
-        if (!donSnap.empty && isMounted) {
-          setDonations(donSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Donation)));
+        const { data: donData } = await supabase.from('donations').select('*');
+        if (donData && isMounted) {
+          setDonations(
+            donData.map((row) => ({
+              id: row.id,
+              donorId: row.donor_id,
+              donorUserId: row.donor_user_id,
+              donorName: row.donor_name,
+              bloodGroup: row.blood_group,
+              requestId: row.request_id,
+              donationDate: row.donation_date,
+              hospital: row.hospital,
+              units: row.units || 1,
+              donationType: row.donation_type || 'Whole Blood',
+              verifiedBy: row.verified_by,
+              verificationDate: row.verification_date || row.created_at,
+              notes: row.notes,
+            }))
+          );
         }
 
         // 5. Fetch hospitals
-        const hospSnap = await getDocs(collection(db, 'hospitals'));
-        if (!hospSnap.empty && isMounted) {
-          setHospitals(hospSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Hospital)));
+        const { data: hospData } = await supabase.from('hospitals').select('*');
+        if (hospData && hospData.length > 0 && isMounted) {
+          setHospitals(
+            hospData.map((row) => ({
+              id: row.id,
+              nameBn: row.name_bn,
+              nameEn: row.name_en,
+              category: row.category,
+              district: row.district,
+              upazila: row.upazila,
+              address: row.address,
+              hotline: row.hotline,
+              emergencyPhone: row.emergency_phone,
+              ambulancePhone: row.ambulance_phone,
+              hasBloodBank: Boolean(row.has_blood_bank),
+              hasICU: Boolean(row.has_icu),
+              isOpen24Hours: Boolean(row.is_open_24_hours),
+              mapUrl: row.map_url,
+              notes: row.notes,
+              isCommunityAdded: Boolean(row.is_community_added),
+              verificationStatus: row.verification_status || 'verified',
+              addedBy: row.added_by,
+            }))
+          );
         }
 
-        // 6. Fetch fund donations (Restricted to authenticated staff or donor owner)
-        try {
-          const fundSnap = await getDocs(collection(db, 'fundDonations'));
-          if (!fundSnap.empty && isMounted) {
-            setFundDonations(fundSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FundDonation)));
-          }
-        } catch {
-          // Fund donations are private; public unauthenticated visitors read only local/demo fallbacks
+        // 6. Fetch fund donations
+        const { data: fndData } = await supabase.from('fund_donations').select('*');
+        if (fndData && isMounted) {
+          setFundDonations(
+            fndData.map((row) => ({
+              id: row.id,
+              donorName: row.donor_name,
+              donorPhone: row.donor_phone,
+              donorEmail: row.donor_email,
+              amount: Number(row.amount),
+              paymentMethod: row.payment_method,
+              transactionId: row.transaction_id,
+              accountNumber: row.account_number,
+              fundCause: row.fund_cause,
+              area: row.area,
+              message: row.message,
+              isAnonymous: Boolean(row.is_anonymous),
+              status: row.status,
+              verifiedBy: row.verified_by,
+              verifiedAt: row.verified_at,
+              organizationId: row.organization_id,
+              createdAt: row.created_at,
+            }))
+          );
         }
 
         // 7. Fetch payment methods
-        const paySnap = await getDocs(collection(db, 'paymentMethods'));
-        if (!paySnap.empty && isMounted) {
-          setPaymentMethods(paySnap.docs.map((d) => ({ id: d.id, ...d.data() } as PaymentMethodConfig)));
+        const { data: payData } = await supabase.from('payment_methods').select('*');
+        if (payData && payData.length > 0 && isMounted) {
+          setPaymentMethods(
+            payData.map((row) => ({
+              id: row.id,
+              name: row.name,
+              nameBn: row.name_bn,
+              type: row.type,
+              accountNumber: row.account_number,
+              accountType: row.account_type || 'personal',
+              instructionsBn: row.instructions_bn || '',
+              qrCodeUrl: row.qr_code_url,
+              isActive: Boolean(row.is_active),
+            }))
+          );
         }
 
         // 8. Fetch users
-        const usersSnap = await getDocs(collection(db, 'users'));
-        if (!usersSnap.empty && isMounted) {
-          setUsers(usersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as User)));
+        const { data: usersData } = await supabase.from('users').select('*');
+        if (usersData && usersData.length > 0 && isMounted) {
+          setUsers(
+            usersData.map((row) => ({
+              id: row.id,
+              fullName: row.full_name,
+              phone: row.phone,
+              email: row.email,
+              role: row.role,
+              organizationId: row.organization_id || 'org-roktobondon',
+              branchId: row.branch_id,
+              photoUrl: row.photo_url,
+              status: row.status,
+              phoneVerified: Boolean(row.phone_verified),
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+              lastLoginAt: row.last_login_at,
+            }))
+          );
         }
       } catch (err) {
-        console.warn('Firestore initial synchronization notice:', err);
+        console.warn('Supabase initial synchronization notice:', err);
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
-    loadFirestoreData();
+    loadSupabaseData();
 
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Sync to localStorage only in Demo Mode
+  // Sync to localStorage in Demo Mode only
   useEffect(() => {
     if (isDemoMode) {
       localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
@@ -587,6 +640,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [permissionMatrix]);
 
+  useEffect(() => {
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.BLOOD_CAMPS, JSON.stringify(bloodCamps));
+    }
+  }, [bloodCamps]);
+
+  useEffect(() => {
+    if (isDemoMode) {
+      localStorage.setItem(STORAGE_KEYS.CAMP_REGISTRATIONS, JSON.stringify(campRegistrations));
+    }
+  }, [campRegistrations]);
+
   const addAuditLog = useCallback(
     (
       action: string,
@@ -607,7 +672,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: new Date().toISOString(),
       };
       setAuditLogs((prev) => [newLog, ...prev.slice(0, 99)]);
-      if (isFirebaseConfigured && !isDemoMode) {
+      if (isSupabaseConfigured && !isDemoMode) {
         recordAuditLog(action, targetType, targetId, metadata, user).catch(() => {});
       }
     },
@@ -620,7 +685,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       let newReq: BloodRequest;
-      if (isFirebaseConfigured && !isDemoMode) {
+      if (isSupabaseConfigured && !isDemoMode) {
         newReq = await createBloodRequestRecord(data);
       } else {
         const id = `req-${Date.now()}`;
@@ -637,11 +702,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           expiresAt: new Date(Date.now() + 48 * 3600000).toISOString(),
         };
 
-        if (isFirebaseConfigured && db) {
+        if (isSupabaseConfigured && supabase) {
           try {
-            await setDoc(doc(db, 'bloodRequests', id), newReq);
+            await createBloodRequestRecord(data);
           } catch (err) {
-            console.warn('Firestore fallback', err);
+            console.warn('Supabase fallback', err);
           }
         }
       }
@@ -677,7 +742,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setBloodRequests((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status } : r))
     );
-    if (isFirebaseConfigured) {
+    if (isSupabaseConfigured) {
       await updateBloodRequestStatusInFirestore(id, status);
     }
     addAuditLog('Request Status Updated', 'BloodRequest', id, { newStatus: status });
@@ -698,7 +763,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : r
       )
     );
-    if (isFirebaseConfigured) {
+    if (isSupabaseConfigured) {
       await verifyBloodRequestInFirestore(id, verifierName);
     }
     addAuditLog('Request Verified', 'BloodRequest', id, { verifierName });
@@ -760,7 +825,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       let newDonor: Donor;
-      if (isFirebaseConfigured && !isDemoMode) {
+      if (isSupabaseConfigured && !isDemoMode) {
         newDonor = await createDonorRecord(publicData, privateData);
       } else {
         newDonor = {
@@ -768,11 +833,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...privateData,
           updatedAt: new Date().toISOString(),
         };
-        if (isFirebaseConfigured && db) {
+        if (isSupabaseConfigured && supabase) {
           try {
             await createDonorRecord(publicData, privateData);
           } catch (e) {
-            console.warn('Firestore donor fallback', e);
+            console.warn('Supabase donor fallback', e);
           }
         }
       }
@@ -790,30 +855,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((d) => (d.id === id ? { ...d, ...data, updatedAt: new Date().toISOString() } : d))
     );
 
-    if (isFirebaseConfigured) {
-      const publicFields: Partial<DonorPublic> = {};
-      const privateFields: Partial<DonorPrivate> = {};
-
-      if (data.fullName !== undefined) publicFields.fullName = data.fullName;
-      if (data.photoUrl !== undefined) publicFields.photoUrl = data.photoUrl;
-      if (data.bloodGroup !== undefined) publicFields.bloodGroup = data.bloodGroup;
-      if (data.district !== undefined) publicFields.district = data.district;
-      if (data.upazila !== undefined) publicFields.upazila = data.upazila;
-      if (data.area !== undefined) publicFields.area = data.area;
-      if (data.availability !== undefined) publicFields.availability = data.availability;
-      if (data.emergencyAvailable !== undefined) publicFields.emergencyAvailable = data.emergencyAvailable;
-      if (data.lastDonationDate !== undefined) publicFields.lastDonationDate = data.lastDonationDate;
-      if (data.totalDonations !== undefined) publicFields.totalDonations = data.totalDonations;
-
-      if (data.phone !== undefined) privateFields.phone = data.phone;
-      if (data.email !== undefined) privateFields.email = data.email;
-      if (data.gender !== undefined) privateFields.gender = data.gender;
-      if (data.dateOfBirth !== undefined) privateFields.dateOfBirth = data.dateOfBirth;
-      if (data.exactAddress !== undefined) privateFields.exactAddress = data.exactAddress;
-      if (data.privacy !== undefined) privateFields.privacy = data.privacy;
-      if (data.adminNotes !== undefined) privateFields.adminNotes = data.adminNotes;
-
-      await updateDonorRecord(id, publicFields, privateFields);
+    if (isSupabaseConfigured) {
+      await updateDonorRecord(id, data);
     }
 
     addAuditLog('Donor Profile Updated', 'Donor', id);
@@ -840,7 +883,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
-    if (isFirebaseConfigured) {
+    if (isSupabaseConfigured) {
       await verifyDonorStatus(donorId, status, verifierName, notes);
     }
 
@@ -863,7 +906,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const bloodReq = bloodRequests.find((r) => r.id === bloodRequestId);
     let newRequest: DonorRequest;
 
-    if (isFirebaseConfigured && !isDemoMode && bloodReq) {
+    if (isSupabaseConfigured && !isDemoMode && bloodReq) {
       newRequest = await sendDonorContactRequest(bloodReq, donor, requesterUserId, matchScore);
     } else {
       newRequest = {
@@ -926,7 +969,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
-    if (isFirebaseConfigured) {
+    if (isSupabaseConfigured) {
       await respondToDonorRequest(requestId, status, declineReason);
     }
 
@@ -935,16 +978,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const recordDonation = async (donationData: Omit<Donation, 'id'>): Promise<Donation> => {
     let newDonation: Donation;
-    if (isFirebaseConfigured && !isDemoMode) {
+    if (isSupabaseConfigured && !isDemoMode) {
       newDonation = await recordDonationInFirestore(donationData);
     } else {
       const id = `don-${Date.now()}`;
       newDonation = { ...donationData, id };
-      if (isFirebaseConfigured && db) {
+      if (isSupabaseConfigured && supabase) {
         try {
           await recordDonationInFirestore(donationData);
         } catch (e) {
-          console.warn('Firestore donation fallback', e);
+          console.warn('Supabase donation fallback', e);
         }
       }
     }
@@ -975,7 +1018,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : r
         )
       );
-      if (isFirebaseConfigured) {
+      if (isSupabaseConfigured) {
         updateBloodRequestStatusInFirestore(donationData.requestId, 'fulfilled').catch(() => {});
       }
     }
@@ -993,9 +1036,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = `loc-${Date.now()}`;
     const newLoc: LocationItem = { ...locationData, id };
     setLocations((prev) => [...prev, newLoc]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'locations', id), newLoc).catch(() => {});
-    }
     addAuditLog('Location Added', 'Location', id, { upazila: newLoc.upazila });
     return newLoc;
   };
@@ -1004,9 +1044,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = `br-${Date.now()}`;
     const newBranch: Branch = { ...branchData, id };
     setBranches((prev) => [...prev, newBranch]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'branches', id), newBranch).catch(() => {});
-    }
     addAuditLog('Branch Created', 'Branch', id, { nameBn: newBranch.nameBn });
     return newBranch;
   };
@@ -1024,8 +1061,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id,
     };
     setHospitals((prev) => [newHospital, ...prev]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'hospitals', id), newHospital).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('hospitals').insert({
+        id: newHospital.id,
+        name_bn: newHospital.nameBn,
+        name_en: newHospital.nameEn,
+        category: newHospital.category,
+        district: newHospital.district,
+        upazila: newHospital.upazila,
+        address: newHospital.address,
+        hotline: newHospital.hotline,
+        emergency_phone: newHospital.emergencyPhone || null,
+        ambulance_phone: newHospital.ambulancePhone || null,
+        has_blood_bank: newHospital.hasBloodBank,
+        has_icu: newHospital.hasICU,
+        is_open_24_hours: newHospital.isOpen24Hours,
+        map_url: newHospital.mapUrl || null,
+        notes: newHospital.notes || null,
+        is_community_added: newHospital.isCommunityAdded || false,
+        verification_status: newHospital.verificationStatus || 'verified',
+        added_by: newHospital.addedBy || null,
+      }).then(() => {});
     }
     addAuditLog(
       `নতুন হাসপাতাল যুক্ত করা হয়েছে: ${newHospital.nameBn}`,
@@ -1040,16 +1096,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setHospitals((prev) =>
       prev.map((h) => (h.id === id ? { ...h, ...data } : h))
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'hospitals', id), data).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      const dbUpdates: Record<string, any> = {};
+      if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
+      if (data.nameEn !== undefined) dbUpdates.name_en = data.nameEn;
+      if (data.category !== undefined) dbUpdates.category = data.category;
+      if (data.district !== undefined) dbUpdates.district = data.district;
+      if (data.upazila !== undefined) dbUpdates.upazila = data.upazila;
+      if (data.address !== undefined) dbUpdates.address = data.address;
+      if (data.hotline !== undefined) dbUpdates.hotline = data.hotline;
+      if (data.emergencyPhone !== undefined) dbUpdates.emergency_phone = data.emergencyPhone;
+      if (data.ambulancePhone !== undefined) dbUpdates.ambulance_phone = data.ambulancePhone;
+      if (data.hasBloodBank !== undefined) dbUpdates.has_blood_bank = data.hasBloodBank;
+      if (data.hasICU !== undefined) dbUpdates.has_icu = data.hasICU;
+      if (data.isOpen24Hours !== undefined) dbUpdates.is_open_24_hours = data.isOpen24Hours;
+      if (data.mapUrl !== undefined) dbUpdates.map_url = data.mapUrl;
+      if (data.notes !== undefined) dbUpdates.notes = data.notes;
+      if (data.verificationStatus !== undefined) dbUpdates.verification_status = data.verificationStatus;
+
+      supabase.from('hospitals').update(dbUpdates).eq('id', id).then(() => {});
     }
     addAuditLog('হাসপাতালের তথ্য আপডেট করা হয়েছে', 'HOSPITAL', id, data);
   };
 
   const deleteHospital = async (id: string) => {
     setHospitals((prev) => prev.filter((h) => h.id !== id));
-    if (isFirebaseConfigured && db) {
-      deleteDoc(doc(db, 'hospitals', id)).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('hospitals').delete().eq('id', id).then(() => {});
     }
     addAuditLog('হাসপাতাল মুছে ফেলা হয়েছে', 'HOSPITAL', id);
   };
@@ -1062,11 +1135,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : h
       )
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'hospitals', id), {
-        verificationStatus: 'verified',
-        isCommunityAdded: false,
-      }).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('hospitals').update({
+        verification_status: 'verified',
+        is_community_added: false,
+      }).eq('id', id).then(() => {});
     }
     addAuditLog('হাসপাতাল ভেরিফাই ও অনুমোদন করা হয়েছে', 'HOSPITAL', id);
   };
@@ -1082,13 +1155,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
     setFundDonations((prev) => [newDonation, ...prev]);
-    if (isFirebaseConfigured && db) {
-      const cleanData = Object.fromEntries(
-        Object.entries(newDonation).filter(([_, v]) => v !== undefined)
-      );
-      setDoc(doc(db, 'fundDonations', newDonation.id), cleanData).catch((err) => {
-        console.error('Firestore add fund donation error:', err);
-      });
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('fund_donations').insert({
+        id: newDonation.id,
+        donor_name: newDonation.donorName,
+        donor_phone: newDonation.donorPhone,
+        donor_email: newDonation.donorEmail || null,
+        amount: newDonation.amount,
+        payment_method: newDonation.paymentMethod,
+        transaction_id: newDonation.transactionId,
+        account_number: newDonation.accountNumber || null,
+        fund_cause: newDonation.fundCause,
+        area: newDonation.area || null,
+        message: newDonation.message || null,
+        is_anonymous: newDonation.isAnonymous,
+        status: newDonation.status,
+        organization_id: newDonation.organizationId || 'org-roktobondon',
+        created_at: newDonation.createdAt,
+      }).then(() => {});
     }
     addAuditLog(
       `নতুন আর্থিক অনুদান জমা দেওয়া হয়েছে: ৳${newDonation.amount} (${newDonation.paymentMethod})`,
@@ -1107,12 +1191,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : d
       )
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'fundDonations', id), {
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('fund_donations').update({
         status: 'verified',
-        verifiedBy: verifierName,
-        verifiedAt: new Date().toISOString(),
-      }).catch(() => {});
+        verified_by: verifierName,
+        verified_at: new Date().toISOString(),
+      }).eq('id', id).then(() => {});
     }
     addAuditLog(`অনুদান ভেরিফাই ও অনুমোদন করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
@@ -1121,8 +1205,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFundDonations((prev) =>
       prev.map((d) => (d.id === id ? { ...d, status: 'rejected' } : d))
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'fundDonations', id), { status: 'rejected' }).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('fund_donations').update({ status: 'rejected' }).eq('id', id).then(() => {});
     }
     addAuditLog(`অনুদান বাতিল/অস্বীকৃত করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
@@ -1135,8 +1219,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `disb-${Date.now()}`,
     };
     setFundDisbursements((prev) => [newDisb, ...prev]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'fundDisbursements', newDisb.id), newDisb).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('fund_disbursements').insert({
+        id: newDisb.id,
+        title: newDisb.title,
+        cause: newDisb.cause,
+        amount: newDisb.amount,
+        recipient: newDisb.recipient,
+        area: newDisb.area,
+        approved_by: newDisb.approvedBy,
+        voucher_no: newDisb.voucherNo || null,
+        date: newDisb.date,
+        notes: newDisb.notes || null,
+        created_at: new Date().toISOString(),
+      }).then(() => {});
     }
     addAuditLog(
       `তহবিল থেকে ব্যয়/বিতরণ রেকর্ড করা হয়েছে: ৳${newDisb.amount} (${newDisb.title})`,
@@ -1149,8 +1245,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteFundDisbursement = async (id: string) => {
     setFundDisbursements((prev) => prev.filter((d) => d.id !== id));
-    if (isFirebaseConfigured && db) {
-      deleteDoc(doc(db, 'fundDisbursements', id)).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('fund_disbursements').delete().eq('id', id).then(() => {});
     }
     addAuditLog(`ব্যয় রেকর্ড মুছে ফেলা হয়েছে: ${id}`, 'DISBURSEMENT', id);
   };
@@ -1159,8 +1255,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPaymentMethods((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...data } : m))
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'paymentMethods', id), data).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      const dbUpdates: Record<string, any> = {};
+      if (data.name !== undefined) dbUpdates.name = data.name;
+      if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
+      if (data.type !== undefined) dbUpdates.type = data.type;
+      if (data.accountNumber !== undefined) dbUpdates.account_number = data.accountNumber;
+      if (data.accountType !== undefined) dbUpdates.account_type = data.accountType;
+      if (data.instructionsBn !== undefined) dbUpdates.instructions_bn = data.instructionsBn;
+      if (data.qrCodeUrl !== undefined) dbUpdates.qr_code_url = data.qrCodeUrl;
+      if (data.isActive !== undefined) dbUpdates.is_active = data.isActive;
+
+      supabase.from('payment_methods').update(dbUpdates).eq('id', id).then(() => {});
     }
     addAuditLog(`পেমেন্ট মেথড আপডেট করা হয়েছে: ${id}`, 'PAYMENT_METHOD', id, data);
   };
@@ -1173,8 +1279,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `pay-${Date.now()}`,
     };
     setPaymentMethods((prev) => [...prev, newMethod]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'paymentMethods', newMethod.id), newMethod).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('payment_methods').insert({
+        id: newMethod.id,
+        name: newMethod.name,
+        name_bn: newMethod.nameBn,
+        type: newMethod.type,
+        account_number: newMethod.accountNumber,
+        account_type: newMethod.accountType,
+        instructions_bn: newMethod.instructionsBn,
+        qr_code_url: newMethod.qrCodeUrl || null,
+        is_active: newMethod.isActive,
+      }).then(() => {});
     }
     addAuditLog(`নতুন পেমেন্ট মেথড যুক্ত করা হয়েছে: ${newMethod.nameBn}`, 'PAYMENT_METHOD', newMethod.id);
     return newMethod;
@@ -1182,8 +1298,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deletePaymentMethod = async (id: string) => {
     setPaymentMethods((prev) => prev.filter((m) => m.id !== id));
-    if (isFirebaseConfigured && db) {
-      deleteDoc(doc(db, 'paymentMethods', id)).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('payment_methods').delete().eq('id', id).then(() => {});
     }
     addAuditLog(`পেমেন্ট মেথড মুছে ফেলা হয়েছে: ${id}`, 'PAYMENT_METHOD', id);
   };
@@ -1192,9 +1308,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDonationCauses((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...data } : c))
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'donationCauses', id), data).catch(() => {});
-    }
     addAuditLog(`অনুদান খাত আপডেট করা হয়েছে: ${id}`, 'DONATION_CAUSE', id, data);
   };
 
@@ -1206,9 +1319,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `cause-${Date.now()}`,
     };
     setDonationCauses((prev) => [...prev, newCause]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'donationCauses', newCause.id), newCause).catch(() => {});
-    }
     addAuditLog(`নতুন অনুদান খাত যুক্ত করা হয়েছে: ${newCause.nameBn}`, 'DONATION_CAUSE', newCause.id);
     return newCause;
   };
@@ -1219,12 +1329,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         u.id === userId ? { ...u, role: newRole, updatedAt: new Date().toISOString() } : u
       )
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'users', userId), {
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('users').update({
         role: newRole,
-        updatedAt: new Date().toISOString(),
-        serverUpdatedAt: serverTimestamp(),
-      }).catch(() => {});
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId).then(() => {});
     }
     addAuditLog(`ব্যবহারকারীর রোল পরিবর্তন করা হয়েছে: ${userId} -> ${newRole}`, 'USER', userId, { newRole });
   };
@@ -1235,11 +1344,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         u.id === userId ? { ...u, ...data, updatedAt: new Date().toISOString() } : u
       )
     );
-    if (isFirebaseConfigured && db) {
-      updateDoc(doc(db, 'users', userId), {
-        ...data,
-        updatedAt: new Date().toISOString(),
-      }).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      const dbUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (data.fullName !== undefined) dbUpdates.full_name = data.fullName;
+      if (data.phone !== undefined) dbUpdates.phone = data.phone;
+      if (data.email !== undefined) dbUpdates.email = data.email;
+      if (data.photoUrl !== undefined) dbUpdates.photo_url = data.photoUrl;
+      if (data.status !== undefined) dbUpdates.status = data.status;
+
+      supabase.from('users').update(dbUpdates).eq('id', userId).then(() => {});
     }
     addAuditLog(`ব্যবহারকারীর তথ্য আপডেট করা হয়েছে: ${userId}`, 'USER', userId, data);
   };
@@ -1254,8 +1369,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
     setUsers((prev) => [newUser, ...prev]);
-    if (isFirebaseConfigured && db) {
-      setDoc(doc(db, 'users', newUser.id), newUser).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('users').insert({
+        id: newUser.id,
+        full_name: newUser.fullName,
+        phone: newUser.phone,
+        email: newUser.email || null,
+        role: newUser.role,
+        organization_id: newUser.organizationId,
+        branch_id: newUser.branchId || null,
+        photo_url: newUser.photoUrl || null,
+        status: newUser.status,
+        phone_verified: newUser.phoneVerified,
+        created_at: newUser.createdAt,
+        updated_at: newUser.updatedAt,
+      }).then(() => {});
     }
     addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${newUser.fullName} (${newUser.role})`, 'USER', newUser.id);
     return newUser;
@@ -1263,8 +1391,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteUser = async (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
-    if (isFirebaseConfigured && db) {
-      deleteDoc(doc(db, 'users', userId)).catch(() => {});
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('users').delete().eq('id', userId).then(() => {});
     }
     addAuditLog(`ব্যবহারকারী মুছে ফেলা হয়েছে: ${userId}`, 'USER', userId);
   };
@@ -1378,111 +1506,178 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Migrate current local seed state into Firestore with donorPublic / donorPrivate partitioning
+   * Migrate current local seed state into Supabase Database
    */
   const migrateLocalToFirestore = async (): Promise<{ success: boolean; message: string }> => {
-    if (!isFirebaseConfigured || !db) {
-      return { success: false, message: 'Firebase কনফিগার করা নেই। .env ভেরিয়েবল চেক করুন।' };
+    if (!isSupabaseConfigured || !supabase) {
+      return { success: false, message: 'Supabase কনফিগার করা নেই। .env ফাইলে VITE_SUPABASE_URL এবং VITE_SUPABASE_ANON_KEY যোগ করুন।' };
     }
 
     try {
       setIsLoading(true);
-      const batch = writeBatch(db);
 
-      // Seed donors partitioned
+      // Seed donors
       for (const d of donors) {
-        const pubRef = doc(db, 'donorPublic', d.id);
-        const privRef = doc(db, 'donorPrivate', d.id);
-
-        batch.set(pubRef, {
+        await supabase.from('donors').upsert({
           id: d.id,
-          donorId: d.donorId,
-          fullName: d.fullName,
-          photoUrl: d.photoUrl || '',
-          bloodGroup: d.bloodGroup,
+          donor_id: d.donorId,
+          user_id: d.userId || d.id,
+          full_name: d.fullName,
+          photo_url: d.photoUrl || null,
+          blood_group: d.bloodGroup,
+          division: d.division || 'Dhaka',
+          district_id: d.districtId || 'dist-dhaka',
           district: d.district,
+          upazila_id: d.upazilaId || 'upa-dhamrai',
           upazila: d.upazila,
+          area_id: d.areaId || null,
           area: d.area,
+          location_label: d.locationLabel || null,
           availability: d.availability,
-          emergencyAvailable: d.emergencyAvailable,
-          lastDonationDate: d.lastDonationDate || '',
-          totalDonations: d.totalDonations || 0,
-          verificationStatus: d.verificationStatus,
-          organizationId: d.organizationId || 'org-roktobondon',
-          branchId: d.branchId || 'br-dhm',
-          createdAt: d.createdAt || new Date().toISOString(),
-        });
-
-        batch.set(privRef, {
-          donorId: d.donorId,
-          userId: d.userId || d.id,
-          phone: d.phone || '',
-          email: d.email || '',
-          gender: d.gender || 'male',
-          dateOfBirth: d.dateOfBirth || '',
-          exactAddress: d.exactAddress || '',
+          emergency_available: d.emergencyAvailable,
+          last_donation_date: d.lastDonationDate || null,
+          first_donation_date: d.firstDonationDate || null,
+          total_donations: d.totalDonations || 0,
+          verification_status: d.verificationStatus,
+          organization_id: d.organizationId || 'org-roktobondon',
+          branch_id: d.branchId || 'br-dhm',
+          phone: d.phone,
+          email: d.email || null,
+          gender: d.gender || null,
+          date_of_birth: d.dateOfBirth || null,
+          exact_address: d.exactAddress || null,
+          emergency_contact: d.emergencyContact || null,
+          admin_notes: d.adminNotes || null,
+          nid_or_id_number: d.nidOrIdNumber || null,
           privacy: d.privacy,
-          adminNotes: d.adminNotes || '',
-          createdAt: d.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       }
 
-      // Seed blood requests (both private and public-safe collections)
+      // Seed blood requests
       for (const req of bloodRequests) {
-        const reqRef = doc(db, 'bloodRequests', req.id);
-        batch.set(reqRef, req);
-
-        const pubRef = doc(db, 'bloodRequestPublic', req.id);
-        batch.set(pubRef, {
+        await supabase.from('blood_requests').upsert({
           id: req.id,
-          requestId: req.requestId,
-          userId: req.userId,
-          bloodGroup: req.bloodGroup,
-          requiredUnits: req.requiredUnits,
+          request_id: req.requestId,
+          user_id: req.userId,
+          patient_name: req.patientName,
+          blood_group: req.bloodGroup,
+          required_units: req.requiredUnits,
+          required_date: req.requiredDate,
+          required_time: req.requiredTime,
+          hospital: req.hospital,
           division: req.division,
           district: req.district,
           upazila: req.upazila,
           area: req.area,
-          emergencyLevel: req.emergencyLevel,
-          requiredDate: req.requiredDate,
-          requiredTime: req.requiredTime,
-          hospital: req.hospital,
+          contact_person: req.contactPerson,
+          contact_number: req.contactNumber,
+          relationship: req.relationship,
+          emergency_level: req.emergencyLevel,
+          notes: req.notes || null,
           status: req.status,
-          verification: req.verification,
-          organizationId: req.organizationId || 'org-roktobondon',
-          createdAt: req.createdAt,
-          expiresAt: req.expiresAt,
+          is_verified: req.verification.isVerified,
+          verified_by: req.verification.verifiedBy || null,
+          verified_at: req.verification.verifiedAt || null,
+          organization_id: req.organizationId || 'org-roktobondon',
+          expires_at: req.expiresAt || null,
+          created_at: req.createdAt,
         });
       }
 
       // Seed hospitals
       for (const hosp of hospitals) {
-        const hospRef = doc(db, 'hospitals', hosp.id);
-        batch.set(hospRef, hosp);
+        await supabase.from('hospitals').upsert({
+          id: hosp.id,
+          name_bn: hosp.nameBn,
+          name_en: hosp.nameEn,
+          category: hosp.category,
+          district: hosp.district,
+          upazila: hosp.upazila,
+          address: hosp.address,
+          hotline: hosp.hotline,
+          emergency_phone: hosp.emergencyPhone || null,
+          ambulance_phone: hosp.ambulancePhone || null,
+          has_blood_bank: hosp.hasBloodBank,
+          has_icu: hosp.hasICU,
+          is_open_24_hours: hosp.isOpen24Hours,
+          map_url: hosp.mapUrl || null,
+          notes: hosp.notes || null,
+          is_community_added: hosp.isCommunityAdded || false,
+          verification_status: hosp.verificationStatus || 'verified',
+          added_by: hosp.addedBy || null,
+        });
       }
 
       // Seed payment methods
       for (const pay of paymentMethods) {
-        const payRef = doc(db, 'paymentMethods', pay.id);
-        batch.set(payRef, pay);
+        await supabase.from('payment_methods').upsert({
+          id: pay.id,
+          name: pay.name,
+          name_bn: pay.nameBn,
+          type: pay.type,
+          account_number: pay.accountNumber,
+          account_type: pay.accountType,
+          instructions_bn: pay.instructionsBn,
+          qr_code_url: pay.qrCodeUrl || null,
+          is_active: pay.isActive,
+        });
       }
 
-      // Seed donation causes
-      for (const cause of donationCauses) {
-        const causeRef = doc(db, 'donationCauses', cause.id);
-        batch.set(causeRef, cause);
-      }
-
-      await batch.commit();
-      addAuditLog('ডেটা সফলভাবে ফায়ারবেজ ক্লাউড ফায়ারস্টোরে মাইগ্রেট করা হয়েছে', 'MIGRATION', 'FIRESTORE');
-      return { success: true, message: 'সকল লোকাল ডেটা ফায়ারস্টোর ক্লাউডে সফলভাবে সেভ করা হয়েছে!' };
+      addAuditLog('ডেটা সফলভাবে Supabase ক্লাউড ডেটাবেজে মাইগ্রেট করা হয়েছে', 'MIGRATION', 'SUPABASE');
+      return { success: true, message: 'সকল লোকাল ডেটা Supabase ক্লাউডে সফলভাবে সেভ করা হয়েছে!' };
     } catch (err: any) {
-      console.error('Migration failed:', err);
-      return { success: false, message: err.message || 'ফায়ারস্টোরে মাইগ্রেশন ব্যর্থ হয়েছে।' };
+      console.error('Supabase Migration failed:', err);
+      return { success: false, message: err.message || 'Supabase-এ মাইগ্রেশন ব্যর্থ হয়েছে।' };
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const addBloodCamp = async (
+    campData: Omit<BloodCamp, 'id' | 'createdAt' | 'registeredCount'>
+  ): Promise<BloodCamp> => {
+    const newCamp: BloodCamp = {
+      ...campData,
+      id: `camp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      registeredCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+    setBloodCamps((prev) => [newCamp, ...prev]);
+    addAuditLog(`নতুন রক্তদান ক্যাম্প যোগ করা হয়েছে: ${newCamp.titleBn}`, 'CAMP', newCamp.id);
+    return newCamp;
+  };
+
+  const updateBloodCamp = async (id: string, data: Partial<BloodCamp>): Promise<void> => {
+    setBloodCamps((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...data } : c))
+    );
+    addAuditLog(`রক্তদান ক্যাম্পের তথ্য আপডেট করা হয়েছে`, 'CAMP', id);
+  };
+
+  const deleteBloodCamp = async (id: string): Promise<void> => {
+    setBloodCamps((prev) => prev.filter((c) => c.id !== id));
+    addAuditLog(`রক্তদান ক্যাম্প মুছে ফেলা হয়েছে`, 'CAMP', id);
+  };
+
+  const registerForCamp = async (
+    registrationData: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>
+  ): Promise<CampRegistration> => {
+    const newReg: CampRegistration = {
+      ...registrationData,
+      id: `reg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      status: 'registered',
+      createdAt: new Date().toISOString(),
+    };
+    setCampRegistrations((prev) => [newReg, ...prev]);
+    setBloodCamps((prev) =>
+      prev.map((c) =>
+        c.id === registrationData.campId
+          ? { ...c, registeredCount: (c.registeredCount || 0) + 1 }
+          : c
+      )
+    );
+    addAuditLog(`ক্যাম্পে নতুন রক্তদাতা প্রি-রেজিস্ট্রেশন করেছেন: ${registrationData.donorName}`, 'CAMP_REGISTRATION', newReg.id);
+    return newReg;
   };
 
   const resetDemoData = () => {
@@ -1506,6 +1701,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDonationCauses(INITIAL_DONATION_CAUSES);
     setFundDisbursements(INITIAL_FUND_DISBURSEMENTS);
     setUsers(INITIAL_DEMO_USERS);
+    setBloodCamps(INITIAL_BLOOD_CAMPS);
+    setCampRegistrations([]);
 
     setAuditLogs([
       {
@@ -1534,6 +1731,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(STORAGE_KEYS.DONATION_CAUSES);
     localStorage.removeItem(STORAGE_KEYS.FUND_DISBURSEMENTS);
     localStorage.removeItem(STORAGE_KEYS.USERS);
+    localStorage.removeItem(STORAGE_KEYS.BLOOD_CAMPS);
+    localStorage.removeItem(STORAGE_KEYS.CAMP_REGISTRATIONS);
   };
 
   return (
@@ -1553,6 +1752,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         donationCauses,
         fundDisbursements,
         users,
+        bloodCamps,
+        campRegistrations,
+        donorBadges,
         isLoading,
         createBloodRequest,
         updateBloodRequestStatus,
@@ -1563,6 +1765,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendDonorRequest,
         respondDonorRequest,
         recordDonation,
+        addBloodCamp,
+        updateBloodCamp,
+        deleteBloodCamp,
+        registerForCamp,
         addLocation,
         addBranch,
         addHospital,
@@ -1593,6 +1799,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markNotificationRead,
         resetDemoData,
         migrateLocalToFirestore,
+        migrateLocalToSupabase: migrateLocalToFirestore,
       }}
     >
       {children}

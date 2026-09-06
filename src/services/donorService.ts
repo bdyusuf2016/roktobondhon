@@ -1,17 +1,4 @@
-import {
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  writeBatch,
-  serverTimestamp,
-  type QueryConstraint,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase/config';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
 import type {
   Donor,
   DonorPublic,
@@ -19,9 +6,6 @@ import type {
   VerificationStatus,
   BloodGroup,
 } from '../types';
-
-const PUBLIC_COLLECTION = 'donorPublic';
-const PRIVATE_COLLECTION = 'donorPrivate';
 
 export interface DonorSearchFilters {
   bloodGroup?: string;
@@ -34,181 +18,140 @@ export interface DonorSearchFilters {
 }
 
 /**
- * Query public donor directory (searches donorPublic only)
- * Never queries or returns donorPrivate fields
+ * Map database row to composite Donor
+ */
+export function mapDonorRow(row: any): Donor {
+  const privacy =
+    typeof row.privacy === 'string'
+      ? JSON.parse(row.privacy)
+      : row.privacy || {
+          showPhone: false,
+          showGender: false,
+          showAge: false,
+          allowDirectContact: true,
+        };
+
+  return {
+    id: row.id,
+    donorId: row.donor_id || row.id,
+    userId: row.user_id || row.id,
+    fullName: row.full_name || 'স্বেচ্ছাসেবী রক্তদাতা',
+    photoUrl: row.photo_url || undefined,
+    bloodGroup: row.blood_group as BloodGroup,
+    division: row.division || 'Dhaka',
+    districtId: row.district_id || 'dist-dhaka',
+    district: row.district || 'ঢাকা',
+    upazilaId: row.upazila_id || 'upa-dhamrai',
+    upazila: row.upazila || 'ধামরাই',
+    areaId: row.area_id || undefined,
+    area: row.area || 'ধামরাই সদর',
+    locationLabel: row.location_label || undefined,
+    availability: Boolean(row.availability),
+    emergencyAvailable: Boolean(row.emergency_available),
+    lastDonationDate: row.last_donation_date || undefined,
+    firstDonationDate: row.first_donation_date || undefined,
+    totalDonations: row.total_donations || 0,
+    verificationStatus: (row.verification_status as VerificationStatus) || 'pending',
+    organizationId: row.organization_id || 'org-roktobondon',
+    branchId: row.branch_id || 'br-dhm',
+    phone: row.phone || '',
+    email: row.email || undefined,
+    gender: row.gender || undefined,
+    dateOfBirth: row.date_of_birth || undefined,
+    exactAddress: row.exact_address || undefined,
+    emergencyContact: row.emergency_contact || undefined,
+    adminNotes: row.admin_notes || undefined,
+    nidOrIdNumber: row.nid_or_id_number || undefined,
+    privacy,
+    verifiedBy: row.verified_by || undefined,
+    verifiedAt: row.verified_at || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * Query public donor directory with filters
  */
 export async function searchDonorsPublic(filters: DonorSearchFilters): Promise<DonorPublic[]> {
-  if (!isFirebaseConfigured || !db) return [];
+  if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const constraints: QueryConstraint[] = [];
+    let query = supabase.from('donors').select('*');
 
     if (filters.bloodGroup) {
-      constraints.push(where('bloodGroup', '==', filters.bloodGroup));
+      query = query.eq('blood_group', filters.bloodGroup);
     }
     if (filters.district) {
-      constraints.push(where('district', '==', filters.district));
+      query = query.eq('district', filters.district);
     }
     if (filters.upazila) {
-      constraints.push(where('upazila', '==', filters.upazila));
+      query = query.eq('upazila', filters.upazila);
     }
     if (filters.availability !== undefined) {
-      constraints.push(where('availability', '==', filters.availability));
+      query = query.eq('availability', filters.availability);
     }
     if (filters.verificationStatus) {
-      constraints.push(where('verificationStatus', '==', filters.verificationStatus));
+      query = query.eq('verification_status', filters.verificationStatus);
     }
     if (filters.emergencyAvailable) {
-      constraints.push(where('emergencyAvailable', '==', true));
+      query = query.eq('emergency_available', true);
     }
     if (filters.organizationId) {
-      constraints.push(where('organizationId', '==', filters.organizationId));
+      query = query.eq('organization_id', filters.organizationId);
     }
 
-    const q = query(collection(db, PUBLIC_COLLECTION), ...constraints);
-    const snap = await getDocs(q);
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error searching donors in Supabase:', error);
+      return [];
+    }
 
-    return snap.docs.map((d) => {
-      const data = d.data();
+    return (data || []).map((row) => {
+      const donor = mapDonorRow(row);
+      // Mask phone if privacy setting forbids public view
       return {
-        id: d.id,
-        donorId: data.donorId || d.id,
-        fullName: data.fullName || 'স্বেচ্ছাসেবী রক্তদাতা',
-        photoUrl: data.photoUrl,
-        bloodGroup: data.bloodGroup as BloodGroup,
-        division: data.division,
-        districtId: data.districtId,
-        district: data.district,
-        upazilaId: data.upazilaId,
-        upazila: data.upazila,
-        areaId: data.areaId,
-        area: data.area,
-        locationLabel: data.locationLabel,
-        availability: Boolean(data.availability),
-        emergencyAvailable: Boolean(data.emergencyAvailable),
-        lastDonationDate: data.lastDonationDate,
-        firstDonationDate: data.firstDonationDate,
-        totalDonations: data.totalDonations || 0,
-        verificationStatus: (data.verificationStatus as VerificationStatus) || 'pending',
-        organizationId: data.organizationId || 'org-roktobondon',
-        branchId: data.branchId,
-        createdAt: data.createdAt || new Date().toISOString(),
+        ...donor,
+        phone: donor.privacy.showPhone ? donor.phone : '',
       };
     });
   } catch (err) {
-    console.error('Error searching donorPublic in Firestore:', err);
+    console.error('Exception searching donors in Supabase:', err);
     return [];
   }
 }
 
 /**
- * Fetch a single public donor profile by donorId
+ * Fetch a single donor profile by ID
  */
-export async function getDonorPublicById(donorId: string): Promise<DonorPublic | null> {
-  if (!isFirebaseConfigured || !db) return null;
+export async function getDonorById(donorId: string): Promise<Donor | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
   try {
-    const ref = doc(db, PUBLIC_COLLECTION, donorId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return {
-      id: snap.id,
-      donorId: data.donorId || snap.id,
-      fullName: data.fullName || 'স্বেচ্ছাসেবী রক্তদাতা',
-      photoUrl: data.photoUrl,
-      bloodGroup: data.bloodGroup as BloodGroup,
-      division: data.division,
-      districtId: data.districtId,
-      district: data.district,
-      upazilaId: data.upazilaId,
-      upazila: data.upazila,
-      areaId: data.areaId,
-      area: data.area,
-      locationLabel: data.locationLabel,
-      availability: Boolean(data.availability),
-      emergencyAvailable: Boolean(data.emergencyAvailable),
-      lastDonationDate: data.lastDonationDate,
-      firstDonationDate: data.firstDonationDate,
-      totalDonations: data.totalDonations || 0,
-      verificationStatus: (data.verificationStatus as VerificationStatus) || 'pending',
-      organizationId: data.organizationId || 'org-roktobondon',
-      branchId: data.branchId,
-      createdAt: data.createdAt || new Date().toISOString(),
-    };
+    const { data, error } = await supabase
+      .from('donors')
+      .select('*')
+      .or(`id.eq.${donorId},donor_id.eq.${donorId}`)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching donor profile:', error);
+      return null;
+    }
+
+    return data ? mapDonorRow(data) : null;
   } catch (err) {
-    console.error('Error fetching public donor profile:', err);
+    console.error('Exception fetching donor profile:', err);
     return null;
   }
 }
 
 /**
- * Fetch private donor profile (guarded by owner or staff)
- */
-export async function getDonorPrivateById(donorId: string): Promise<DonorPrivate | null> {
-  if (!isFirebaseConfigured || !db) return null;
-  try {
-    const ref = doc(db, PRIVATE_COLLECTION, donorId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return {
-      donorId: data.donorId || snap.id,
-      userId: data.userId,
-      phone: data.phone || '',
-      email: data.email,
-      gender: data.gender,
-      dateOfBirth: data.dateOfBirth,
-      exactAddress: data.exactAddress,
-      emergencyContact: data.emergencyContact,
-      adminNotes: data.adminNotes,
-      verificationDocuments: data.verificationDocuments,
-      nidOrIdNumber: data.nidOrIdNumber,
-      privacy: data.privacy || {
-        showPhone: false,
-        showGender: false,
-        showAge: false,
-        allowDirectContact: true,
-      },
-      verifiedBy: data.verifiedBy,
-      verifiedAt: data.verifiedAt,
-      createdAt: data.createdAt || new Date().toISOString(),
-      updatedAt: data.updatedAt || new Date().toISOString(),
-    };
-  } catch (err) {
-    console.error('Error fetching private donor profile:', err);
-    return null;
-  }
-}
-
-/**
- * Register a donor by atomically writing to donorPublic and donorPrivate
+ * Create/Register a donor record in Supabase
  */
 export async function createDonorRecord(
   publicData: DonorPublic,
   privateData: DonorPrivate
 ): Promise<Donor> {
-  const donorId = publicData.id;
-
-  if (isFirebaseConfigured && db) {
-    const batch = writeBatch(db);
-
-    const publicRef = doc(db, PUBLIC_COLLECTION, donorId);
-    batch.set(publicRef, {
-      ...publicData,
-      serverCreatedAt: serverTimestamp(),
-    });
-
-    const privateRef = doc(db, PRIVATE_COLLECTION, donorId);
-    batch.set(privateRef, {
-      ...privateData,
-      serverCreatedAt: serverTimestamp(),
-      serverUpdatedAt: serverTimestamp(),
-    });
-
-    await batch.commit();
-  }
-
-  // Return composite Donor for client UI
-  return {
+  const composite: Donor = {
     ...publicData,
     userId: privateData.userId,
     phone: privateData.phone,
@@ -221,44 +164,104 @@ export async function createDonorRecord(
     nidOrIdNumber: privateData.nidOrIdNumber,
     verifiedBy: privateData.verifiedBy,
     verifiedAt: privateData.verifiedAt,
-    updatedAt: privateData.updatedAt,
+    updatedAt: new Date().toISOString(),
   };
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('donors').insert({
+        id: composite.id,
+        donor_id: composite.donorId,
+        user_id: composite.userId,
+        full_name: composite.fullName,
+        photo_url: composite.photoUrl || null,
+        blood_group: composite.bloodGroup,
+        division: composite.division || 'Dhaka',
+        district_id: composite.districtId || 'dist-dhaka',
+        district: composite.district,
+        upazila_id: composite.upazilaId || 'upa-dhamrai',
+        upazila: composite.upazila,
+        area_id: composite.areaId || null,
+        area: composite.area,
+        location_label: composite.locationLabel || null,
+        availability: composite.availability,
+        emergency_available: composite.emergencyAvailable,
+        last_donation_date: composite.lastDonationDate || null,
+        first_donation_date: composite.firstDonationDate || null,
+        total_donations: composite.totalDonations,
+        verification_status: composite.verificationStatus,
+        organization_id: composite.organizationId,
+        branch_id: composite.branchId,
+        phone: composite.phone,
+        email: composite.email || null,
+        gender: composite.gender || null,
+        date_of_birth: composite.dateOfBirth || null,
+        exact_address: composite.exactAddress || null,
+        emergency_contact: composite.emergencyContact || null,
+        admin_notes: composite.adminNotes || null,
+        nid_or_id_number: composite.nidOrIdNumber || null,
+        privacy: composite.privacy,
+        created_at: composite.createdAt,
+        updated_at: composite.updatedAt,
+      });
+
+      if (error) {
+        console.error('Error inserting donor in Supabase:', error);
+      }
+    } catch (err) {
+      console.error('Exception creating donor record:', err);
+    }
+  }
+
+  return composite;
 }
 
 /**
- * Update donor profile across public and private records
+ * Update donor profile
  */
 export async function updateDonorRecord(
   donorId: string,
-  publicUpdates?: Partial<DonorPublic>,
-  privateUpdates?: Partial<DonorPrivate>
+  updates: Partial<Donor>
 ): Promise<void> {
-  if (!isFirebaseConfigured || !db) return;
-  const batch = writeBatch(db);
+  if (!isSupabaseConfigured || !supabase) return;
 
-  if (publicUpdates && Object.keys(publicUpdates).length > 0) {
-    const pubRef = doc(db, PUBLIC_COLLECTION, donorId);
-    batch.update(pubRef, {
-      ...publicUpdates,
-      serverUpdatedAt: serverTimestamp(),
-    });
+  const dbUpdates: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
+  if (updates.photoUrl !== undefined) dbUpdates.photo_url = updates.photoUrl;
+  if (updates.bloodGroup !== undefined) dbUpdates.blood_group = updates.bloodGroup;
+  if (updates.division !== undefined) dbUpdates.division = updates.division;
+  if (updates.district !== undefined) dbUpdates.district = updates.district;
+  if (updates.upazila !== undefined) dbUpdates.upazila = updates.upazila;
+  if (updates.area !== undefined) dbUpdates.area = updates.area;
+  if (updates.locationLabel !== undefined) dbUpdates.location_label = updates.locationLabel;
+  if (updates.availability !== undefined) dbUpdates.availability = updates.availability;
+  if (updates.emergencyAvailable !== undefined) dbUpdates.emergency_available = updates.emergencyAvailable;
+  if (updates.lastDonationDate !== undefined) dbUpdates.last_donation_date = updates.lastDonationDate;
+  if (updates.totalDonations !== undefined) dbUpdates.total_donations = updates.totalDonations;
+  if (updates.verificationStatus !== undefined) dbUpdates.verification_status = updates.verificationStatus;
+  if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+  if (updates.email !== undefined) dbUpdates.email = updates.email;
+  if (updates.gender !== undefined) dbUpdates.gender = updates.gender;
+  if (updates.dateOfBirth !== undefined) dbUpdates.date_of_birth = updates.dateOfBirth;
+  if (updates.exactAddress !== undefined) dbUpdates.exact_address = updates.exactAddress;
+  if (updates.emergencyContact !== undefined) dbUpdates.emergency_contact = updates.emergencyContact;
+  if (updates.adminNotes !== undefined) dbUpdates.admin_notes = updates.adminNotes;
+  if (updates.nidOrIdNumber !== undefined) dbUpdates.nid_or_id_number = updates.nidOrIdNumber;
+  if (updates.privacy !== undefined) dbUpdates.privacy = updates.privacy;
+  if (updates.verifiedBy !== undefined) dbUpdates.verified_by = updates.verifiedBy;
+  if (updates.verifiedAt !== undefined) dbUpdates.verified_at = updates.verifiedAt;
+
+  const { error } = await supabase.from('donors').update(dbUpdates).eq('id', donorId);
+  if (error) {
+    console.error('Error updating donor in Supabase:', error);
   }
-
-  if (privateUpdates && Object.keys(privateUpdates).length > 0) {
-    const privRef = doc(db, PRIVATE_COLLECTION, donorId);
-    batch.update(privRef, {
-      ...privateUpdates,
-      updatedAt: new Date().toISOString(),
-      serverUpdatedAt: serverTimestamp(),
-    });
-  }
-
-  await batch.commit();
 }
 
 /**
  * Verify a donor (authorized staff only)
- * Creates verification log entry and updates verification status
  */
 export async function verifyDonorStatus(
   donorId: string,
@@ -266,38 +269,28 @@ export async function verifyDonorStatus(
   verifierName: string,
   notes?: string
 ): Promise<void> {
-  if (!isFirebaseConfigured || !db) return;
+  if (!isSupabaseConfigured || !supabase) return;
   const now = new Date().toISOString();
-  const batch = writeBatch(db);
 
-  // Update public status
-  const pubRef = doc(db, PUBLIC_COLLECTION, donorId);
-  batch.update(pubRef, {
-    verificationStatus: status,
-    serverUpdatedAt: serverTimestamp(),
-  });
+  // Update donor status
+  await supabase
+    .from('donors')
+    .update({
+      verification_status: status,
+      verified_by: verifierName,
+      verified_at: now,
+      admin_notes: notes || '',
+      updated_at: now,
+    })
+    .eq('id', donorId);
 
-  // Update private admin notes & verifier
-  const privRef = doc(db, PRIVATE_COLLECTION, donorId);
-  batch.update(privRef, {
-    verificationStatus: status,
-    verifiedBy: verifierName,
-    verifiedAt: now,
-    adminNotes: notes || '',
-    updatedAt: now,
-    serverUpdatedAt: serverTimestamp(),
-  });
-
-  // Create audit verification log
-  const logRef = doc(collection(db, 'verificationLogs'));
-  batch.set(logRef, {
-    donorId,
+  // Insert verification log
+  await supabase.from('verification_logs').insert({
+    id: `vlog-${Date.now()}`,
+    donor_id: donorId,
     status,
-    verifiedBy: verifierName,
+    verified_by: verifierName,
     notes: notes || '',
     timestamp: now,
-    serverTimestamp: serverTimestamp(),
   });
-
-  await batch.commit();
 }

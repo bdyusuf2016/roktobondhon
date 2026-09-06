@@ -121,6 +121,34 @@ export const Navbar: React.FC = () => {
               ডোনার নিবন্ধন
             </Link>
             <Link
+              to="/camps"
+              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isActive('/camps')
+                  ? 'bg-red-50 text-red-700 border border-red-200/80 font-semibold'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+            >
+              <span>ব্লাড ক্যাম্প</span>
+            </Link>
+            <Link
+              to="/certificate"
+              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isActive('/certificate')
+                  ? 'bg-red-50 text-red-700 border border-red-200/80 font-semibold'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+            >
+              <span>সনদপত্র</span>
+            </Link>
+            <Link
+              to="/health-checker"
+              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isActive('/health-checker')
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-semibold'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+            >
+              <span className="text-amber-600">✨</span>
+              <span>AI স্বাস্থ্য সহকারী</span>
+            </Link>
+            <Link
               to="/hospitals"
               className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isActive('/hospitals')
                   ? 'bg-red-50 text-red-700 border border-red-200/80 font-semibold'
@@ -128,7 +156,7 @@ export const Navbar: React.FC = () => {
                 }`}
             >
               <Building2 className="w-3.5 h-3.5 text-red-600" />
-              <span>হাসপাতাল ডিরেক্টরি</span>
+              <span>হাসপাতাল</span>
             </Link>
             <Link
               to="/donate"
@@ -138,7 +166,7 @@ export const Navbar: React.FC = () => {
                 }`}
             >
               <Heart className="w-3.5 h-3.5 fill-current" />
-              <span>ডোনেট ও সাপোর্ট</span>
+              <span>ডোনেট</span>
             </Link>
             <Link
               to="/about"
@@ -310,6 +338,30 @@ export const Navbar: React.FC = () => {
               }`}
           >
             ডোনার হিসেবে যুক্ত হোন
+          </Link>
+          <Link
+            to="/camps"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-lg text-base font-medium ${isActive('/camps') ? 'bg-red-50 text-red-700 border border-red-200/70' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+          >
+            🎪 রক্তদান ক্যাম্প ও ইভেন্ট
+          </Link>
+          <Link
+            to="/certificate"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-lg text-base font-medium ${isActive('/certificate') ? 'bg-red-50 text-red-700 border border-red-200/70' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+          >
+            🏆 রক্তদাতা সনদপত্র ও ব্যাজ
+          </Link>
+          <Link
+            to="/health-checker"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-lg text-base font-medium ${isActive('/health-checker') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/70' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+          >
+            ✨ AI রক্তদান যোগ্যতা চেকার
           </Link>
           <Link
             to="/hospitals"

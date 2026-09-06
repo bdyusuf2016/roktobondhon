@@ -1,31 +1,44 @@
-import {
-  doc,
-  getDocs,
-  setDoc,
-  collection,
-  query,
-  where,
-  serverTimestamp,
-} from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../firebase/config';
-import type { Donation } from '../types';
+import { supabase, isSupabaseConfigured } from '../supabase/config';
+import type { Donation, BloodGroup, DonationType } from '../types';
 
-const DONATIONS_COLLECTION = 'donations';
+function mapDonationRow(row: any): Donation {
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    donorUserId: row.donor_user_id,
+    donorName: row.donor_name,
+    bloodGroup: row.blood_group as BloodGroup,
+    requestId: row.request_id || undefined,
+    donationDate: row.donation_date,
+    hospital: row.hospital,
+    units: row.units || 1,
+    donationType: (row.donation_type as DonationType) || 'Whole Blood',
+    verifiedBy: row.verified_by,
+    verificationDate: row.verification_date || row.created_at,
+    notes: row.notes || undefined,
+  };
+}
 
 /**
  * Fetch donation records for a specific donor
  */
 export async function getDonationsForDonor(donorId: string): Promise<Donation[]> {
-  if (!isFirebaseConfigured || !db) return [];
+  if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const q = query(
-      collection(db, DONATIONS_COLLECTION),
-      where('donorId', '==', donorId)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Donation));
+    const { data, error } = await supabase
+      .from('donations')
+      .select('*')
+      .eq('donor_id', donorId)
+      .order('donation_date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching donations from Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map(mapDonationRow);
   } catch (err) {
-    console.error('Error fetching donations for donor:', err);
+    console.error('Exception fetching donations:', err);
     return [];
   }
 }
@@ -42,12 +55,31 @@ export async function recordDonationInFirestore(
     id,
   };
 
-  if (isFirebaseConfigured && db) {
-    const ref = doc(db, DONATIONS_COLLECTION, id);
-    await setDoc(ref, {
-      ...newDonation,
-      serverCreatedAt: serverTimestamp(),
-    });
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('donations').insert({
+        id: newDonation.id,
+        donor_id: newDonation.donorId,
+        donor_user_id: newDonation.donorUserId,
+        donor_name: newDonation.donorName,
+        blood_group: newDonation.bloodGroup,
+        request_id: newDonation.requestId || null,
+        donation_date: newDonation.donationDate,
+        hospital: newDonation.hospital,
+        units: newDonation.units,
+        donation_type: newDonation.donationType,
+        verified_by: newDonation.verifiedBy,
+        verification_date: newDonation.verificationDate || new Date().toISOString(),
+        notes: newDonation.notes || null,
+        created_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        console.error('Error inserting donation in Supabase:', error);
+      }
+    } catch (err) {
+      console.error('Exception recording donation:', err);
+    }
   }
 
   return newDonation;
