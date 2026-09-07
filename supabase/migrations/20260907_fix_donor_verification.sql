@@ -22,7 +22,6 @@
 -- 1. Auto-confirm any staff accounts in auth.users so their logins succeed
 UPDATE auth.users
 SET email_confirmed_at = COALESCE(email_confirmed_at, clock_timestamp()),
-    confirmed_at = COALESCE(confirmed_at, clock_timestamp()),
     phone_confirmed_at = COALESCE(phone_confirmed_at, clock_timestamp())
 WHERE lower(email) IN (
   SELECT lower(email) FROM public.users WHERE role IN ('super_admin', 'admin', 'moderator', 'volunteer') AND email IS NOT NULL
