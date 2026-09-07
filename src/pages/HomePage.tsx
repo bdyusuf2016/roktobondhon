@@ -196,7 +196,7 @@ export const HomePage: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-red-600 block">
-              {donors.length}+
+              {donors.length}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               নিবন্ধিত রক্তদাতা
@@ -208,7 +208,7 @@ export const HomePage: React.FC = () => {
 
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-emerald-600 block">
-              {donations.length}+
+              {donations.length}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               সফল রক্তদান
@@ -232,13 +232,13 @@ export const HomePage: React.FC = () => {
 
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-indigo-600 block">
-              ৩ টি
+              {branches.length > 0 ? `${branches.length} টি` : 'সক্রিয়'}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               সক্রিয় শাখা
             </span>
             <span className="text-[11px] text-slate-400 block mt-0.5">
-              ধামরাই • সাভার • মানিকগঞ্জ
+              কালামপুর • ধামরাই • সাভার • মানিকগঞ্জ
             </span>
           </div>
         </div>

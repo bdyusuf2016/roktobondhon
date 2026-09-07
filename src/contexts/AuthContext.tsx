@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
-import { INITIAL_DEMO_USERS } from '../data/seedData';
 import { supabase, isSupabaseConfigured, isDemoMode } from '../supabase/config';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import {
@@ -49,10 +48,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         console.error('Failed to parse cached user', e);
       }
-    }
-    // In demo mode only, default to super_admin for preview
-    if (isDemoMode) {
-      return INITIAL_DEMO_USERS[0];
     }
     return null;
   });
@@ -111,23 +106,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithPhoneOtp = async (phone: string, otp: string) => {
     setIsLoading(true);
     try {
-      if (isDemoMode) {
-        if (otp.length < 4) {
-          throw new Error('অনুগ্রহ করে সঠিক ৪-৬ ডিজিটের ওটিপি (OTP) প্রদান করুন');
-        }
-        const matched = INITIAL_DEMO_USERS.find((u) => u.phone === phone) || {
-          id: `user-phone-${Date.now()}`,
-          fullName: 'মোবাইল রক্তদাতা',
-          phone,
-          role: 'donor' as UserRole,
-          organizationId: 'org-roktobondon',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setCurrentUser(matched);
-        return;
-      }
-
       // Real Supabase OTP Verification
       const sbUser = await confirmSupabasePhoneOtp(phone, otp);
       setSupabaseUser(sbUser);
@@ -138,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(profile);
       } else {
         const newProfile = await createUserProfile(sbUser.id, {
-          fullName: sbUser.user_metadata?.full_name || 'মোবাইল ব্যবহারকারী',
+          fullName: sbUser.user_metadata?.full_name || 'রক্তদাতা সদস্য',
           phone: sbUser.phone || phone,
           role: 'donor',
           phoneVerified: true,
@@ -150,66 +128,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithEmail = async (email: string, pass: string) => {
+  const loginWithEmail = async (emailOrPhone: string, pass: string) => {
     setIsLoading(true);
     try {
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanPhone = cleanEmail.replace(/@roktobondon\.org$/, '').replace(/[^0-9]/g, '');
+      const isPhoneInput = /^[0-9+-\s()]+$/.test(emailOrPhone.trim());
+      const cleanPhone = isPhoneInput ? emailOrPhone.replace(/[^0-9]/g, '') : '';
+      const cleanEmail = emailOrPhone.trim().toLowerCase();
 
-      // 1. Try Supabase Auth SignIn if configured
-      if (isSupabaseConfigured && supabase) {
+      // 1. Try Supabase Auth
+      if (isSupabaseConfigured && supabase && !isPhoneInput) {
         try {
           const sbUser = await signInEmail(cleanEmail, pass);
-          setSupabaseUser(sbUser);
-          const profile = await getUserProfile(sbUser.id);
-          if (profile) {
-            setCurrentUser(profile);
-            return;
+          if (sbUser) {
+            setSupabaseUser(sbUser);
+            const profile = await getUserProfile(sbUser.id);
+            if (profile) {
+              setCurrentUser(profile);
+              return;
+            }
           }
-        } catch {
-          // If signIn fails (e.g. rate-limited or unconfirmed email), attempt Supabase Auth signUp
-          try {
-            const registeredUser = await registerEmail(cleanEmail, pass);
-            setSupabaseUser(registeredUser);
-            const newProfile = await createUserProfile(registeredUser.id, {
-              fullName: cleanEmail.split('@')[0],
-              email: cleanEmail,
-              phone: cleanPhone.length >= 10 ? cleanPhone : '+8801700000000',
-              role: cleanEmail.includes('admin') ? 'super_admin' : 'donor',
-            });
-            setCurrentUser(newProfile);
-            return;
-          } catch {
-            // Supabase auth failed (e.g. rate limit). Check public.users database directly.
-          }
+        } catch (authErr) {
+          console.warn('Supabase auth attempt notice:', authErr);
         }
+      }
 
-        // 2. Query public.users database directly
+      // 2. Direct database query in users table
+      if (isSupabaseConfigured && supabase) {
         try {
           let query = supabase.from('users').select('*');
-          if (cleanPhone && cleanPhone.length >= 7) {
-            query = query.or(`email.eq.${cleanEmail},phone.ilike.%${cleanPhone}%`);
+          if (isPhoneInput) {
+            query = query.ilike('phone', `%${cleanPhone.slice(-10)}%`);
           } else {
             query = query.eq('email', cleanEmail);
           }
-
-          const { data: dbUsers } = await query;
-          if (dbUsers && dbUsers.length > 0) {
-            const found = dbUsers[0];
-            const userObj: User = {
-              id: found.id,
-              fullName: found.full_name,
-              email: found.email || cleanEmail,
-              phone: found.phone || cleanPhone || '+8801700000001',
-              role: found.role as UserRole,
-              organizationId: found.organization_id || 'org-roktobondon',
-              branchId: found.branch_id || undefined,
-              photoUrl: found.photo_url || undefined,
-              status: found.status || 'active',
-              createdAt: found.created_at || new Date().toISOString(),
-              updatedAt: found.updated_at || new Date().toISOString(),
+          const { data: userRows, error: userErr } = await query.limit(1);
+          if (!userErr && userRows && userRows.length > 0) {
+            const row = userRows[0];
+            const matchedUser: User = {
+              id: row.id,
+              fullName: row.full_name,
+              phone: row.phone,
+              email: row.email,
+              role: row.role as UserRole,
+              organizationId: row.organization_id || 'org-roktobondon',
+              branchId: row.branch_id,
+              photoUrl: row.photo_url,
+              status: row.status || 'active',
+              phoneVerified: Boolean(row.phone_verified),
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+              lastLoginAt: new Date().toISOString(),
             };
-            setCurrentUser(userObj);
+            setCurrentUser(matchedUser);
             return;
           }
         } catch (dbErr) {
@@ -217,31 +187,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 3. Fallback to Initial Users / Predefined accounts
-      const matched = INITIAL_DEMO_USERS.find(
-        (u) =>
-          u.email?.toLowerCase() === cleanEmail ||
-          (cleanPhone && u.phone?.replace(/[^0-9]/g, '').includes(cleanPhone))
-      );
-
-      if (matched) {
-        setCurrentUser(matched);
-        return;
-      }
-
-      // 4. Auto create local active user if valid credentials provided
-      const isSuperAdminEmail = cleanEmail === 'admin@roktobondon.org' || cleanEmail.includes('admin');
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        fullName: cleanEmail.split('@')[0],
-        email: cleanEmail,
-        phone: cleanPhone || '+8801711000000',
-        role: isSuperAdminEmail ? ('super_admin' as UserRole) : ('donor' as UserRole),
-        organizationId: 'org-roktobondon',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setCurrentUser(newUser);
+      // 3. Fallback error if not found
+      throw new Error('ব্যবহারকারী পাওয়া যায়নি। অনুগ্রহ করে সঠিক ইমেইল বা ফোন নম্বর প্রদান করুন।');
     } finally {
       setIsLoading(false);
     }
@@ -252,9 +199,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (isSupabaseConfigured && supabase) {
         await signInGoogle();
-      } else {
-        // Fallback demo user
-        setCurrentUser(INITIAL_DEMO_USERS[0]);
       }
     } finally {
       setIsLoading(false);
@@ -314,15 +258,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchDemoRole = (role: UserRole) => {
-    if (!isDemoMode) {
-      console.warn('Demo role switching is disabled in production.');
-      return;
-    }
-    const demo = INITIAL_DEMO_USERS.find((u) => u.role === role);
-    if (demo) {
-      setCurrentUser(demo);
-    } else {
-      setCurrentUser((prev) => (prev ? { ...prev, role } : INITIAL_DEMO_USERS[0]));
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, role });
     }
   };
 

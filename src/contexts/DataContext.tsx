@@ -173,7 +173,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? generateSeedDonors() : [];
+    return [];
   });
 
   const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>(() => {
@@ -186,7 +186,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? generateSeedRequests() : [];
+    return [];
   });
 
   const [donorRequests, setDonorRequests] = useState<DonorRequest[]>(() => {
@@ -212,7 +212,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? generateSeedDonations(generateSeedDonors(), generateSeedRequests()) : [];
+    return [];
   });
 
   const [locations, setLocations] = useState<LocationItem[]>(() => {
@@ -225,7 +225,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_LOCATIONS;
+    return [];
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
@@ -238,7 +238,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_BRANCHES;
+    return [];
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -246,8 +246,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {
         id: 'notif-welcome',
         userId: 'all',
-        title: 'স্বাগতম রক্তবন্ধন প্ল্যাটফর্মে',
-        message: 'ধামরাই, সাভার ও মানিকগঞ্জে স্বেচ্ছাসেবী রক্তদাতাদের নেটওয়ার্কে আপনাকে স্বাগতম।',
+        title: 'স্বাগতম রক্ত দান পরিবার কালামপুর প্ল্যাটফর্মে',
+        message: 'কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জে স্বেচ্ছাসেবী রক্তদাতাদের নেটওয়ার্কে আপনাকে স্বাগতম।',
         type: 'system',
         isRead: false,
         createdAt: new Date().toISOString(),
@@ -300,7 +300,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return HOSPITALS_DATA;
+    return [];
   });
 
   const [fundDonations, setFundDonations] = useState<FundDonation[]>(() => {
@@ -313,7 +313,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? INITIAL_FUND_DONATIONS : [];
+    return [];
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(() => {
@@ -326,7 +326,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_PAYMENT_METHODS;
+    return [];
   });
 
   const [donationCauses, setDonationCauses] = useState<DonationCauseConfig[]>(() => {
@@ -339,7 +339,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_DONATION_CAUSES;
+    return [];
   });
 
   const [fundDisbursements, setFundDisbursements] = useState<FundDisbursement[]>(() => {
@@ -352,7 +352,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? INITIAL_FUND_DISBURSEMENTS : [];
+    return [];
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -365,7 +365,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return isDemoMode ? INITIAL_DEMO_USERS : [];
+    return [];
   });
 
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix>(() => {
@@ -390,7 +390,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_BLOOD_CAMPS;
+    return [];
   });
 
   const [campRegistrations, setCampRegistrations] = useState<CampRegistration[]>(() => {
@@ -420,10 +420,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         // 1. Fetch donors
         const { data: donorsData } = await supabase.from('donors').select('*');
-        if (donorsData && donorsData.length > 0 && isMounted) {
+        if (donorsData && isMounted) {
           setDonors(donorsData.map(mapDonorRow));
-        } else if (isDemoMode && isMounted) {
-          setDonors((prev) => (prev.length > 0 ? prev : generateSeedDonors()));
         }
 
         // 2. Fetch blood requests
@@ -431,10 +429,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .from('blood_requests')
           .select('*')
           .order('created_at', { ascending: false });
-        if (reqsData && reqsData.length > 0 && isMounted) {
+        if (reqsData && isMounted) {
           setBloodRequests(reqsData.map(mapBloodRequestRow));
-        } else if (isDemoMode && isMounted) {
-          setBloodRequests((prev) => (prev.length > 0 ? prev : generateSeedRequests()));
         }
 
         // 3. Fetch donor requests
