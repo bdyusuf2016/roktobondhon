@@ -47,7 +47,7 @@ const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, logout, updateCurrentUser, changePassword } = useAuth();
-  const { donors, bloodRequests, donations, updateDonor } = useData();
+  const { donors, bloodRequests, donations, updateDonor, registerDonor } = useData();
   const { config } = useOrgConfig();
 
   // Active Tab
@@ -62,18 +62,33 @@ export const ProfilePage: React.FC = () => {
   const [editFullName, setEditFullName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editPhotoUrl, setEditPhotoUrl] = useState('');
   const [editGender, setEditGender] = useState<'male' | 'female' | 'other'>('male');
   const [editDateOfBirth, setEditDateOfBirth] = useState('');
   const [editWeight, setEditWeight] = useState<number | ''>('');
   const [editBloodGroup, setEditBloodGroup] = useState<BloodGroup>('A+');
   const [editDistrict, setEditDistrict] = useState('Dhaka');
-  const [editUpazila, setEditUpazila] = useState('Dhamrai');
+  const [editUpazila, setEditUpazila] = useState('Dhamrai (ধামরাই)');
   const [editArea, setEditArea] = useState('');
   const [editExactAddress, setEditExactAddress] = useState('');
   const [editEmergencyContact, setEditEmergencyContact] = useState('');
   const [editLastDonationDate, setEditLastDonationDate] = useState('');
+  const [editAvailability, setEditAvailability] = useState(true);
   const [editShowPhone, setEditShowPhone] = useState(true);
   const [editAllowDirectContact, setEditAllowDirectContact] = useState(true);
+
+  // Dynamic Upazilas and Unions for current selected district
+  const currentUpazilas = useMemo(() => {
+    const list = INITIAL_LOCATIONS.filter((l) => l.district === editDistrict).map((l) => l.upazila);
+    return list.length > 0 ? list : ['Dhamrai (ধামরাই)', 'Savar (সাভার)'];
+  }, [editDistrict]);
+
+  const currentUnions = useMemo(() => {
+    const matched = INITIAL_LOCATIONS.find(
+      (l) => l.district === editDistrict && l.upazila === editUpazila
+    );
+    return matched?.unions || [];
+  }, [editDistrict, editUpazila]);
 
   // Change Password Form State
   const [newPassword, setNewPassword] = useState('');
@@ -160,20 +175,20 @@ export const ProfilePage: React.FC = () => {
     setEditFullName(currentUser.fullName || '');
     setEditPhone(currentUser.phone || '');
     setEditEmail(currentUser.email || '');
-    if (myDonor) {
-      setEditBloodGroup(myDonor.bloodGroup || 'A+');
-      setEditGender(myDonor.gender || 'male');
-      setEditDateOfBirth(myDonor.dateOfBirth || '');
-      setEditWeight(myDonor.weight || '');
-      setEditDistrict(myDonor.district || 'Dhaka');
-      setEditUpazila(myDonor.upazila || 'Dhamrai');
-      setEditArea(myDonor.area || '');
-      setEditExactAddress(myDonor.exactAddress || '');
-      setEditEmergencyContact(myDonor.emergencyContact || '');
-      setEditLastDonationDate(myDonor.lastDonationDate || '');
-      setEditShowPhone(myDonor.privacy?.showPhone ?? true);
-      setEditAllowDirectContact(myDonor.privacy?.allowDirectContact ?? true);
-    }
+    setEditPhotoUrl(currentUser.photoUrl || myDonor?.photoUrl || '');
+    setEditBloodGroup(myDonor?.bloodGroup || 'A+');
+    setEditGender(myDonor?.gender || 'male');
+    setEditDateOfBirth(myDonor?.dateOfBirth || '');
+    setEditWeight(myDonor?.weight || '');
+    setEditDistrict(myDonor?.district || 'Dhaka');
+    setEditUpazila(myDonor?.upazila || 'Dhamrai (ধামরাই)');
+    setEditArea(myDonor?.area || '');
+    setEditExactAddress(myDonor?.exactAddress || '');
+    setEditEmergencyContact(myDonor?.emergencyContact || '');
+    setEditLastDonationDate(myDonor?.lastDonationDate || '');
+    setEditAvailability(myDonor?.availability ?? true);
+    setEditShowPhone(myDonor?.privacy?.showPhone ?? true);
+    setEditAllowDirectContact(myDonor?.privacy?.allowDirectContact ?? true);
     setShowEditProfileModal(true);
   };
 
@@ -183,21 +198,27 @@ export const ProfilePage: React.FC = () => {
       setToastMessage({ type: 'error', text: 'অনুগ্রহ করে সম্পূর্ণ নাম লিখুন।' });
       return;
     }
+    if (!editPhone.trim()) {
+      setToastMessage({ type: 'error', text: 'অনুগ্রহ করে মোবাইল নম্বর লিখুন।' });
+      return;
+    }
     setIsSubmitting(true);
     try {
-      // 1. Update User Profile
+      // 1. Update Core User Profile
       await updateCurrentUser({
         fullName: editFullName.trim(),
         phone: editPhone.trim(),
         email: editEmail.trim() || undefined,
+        photoUrl: editPhotoUrl.trim() || undefined,
       });
 
-      // 2. If registered as donor, update full donor profile
+      // 2. If registered donor exists, update full donor profile
       if (myDonor) {
         await updateDonor(myDonor.id, {
           fullName: editFullName.trim(),
           phone: editPhone.trim(),
           email: editEmail.trim() || undefined,
+          photoUrl: editPhotoUrl.trim() || undefined,
           gender: editGender,
           dateOfBirth: editDateOfBirth || undefined,
           weight: editWeight ? Number(editWeight) : undefined,
@@ -208,16 +229,50 @@ export const ProfilePage: React.FC = () => {
           exactAddress: editExactAddress.trim() || undefined,
           emergencyContact: editEmergencyContact.trim() || undefined,
           lastDonationDate: editLastDonationDate || undefined,
+          availability: editAvailability,
           privacy: {
             ...myDonor.privacy,
             showPhone: editShowPhone,
             allowDirectContact: editAllowDirectContact,
           },
         });
+      } else {
+        // 3. If no donor record yet, register user into donor directory
+        await registerDonor({
+          userId: currentUser.id,
+          organizationId: currentUser.organizationId || 'org-roktobondon',
+          branchId: currentUser.branchId || 'br-dhm',
+          fullName: editFullName.trim(),
+          phone: editPhone.trim(),
+          email: editEmail.trim() || undefined,
+          photoUrl: editPhotoUrl.trim() || undefined,
+          bloodGroup: editBloodGroup,
+          division: 'Dhaka',
+          districtId: `dist-${editDistrict.toLowerCase()}`,
+          district: editDistrict,
+          upazilaId: `upa-${editUpazila.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+          upazila: editUpazila,
+          areaId: `area-${Date.now()}`,
+          area: editArea.trim() || editUpazila,
+          gender: editGender,
+          dateOfBirth: editDateOfBirth || undefined,
+          weight: editWeight ? Number(editWeight) : undefined,
+          exactAddress: editExactAddress.trim() || undefined,
+          emergencyContact: editEmergencyContact.trim() || undefined,
+          lastDonationDate: editLastDonationDate || undefined,
+          availability: editAvailability,
+          emergencyAvailable: true,
+          privacy: {
+            showPhone: editShowPhone,
+            showGender: true,
+            showAge: true,
+            allowDirectContact: editAllowDirectContact,
+          },
+        });
       }
 
       setShowEditProfileModal(false);
-      setToastMessage({ type: 'success', text: 'প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে!' });
+      setToastMessage({ type: 'success', text: 'প্রোফাইল তথ্য সফলভাবে সম্পূর্ণ আপডেট হয়েছে!' });
       setTimeout(() => setToastMessage(null), 4000);
     } catch (err: any) {
       setToastMessage({ type: 'error', text: err?.message || 'প্রোফাইল আপডেট করতে সমস্যা হয়েছে।' });
@@ -261,15 +316,6 @@ export const ProfilePage: React.FC = () => {
     if (!myDonor) return;
     await updateDonor(myDonor.id, { emergencyAvailable: !myDonor.emergencyAvailable });
   };
-
-  // Dynamic Upazila list based on selected district
-  const currentUpazilas = Array.from(
-    new Set(
-      INITIAL_LOCATIONS.filter((l) => l.district.toLowerCase() === editDistrict.toLowerCase()).map(
-        (l) => l.upazila.split(' ')[0]
-      )
-    )
-  );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -988,166 +1034,228 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  পুরো নাম <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editFullName}
-                  onChange={(e) => setEditFullName(e.target.value)}
-                  placeholder="আপনার নাম লিখুন"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                />
-              </div>
+              {/* Section 1: Personal Information */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold border-b border-slate-200/80 pb-2">
+                  <UserIcon className="w-4 h-4 text-red-600" />
+                  <span>১. ব্যক্তিগত মৌলিক তথ্য</span>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    মোবাইল নম্বর <span className="text-red-500">*</span>
+                    পুরো নাম <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="tel"
+                    type="text"
                     required
-                    value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    placeholder="017XXXXXXXX"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    value={editFullName}
+                    onChange={(e) => setEditFullName(e.target.value)}
+                    placeholder="আপনার পূর্ণ নাম লিখুন"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      মোবাইল নম্বর <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="017XXXXXXXX"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      ইমেইল ঠিকানা (ঐচ্ছিক)
+                    </label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="example@mail.com"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      লিঙ্গ
+                    </label>
+                    <select
+                      value={editGender}
+                      onChange={(e) => setEditGender(e.target.value as Gender)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    >
+                      <option value="male">পুরুষ (Male)</option>
+                      <option value="female">মহিলা (Female)</option>
+                      <option value="other">অন্যান্য (Other)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      জন্ম তারিখ
+                    </label>
+                    <input
+                      type="date"
+                      value={editDateOfBirth}
+                      onChange={(e) => setEditDateOfBirth(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    ইমেইল ঠিকানা (ঐচ্ছিক)
+                    প্রোফাইল ছবি / অবতার লিংক (ঐচ্ছিক URL)
                   </label>
                   <input
-                    type="email"
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                    placeholder="example@mail.com"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    type="url"
+                    value={editPhotoUrl}
+                    onChange={(e) => setEditPhotoUrl(e.target.value)}
+                    placeholder="https://example.com/photo.jpg"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden text-xs"
                   />
                 </div>
               </div>
 
-              {/* Donor Specific Edit Fields */}
-              {myDonor && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3.5">
-                  <span className="text-[11px] font-bold text-red-700 uppercase tracking-wider block">
-                    রক্তদাতা ও স্বাস্থ্য বিবরণ
-                  </span>
+              {/* Section 2: Blood & Health Details */}
+              <div className="p-4 bg-rose-50/50 border border-rose-200/80 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-red-900 font-bold border-b border-rose-200/60 pb-2">
+                  <Droplets className="w-4 h-4 text-red-600" />
+                  <span>২. রক্তদান ও স্বাস্থ্য বিবরণ</span>
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        রক্তের গ্রুপ
-                      </label>
-                      <select
-                        value={editBloodGroup}
-                        onChange={(e) => setEditBloodGroup(e.target.value as BloodGroup)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono font-bold text-red-700 focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      >
-                        {BLOOD_GROUPS.map((bg) => (
-                          <option key={bg} value={bg}>{bg}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        লিঙ্গ
-                      </label>
-                      <select
-                        value={editGender}
-                        onChange={(e) => setEditGender(e.target.value as Gender)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      >
-                        <option value="male">পুরুষ (Male)</option>
-                        <option value="female">মহিলা (Female)</option>
-                        <option value="other">অন্যান্য</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        ওজন (কেজি)
-                      </label>
-                      <input
-                        type="number"
-                        value={editWeight}
-                        onChange={(e) => setEditWeight(e.target.value ? Number(e.target.value) : '')}
-                        placeholder="যেমন: ৬০"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        জন্ম তারিখ
-                      </label>
-                      <input
-                        type="date"
-                        value={editDateOfBirth}
-                        onChange={(e) => setEditDateOfBirth(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        শেষ রক্তদানের তারিখ
-                      </label>
-                      <input
-                        type="date"
-                        value={editLastDonationDate}
-                        onChange={(e) => setEditLastDonationDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        জেলা
-                      </label>
-                      <select
-                        value={editDistrict}
-                        onChange={(e) => {
-                          setEditDistrict(e.target.value);
-                          if (e.target.value === 'Dhaka') setEditUpazila('Dhamrai');
-                          else if (e.target.value === 'Manikganj') setEditUpazila('Manikganj Sadar');
-                          else setEditUpazila('Gazipur Sadar');
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      >
-                        <option value="Dhaka">Dhaka (ঢাকা)</option>
-                        <option value="Manikganj">Manikganj (মানিকগঞ্জ)</option>
-                        <option value="Gazipur">Gazipur (গাজীপুর)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-slate-700 mb-1">
-                        উপজেলা / থানা
-                      </label>
-                      <select
-                        value={editUpazila}
-                        onChange={(e) => setEditUpazila(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                      >
-                        {currentUpazilas.map((upa) => (
-                          <option key={upa} value={upa}>{upa}</option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      রক্তের গ্রুপ <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={editBloodGroup}
+                      onChange={(e) => setEditBloodGroup(e.target.value as BloodGroup)}
+                      className="w-full px-3 py-2 border border-red-300 rounded-lg bg-white font-mono font-black text-red-600 focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    >
+                      {BLOOD_GROUPS.map((bg) => (
+                        <option key={bg} value={bg}>{bg}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      ইউনিয়ন / এলাকা / গ্রাম
+                      ওজন (কেজি)
+                    </label>
+                    <input
+                      type="number"
+                      value={editWeight}
+                      onChange={(e) => setEditWeight(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="যেমন: ৬০"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      সর্বশেষ রক্তদানের তারিখ
+                    </label>
+                    <input
+                      type="date"
+                      value={editLastDonationDate}
+                      onChange={(e) => setEditLastDonationDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none bg-white p-2.5 rounded-lg border border-rose-200">
+                    <input
+                      type="checkbox"
+                      checked={editAvailability}
+                      onChange={(e) => setEditAvailability(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded-sm border-slate-300 focus:ring-red-500"
+                    />
+                    <span className="text-slate-800 font-bold">
+                      আমি বর্তমানে জরুরি প্রয়োজনে রক্তদানে প্রস্তুত ও সক্রিয় আছি
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Section 3: Location & Address */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold border-b border-slate-200/80 pb-2">
+                  <MapPin className="w-4 h-4 text-red-600" />
+                  <span>৩. ঠিকানা ও অবস্থান</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      জেলা
+                    </label>
+                    <select
+                      value={editDistrict}
+                      onChange={(e) => {
+                        const dist = e.target.value;
+                        setEditDistrict(dist);
+                        if (dist === 'Dhaka') setEditUpazila('Dhamrai (ধামরাই)');
+                        else if (dist === 'Manikganj') setEditUpazila('Manikganj Sadar (মানিকগঞ্জ সদর)');
+                        else setEditUpazila('Gazipur Sadar (গাজীপুর সদর)');
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    >
+                      <option value="Dhaka">Dhaka (ঢাকা)</option>
+                      <option value="Manikganj">Manikganj (মানিকগঞ্জ)</option>
+                      <option value="Gazipur">Gazipur (গাজীপুর)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      উপজেলা / থানা
+                    </label>
+                    <select
+                      value={editUpazila}
+                      onChange={(e) => setEditUpazila(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    >
+                      {currentUpazilas.map((upa) => (
+                        <option key={upa} value={upa}>{upa}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      ইউনিয়ন তালিকা
+                    </label>
+                    <select
+                      value={currentUnions.includes(editArea) ? editArea : ''}
+                      onChange={(e) => {
+                        if (e.target.value) setEditArea(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                    >
+                      <option value="">-- ইউনিয়ন নির্বাচন করুন --</option>
+                      {currentUnions.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      ইউনিয়ন / এলাকা / গ্রাম (কাস্টম)
                     </label>
                     <input
                       type="text"
@@ -1157,47 +1265,68 @@ export const ProfilePage: React.FC = () => {
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
                     />
                   </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      জরুরি যোগাযোগের নম্বর (ঐচ্ছিক)
-                    </label>
-                    <input
-                      type="tel"
-                      value={editEmergencyContact}
-                      onChange={(e) => setEditEmergencyContact(e.target.value)}
-                      placeholder="018XXXXXXXX"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={editShowPhone}
-                        onChange={(e) => setEditShowPhone(e.target.checked)}
-                        className="w-4 h-4 text-red-600 rounded-sm border-slate-300 focus:ring-red-500"
-                      />
-                      <span className="text-slate-700 font-semibold">
-                        রক্তদাতা তালিকায় সাধারণ মানুষদের জন্য মোবাইল নম্বর উন্মুক্ত রাখুন
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={editAllowDirectContact}
-                        onChange={(e) => setEditAllowDirectContact(e.target.checked)}
-                        className="w-4 h-4 text-red-600 rounded-sm border-slate-300 focus:ring-red-500"
-                      />
-                      <span className="text-slate-700 font-semibold">
-                        জরুরি প্রয়োজনে সরাসরি কল করার অনুমতি দিন
-                      </span>
-                    </label>
-                  </div>
                 </div>
-              )}
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    বিস্তারিত বাসা / হোল্ডিং / রোড ঠিকানা
+                  </label>
+                  <input
+                    type="text"
+                    value={editExactAddress}
+                    onChange={(e) => setEditExactAddress(e.target.value)}
+                    placeholder="যেমন: বাড়ি # ১২, রোড # ৪, কালামপুর বাজার"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Section 4: Emergency Contact & Privacy */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold border-b border-slate-200/80 pb-2">
+                  <Phone className="w-4 h-4 text-red-600" />
+                  <span>৪. জরুরি যোগাযোগ ও গোপনীয়তা</span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    জরুরি বিকল্প নম্বর (আত্মীয় বা বন্ধুর ফোন)
+                  </label>
+                  <input
+                    type="tel"
+                    value={editEmergencyContact}
+                    onChange={(e) => setEditEmergencyContact(e.target.value)}
+                    placeholder="018XXXXXXXX"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editShowPhone}
+                      onChange={(e) => setEditShowPhone(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded-sm border-slate-300 focus:ring-red-500"
+                    />
+                    <span className="text-slate-700 font-semibold">
+                      রক্তদাতা তালিকায় সাধারণ মানুষদের জন্য মোবাইল নম্বর উন্মুক্ত রাখুন
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editAllowDirectContact}
+                      onChange={(e) => setEditAllowDirectContact(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded-sm border-slate-300 focus:ring-red-500"
+                    />
+                    <span className="text-slate-700 font-semibold">
+                      জরুরি প্রয়োজনে সরাসরি কল করার অনুমতি দিন
+                    </span>
+                  </label>
+                </div>
+              </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
