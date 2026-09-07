@@ -179,7 +179,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
             {/* Tab Modules */}
             <div>
-              {activeTab === 'overview' && <AdminOverviewTab />}
+              {activeTab === 'overview' && (
+                <AdminOverviewTab onNavigateToTab={(t) => setActiveTab(t as AdminTabKey)} />
+              )}
               {activeTab === 'analytics' && <AdminAnalyticsTab />}
               {activeTab === 'health' && <SystemHealthTab />}
 
