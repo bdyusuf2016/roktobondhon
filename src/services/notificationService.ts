@@ -17,7 +17,7 @@ function mapNotificationRow(row: any): NotificationItem {
 /**
  * Fetch notifications for a user (or broadcast 'all')
  */
-export async function getUserNotificationsFromFirestore(userId: string): Promise<NotificationItem[]> {
+export async function getUserNotificationsFromSupabase(userId: string): Promise<NotificationItem[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -41,7 +41,7 @@ export async function getUserNotificationsFromFirestore(userId: string): Promise
 /**
  * Send notification
  */
-export async function sendNotificationToFirestore(
+export async function sendNotificationToSupabase(
   notif: Omit<NotificationItem, 'id'>
 ): Promise<NotificationItem> {
   const id = `notif-${Date.now()}`;
@@ -73,7 +73,7 @@ export async function sendNotificationToFirestore(
 /**
  * Mark notification as read
  */
-export async function markNotificationAsReadInFirestore(id: string): Promise<void> {
+export async function markNotificationAsReadInSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   const { error } = await supabase
     .from('notifications')
@@ -84,3 +84,8 @@ export async function markNotificationAsReadInFirestore(id: string): Promise<voi
     console.error('Error marking notification read in Supabase:', error);
   }
 }
+
+// Compatibility aliases
+export const getUserNotificationsFromFirestore = getUserNotificationsFromSupabase;
+export const sendNotificationToFirestore = sendNotificationToSupabase;
+export const markNotificationAsReadInFirestore = markNotificationAsReadInSupabase;

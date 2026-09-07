@@ -27,7 +27,7 @@ function mapHospitalRow(row: any): Hospital {
 /**
  * Fetch all hospitals from Supabase
  */
-export async function getHospitalsFromFirestore(): Promise<Hospital[]> {
+export async function getHospitalsFromSupabase(): Promise<Hospital[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -50,7 +50,7 @@ export async function getHospitalsFromFirestore(): Promise<Hospital[]> {
 /**
  * Add a new hospital directory entry
  */
-export async function addHospitalToFirestore(hospital: Omit<Hospital, 'id'>): Promise<Hospital> {
+export async function addHospitalToSupabase(hospital: Omit<Hospital, 'id'>): Promise<Hospital> {
   const id = `hosp-${Date.now()}`;
   const item: Hospital = { ...hospital, id };
 
@@ -88,7 +88,7 @@ export async function addHospitalToFirestore(hospital: Omit<Hospital, 'id'>): Pr
 /**
  * Update an existing hospital
  */
-export async function updateHospitalInFirestore(id: string, data: Partial<Hospital>): Promise<void> {
+export async function updateHospitalInSupabase(id: string, data: Partial<Hospital>): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   const dbUpdates: Record<string, any> = {};
   if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
@@ -116,10 +116,20 @@ export async function updateHospitalInFirestore(id: string, data: Partial<Hospit
 /**
  * Delete a hospital
  */
-export async function deleteHospitalFromFirestore(id: string): Promise<void> {
+export async function deleteHospitalFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   const { error } = await supabase.from('hospitals').delete().eq('id', id);
   if (error) {
     console.error('Error deleting hospital from Supabase:', error);
   }
 }
+
+// Backward-compatible aliases
+export const getHospitalsFromFirestore = getHospitalsFromSupabase;
+export const addHospitalToFirestore = addHospitalToSupabase;
+export const updateHospitalInFirestore = updateHospitalInSupabase;
+export const deleteHospitalFromFirestore = deleteHospitalFromSupabase;
+export const getHospitals = getHospitalsFromSupabase;
+export const addHospital = addHospitalToSupabase;
+export const updateHospital = updateHospitalInSupabase;
+export const deleteHospital = deleteHospitalFromSupabase;

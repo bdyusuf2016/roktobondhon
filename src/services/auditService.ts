@@ -62,7 +62,7 @@ export async function recordAuditLog(
 /**
  * Fetch latest audit logs (admin access)
  */
-export async function getAuditLogsFromFirestore(limitCount: number = 100): Promise<AuditLog[]> {
+export async function getAuditLogsFromSupabase(limitCount: number = 100): Promise<AuditLog[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -82,6 +82,9 @@ export async function getAuditLogsFromFirestore(limitCount: number = 100): Promi
     return [];
   }
 }
+
+// Compatibility aliases
+export const getAuditLogsFromFirestore = getAuditLogsFromSupabase;
 
 /**
  * Filter audit logs by search query, target type, and user role

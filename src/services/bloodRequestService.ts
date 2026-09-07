@@ -173,7 +173,7 @@ export async function createBloodRequestRecord(
 /**
  * Update request status
  */
-export async function updateBloodRequestStatusInFirestore(
+export async function updateBloodRequestStatusInSupabase(
   id: string,
   status: RequestStatus
 ): Promise<void> {
@@ -194,7 +194,7 @@ export async function updateBloodRequestStatusInFirestore(
 /**
  * Verify blood request by staff/volunteer
  */
-export async function verifyBloodRequestInFirestore(
+export async function verifyBloodRequestInSupabase(
   id: string,
   verifierName: string
 ): Promise<void> {
@@ -216,3 +216,7 @@ export async function verifyBloodRequestInFirestore(
     console.error('Error verifying blood request in Supabase:', error);
   }
 }
+
+// Compatibility aliases
+export const updateBloodRequestStatusInFirestore = updateBloodRequestStatusInSupabase;
+export const verifyBloodRequestInFirestore = verifyBloodRequestInSupabase;

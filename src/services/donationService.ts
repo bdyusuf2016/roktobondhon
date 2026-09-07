@@ -46,7 +46,7 @@ export async function getDonationsForDonor(donorId: string): Promise<Donation[]>
 /**
  * Record a verified donation (authorized staff only)
  */
-export async function recordDonationInFirestore(
+export async function recordDonationInSupabase(
   donation: Omit<Donation, 'id'>
 ): Promise<Donation> {
   const id = `don-${Date.now()}`;
@@ -84,3 +84,6 @@ export async function recordDonationInFirestore(
 
   return newDonation;
 }
+
+// Compatibility aliases
+export const recordDonationInFirestore = recordDonationInSupabase;

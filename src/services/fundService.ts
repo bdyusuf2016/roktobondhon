@@ -59,7 +59,7 @@ function mapPaymentMethodRow(row: any): PaymentMethodConfig {
 /**
  * Fetch all Fund Donations
  */
-export async function getFundDonationsFromFirestore(): Promise<FundDonation[]> {
+export async function getFundDonationsFromSupabase(): Promise<FundDonation[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -82,7 +82,7 @@ export async function getFundDonationsFromFirestore(): Promise<FundDonation[]> {
 /**
  * Add a new fund donation record
  */
-export async function addFundDonationToFirestore(
+export async function addFundDonationToSupabase(
   donation: Omit<FundDonation, 'id' | 'createdAt' | 'status'>
 ): Promise<FundDonation> {
   const id = `fnd-${Date.now()}`;
@@ -123,7 +123,7 @@ export async function addFundDonationToFirestore(
 /**
  * Verify fund donation
  */
-export async function verifyFundDonationInFirestore(
+export async function verifyFundDonationInSupabase(
   id: string,
   verifierName: string
 ): Promise<void> {
@@ -146,7 +146,7 @@ export async function verifyFundDonationInFirestore(
 /**
  * Fetch all Fund Disbursements
  */
-export async function getFundDisbursementsFromFirestore(): Promise<FundDisbursement[]> {
+export async function getFundDisbursementsFromSupabase(): Promise<FundDisbursement[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -169,7 +169,7 @@ export async function getFundDisbursementsFromFirestore(): Promise<FundDisbursem
 /**
  * Add a new disbursement voucher
  */
-export async function addFundDisbursementToFirestore(
+export async function addFundDisbursementToSupabase(
   disbursement: Omit<FundDisbursement, 'id'>
 ): Promise<FundDisbursement> {
   const id = `disb-${Date.now()}`;
@@ -201,7 +201,7 @@ export async function addFundDisbursementToFirestore(
 /**
  * Delete a disbursement voucher
  */
-export async function deleteFundDisbursementFromFirestore(id: string): Promise<void> {
+export async function deleteFundDisbursementFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   const { error } = await supabase.from('fund_disbursements').delete().eq('id', id);
   if (error) {
@@ -212,7 +212,7 @@ export async function deleteFundDisbursementFromFirestore(id: string): Promise<v
 /**
  * Fetch Payment Methods Config
  */
-export async function getPaymentMethodsFromFirestore(): Promise<PaymentMethodConfig[]> {
+export async function getPaymentMethodsFromSupabase(): Promise<PaymentMethodConfig[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase.from('payment_methods').select('*');
@@ -231,7 +231,7 @@ export async function getPaymentMethodsFromFirestore(): Promise<PaymentMethodCon
 /**
  * Save / Update Payment Method
  */
-export async function savePaymentMethodToFirestore(
+export async function savePaymentMethodToSupabase(
   method: PaymentMethodConfig
 ): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
@@ -255,10 +255,21 @@ export async function savePaymentMethodToFirestore(
 /**
  * Delete Payment Method
  */
-export async function deletePaymentMethodFromFirestore(id: string): Promise<void> {
+export async function deletePaymentMethodFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   const { error } = await supabase.from('payment_methods').delete().eq('id', id);
   if (error) {
     console.error('Error deleting payment method from Supabase:', error);
   }
 }
+
+// Backward-compatible aliases
+export const getFundDonationsFromFirestore = getFundDonationsFromSupabase;
+export const addFundDonationToFirestore = addFundDonationToSupabase;
+export const verifyFundDonationInFirestore = verifyFundDonationInSupabase;
+export const getFundDisbursementsFromFirestore = getFundDisbursementsFromSupabase;
+export const addFundDisbursementToFirestore = addFundDisbursementToSupabase;
+export const deleteFundDisbursementFromFirestore = deleteFundDisbursementFromSupabase;
+export const getPaymentMethodsFromFirestore = getPaymentMethodsFromSupabase;
+export const savePaymentMethodToFirestore = savePaymentMethodToSupabase;
+export const deletePaymentMethodFromFirestore = deletePaymentMethodFromSupabase;
