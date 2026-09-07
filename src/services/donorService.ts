@@ -76,7 +76,8 @@ export function mapDonorRow(row: any): Donor {
 export async function searchDonorsPublic(filters: DonorSearchFilters): Promise<DonorPublic[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
-    let query = supabase.from('donors').select('*');
+    const PUBLIC_DONOR_COLUMNS = 'id, donor_id, user_id, full_name, photo_url, blood_group, division, district_id, district, upazila_id, upazila, area_id, area, location_label, age, availability, emergency_available, last_donation_date, next_eligible_date, first_donation_date, total_donations, verification_status, organization_id, branch_id, phone, gender, privacy, verified_by, verified_at, created_at, updated_at';
+    let query = supabase.from('donors').select(PUBLIC_DONOR_COLUMNS);
 
     if (filters.bloodGroup) {
       query = query.eq('blood_group', filters.bloodGroup);

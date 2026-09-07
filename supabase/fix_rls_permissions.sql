@@ -1,69 +1,98 @@
 -- ==============================================================================
--- র ক্ত ব ন্ধ ন (ROKTOBONDHON) - SUPABASE 100% PERMISSIONS & RLS REPAIR SCRIPT
+-- ROKTOBONDHON - FIX RLS PERMISSIONS & PRIVILEGE ESCALATION GUARDS
 -- ==============================================================================
--- এই স্ক্রিপ্টটি Supabase SQL Editor এ রান করলে কন্ট্রোল প্যানেলের সমস্ত আপডেট
--- (System Config, হাসপাতাল, ডোনার, শাখা, পেমেন্ট মেথড, নোটিফিকেশন ইত্যাদি)
--- কোনো RLS ব্লকিং ছাড়া সরাসরি ডাটাবেজে সেভ ও সিঙ্ক হবে।
+-- Run this in Supabase SQL Editor to enforce RLS, immutable audit logs,
+-- and server-side role & verification tampering protection.
 -- ==============================================================================
 
--- 1. Ensure system_config table exists
-CREATE TABLE IF NOT EXISTS public.system_config (
-  id TEXT PRIMARY KEY DEFAULT 'default',
-  config JSONB NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 2. Ensure branches table exists
-CREATE TABLE IF NOT EXISTS public.branches (
-  id TEXT PRIMARY KEY,
-  organization_id TEXT NOT NULL DEFAULT 'org-roktobondon',
-  name TEXT NOT NULL,
-  name_bn TEXT NOT NULL,
-  district TEXT NOT NULL,
-  upazila TEXT NOT NULL,
-  coordinator_name TEXT,
-  coordinator_phone TEXT,
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Temporarily disable and recreate clean permissive policies on all tables
-DO $$ 
-DECLARE
-  tbl text;
-  tables text[] := ARRAY[
-    'users', 'branches', 'donors', 'blood_requests', 'donor_requests',
-    'donations', 'hospitals', 'blood_camps', 'camp_registrations',
-    'fund_donations', 'fund_disbursements', 'payment_methods',
-    'notifications', 'audit_logs', 'verification_logs', 'system_config'
-  ];
+-- 1. Secure search path on helper functions
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN AS $$
 BEGIN
-  FOREACH tbl IN ARRAY tables LOOP
-    EXECUTE format('ALTER TABLE IF EXISTS public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-    
-    -- Drop existing restrictive policies if any
-    BEGIN
-      EXECUTE format('DROP POLICY IF EXISTS "Allow full access to public" ON public.%I;', tbl);
-      EXECUTE format('DROP POLICY IF EXISTS "Public can view %I" ON public.%I;', tbl, tbl);
-      EXECUTE format('DROP POLICY IF EXISTS "Allow public all on %I" ON public.%I;', tbl, tbl);
-    EXCEPTION WHEN OTHERS THEN
-      NULL;
-    END;
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()::text
+      AND role IN ('super_admin', 'admin', 'moderator', 'volunteer')
+      AND status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
-    -- Create unified open access policy for seamless client and admin operations
-    EXECUTE format(
-      'CREATE POLICY "Allow public all on %I" ON public.%I FOR ALL TO public USING (true) WITH CHECK (true);',
-      tbl, tbl
-    );
-  END LOOP;
-END $$;
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()::text
+      AND role IN ('super_admin', 'admin')
+      AND status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
--- 4. Grant table permissions to anon & authenticated roles
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+-- 2. Prevent arbitrary vertical role escalation on users table
+CREATE OR REPLACE FUNCTION public.protect_user_roles()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.role IS DISTINCT FROM OLD.role) OR (NEW.status IS DISTINCT FROM OLD.status) OR (NEW.organization_id IS DISTINCT FROM OLD.organization_id) THEN
+    IF NOT public.is_admin() THEN
+      RAISE EXCEPTION 'Unauthorized: Only administrators can modify user role, status, or organization.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
--- ==============================================================================
--- DONE! সমস্ত টেবিলে রিড, রাইট, আপডেট ও ডিলিট পারমিশন সফলভাবে কার্যকর করা হয়েছে।
--- ==============================================================================
+DROP TRIGGER IF EXISTS trg_protect_user_roles ON public.users;
+CREATE TRIGGER trg_protect_user_roles
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_user_roles();
+
+-- 3. Prevent donor self-verification tampering
+CREATE OR REPLACE FUNCTION public.protect_donor_verification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.verification_status IS DISTINCT FROM OLD.verification_status) OR (NEW.verified_by IS DISTINCT FROM OLD.verified_by) OR (NEW.verified_at IS DISTINCT FROM OLD.verified_at) THEN
+    IF NOT public.is_staff() THEN
+      RAISE EXCEPTION 'Unauthorized: Only staff can verify or change donor verification status.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_donor_verification ON public.donors;
+CREATE TRIGGER trg_protect_donor_verification
+  BEFORE UPDATE ON public.donors
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_donor_verification();
+
+-- 4. Prevent fund donation status forgery
+CREATE OR REPLACE FUNCTION public.protect_fund_donation_verification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.status IS DISTINCT FROM OLD.status) OR (NEW.verified_by IS DISTINCT FROM OLD.verified_by) OR (NEW.verified_at IS DISTINCT FROM OLD.verified_at) THEN
+    IF NOT public.is_admin() THEN
+      RAISE EXCEPTION 'Unauthorized: Only administrators can verify fund donations.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_fund_donation_verification ON public.fund_donations;
+CREATE TRIGGER trg_protect_fund_donation_verification
+  BEFORE UPDATE ON public.fund_donations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_fund_donation_verification();
+
+-- 5. Strict immutable audit trail
+DROP POLICY IF EXISTS "Prevent updating audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Prevent deleting audit logs" ON public.audit_logs;
+
+CREATE POLICY "Prevent updating audit logs" ON public.audit_logs
+  FOR UPDATE USING (false);
+
+CREATE POLICY "Prevent deleting audit logs" ON public.audit_logs
+  FOR DELETE USING (false);

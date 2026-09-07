@@ -96,10 +96,10 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
             <Droplet className="w-8 h-8 fill-current" />
           </div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-red-700 via-rose-800 to-amber-700 bg-clip-text text-transparent">
-            {config?.organizationName || 'রক্ত দান পরিবার কালামপুর'}
+            {config?.organization?.organizationNameBn || config?.organization?.organizationName || 'রক্ত দান পরিবার কালামপুর'}
           </h1>
           <p className="text-xs md:text-sm font-semibold text-slate-500 tracking-widest uppercase">
-            {config?.siteTagline || 'স্বেচ্ছাসেবী রক্তদান প্ল্যাটফর্ম'} • Certificate of Appreciation
+            {config?.organization?.sloganBn || config?.organization?.slogan || 'স্বেচ্ছাসেবী রক্তদান প্ল্যাটফর্ম'} • Certificate of Appreciation
           </p>
           <div className="inline-block px-4 py-1 rounded-full bg-amber-100/80 border border-amber-300 text-amber-800 font-bold text-sm tracking-wide">
             ★ মানবতার সম্মাননা সনদপত্র ★
