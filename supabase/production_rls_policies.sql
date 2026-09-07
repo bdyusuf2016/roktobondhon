@@ -121,6 +121,11 @@ CREATE POLICY "Admins can delete user profiles" ON public.users
 CREATE OR REPLACE FUNCTION public.protect_user_roles()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Allow direct database superuser/administrator in Supabase SQL Editor
+  IF current_user IN ('postgres', 'supabase_admin') AND auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
   IF (NEW.role IS DISTINCT FROM OLD.role) OR (NEW.status IS DISTINCT FROM OLD.status) OR (NEW.organization_id IS DISTINCT FROM OLD.organization_id) THEN
     IF NOT public.is_admin() THEN
       RAISE EXCEPTION 'Unauthorized: Only administrators can modify user role, status, or organization.';
