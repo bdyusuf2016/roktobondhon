@@ -170,7 +170,7 @@ export const SeoSettings: React.FC = () => {
               <span className="text-slate-500">home</span>
             </div>
             <h3 className="text-base text-blue-700 hover:underline font-medium cursor-pointer leading-snug">
-              {form.siteTitleBn || form.siteTitle || 'রক্তবন্ধন রক্তদান প্ল্যাটফর্ম'}
+              {form.siteTitleBn || form.siteTitle || 'রক্ত দান পরিবার কালামপুর রক্তদান প্ল্যাটফর্ম'}
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
               {form.metaDescriptionBn || form.metaDescription || 'ধামরাই, সাভার ও মানিকগঞ্জে জরুরি রক্তের প্রয়োজনে রক্তদাতা অনুসন্ধান ও স্বেচ্ছাসেবী রক্তদান নেটওয়ার্ক।'}
@@ -194,10 +194,10 @@ export const SeoSettings: React.FC = () => {
             )}
             <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-1">
               <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                {form.canonicalUrl.replace(/https?:\/\//, '').split('/')[0] || 'roktobondon.org'}
+                {form.canonicalUrl.replace(/https?:\/\//, '').split('/')[0] || 'roktodanporibar.org'}
               </p>
               <p className="text-xs font-bold text-slate-900 line-clamp-1">
-                {form.ogTitle || form.siteTitleBn || 'রক্তবন্ধন রক্তদান প্ল্যাটফর্ম'}
+                {form.ogTitle || form.siteTitleBn || 'রক্ত দান পরিবার কালামপুর রক্তদান প্ল্যাটফর্ম'}
               </p>
               <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
                 {form.ogDescription || form.metaDescriptionBn || form.metaDescription}
@@ -216,7 +216,7 @@ export const SeoSettings: React.FC = () => {
             type="text"
             value={form.siteTitleBn}
             onChange={(e) => handleChange('siteTitleBn', e.target.value)}
-            placeholder="রক্তবন্ধন — ধামরাই, সাভার ও মানিকগঞ্জের স্বেচ্ছাসেবী রক্তদান প্ল্যাটফর্ম"
+            placeholder="রক্ত দান পরিবার কালামপুর — ধামরাই, সাভার ও মানিকগঞ্জের স্বেচ্ছাসেবী রক্তদান প্ল্যাটফর্ম"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden transition-all"
           />
         </div>

@@ -27,7 +27,7 @@ export const DonorAppreciationModal: React.FC<DonorAppreciationModalProps> = ({
 
   const handleShare = () => {
     navigator.clipboard?.writeText(
-      `রক্তবন্ধন প্ল্যাটফর্মে ${donorName} এ পর্যন্ত ${donationCount} বার রক্তদান করে প্রায় ${livesSaved} জনের জীবন রক্ষায় অবদান রেখেছেন! রক্ত দিন, জীবন বাঁচান। ❤️`
+      `রক্ত দান পরিবার কালামপুর প্ল্যাটফর্মে ${donorName} এ পর্যন্ত ${donationCount} বার রক্তদান করে প্রায় ${livesSaved} জনের জীবন রক্ষায় অবদান রেখেছেন! রক্ত দিন, জীবন বাঁচান। ❤️`
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

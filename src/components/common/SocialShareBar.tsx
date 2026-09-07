@@ -48,7 +48,7 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
       )
     : customTitle
     ? `${customTitle}\n${shareUrl}`
-    : `${seoConfig?.siteTitleBn || 'রক্তবন্ধন রক্তদান প্ল্যাটফর্ম'}\n${shareUrl}`;
+    : `${seoConfig?.siteTitleBn || 'রক্ত দান পরিবার কালামপুর রক্তদান প্ল্যাটফর্ম'}\n${shareUrl}`;
 
   const handleCopyLink = async () => {
     try {

@@ -21,10 +21,10 @@ export const PwaSettings: React.FC = () => {
   const { isInstalled, isOnline, promptInstall, isInstallable } = usePWA();
 
   const pwaConfig = config.pwa || {
-    appName: 'রক্তবন্ধন (RoktoBondhon)',
-    appNameBn: 'রক্তবন্ধন (RoktoBondon) - রক্তদান প্ল্যাটফর্ম',
-    shortName: 'RoktoBondon',
-    shortNameBn: 'রক্তবন্ধন',
+    appName: 'রক্ত দান পরিবার কালামপুর (Rokto Dan Poribar Kalampur)',
+    appNameBn: 'রক্ত দান পরিবার কালামপুর - রক্তদান প্ল্যাটফর্ম',
+    shortName: 'Rokto Dan Poribar Kalampur',
+    shortNameBn: 'রক্ত দান পরিবার কালামপুর',
     descriptionBn: 'ধামরাই, সাভার ও মানিকগঞ্জে জরুরি রক্তের প্রয়োজনে রক্তদাতা অনুসন্ধান ও স্বেচ্ছাসেবী প্ল্যাটফর্ম।',
     themeColor: '#dc2626',
     backgroundColor: '#ffffff',

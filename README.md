@@ -1,4 +1,4 @@
-# রক্তবন্ধন (RoktoBondhon) — Voluntary Blood Donation Platform
+# রক্ত দান পরিবার কালামপুর — Voluntary Blood Donation Platform
 
 > ধামরাই, সাভার, মানিকগঞ্জ সহ বাংলাদেশের জরুরি রক্তের প্রয়োজনে রক্তদাতা অনুসন্ধান, রক্তের আবেদন ও স্বেচ্ছাসেবী সংগঠন ব্যবস্থাপনা প্ল্যাটফর্ম।
 
@@ -6,7 +6,7 @@
 
 ## 🌟 Overview & Architecture
 
-**রক্তবন্ধন (RoktoBondhon)** is a full-featured voluntary blood donor platform built with **React 19**, **TypeScript**, **Vite**, **Tailwind CSS**, and **Supabase PostgreSQL** (Database, Row-Level Security, Storage).
+**রক্ত দান পরিবার কালামপুর** is a full-featured voluntary blood donor platform built with **React 19**, **TypeScript**, **Vite**, **Tailwind CSS**, and **Supabase PostgreSQL** (Database, Row-Level Security, Storage).
 
 ### Core Architectural Features:
 - **Cloud PostgreSQL (Supabase) as Single Source of Truth:** High-performance real-time relational database.

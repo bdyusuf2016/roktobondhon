@@ -174,7 +174,7 @@ export const GamificationSettings: React.FC = () => {
             <div className="text-center sm:text-left">
               <div className="w-24 h-0.5 bg-slate-400 mb-1 mx-auto sm:mx-0"></div>
               <p className="text-xs font-bold text-slate-900">{form.organizationSignatoryNameBn || form.organizationSignatoryName || 'সমন্বয়ক'}</p>
-              <p className="text-[10px] text-slate-500">{form.organizationSignatoryTitleBn || form.organizationSignatoryTitle || 'রক্তবন্ধন'}</p>
+              <p className="text-[10px] text-slate-500">{form.organizationSignatoryTitleBn || form.organizationSignatoryTitle || 'রক্ত দান পরিবার কালামপুর'}</p>
             </div>
             <div className="flex items-center gap-2 bg-white/80 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-slate-200 text-center">
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
@@ -217,7 +217,7 @@ export const GamificationSettings: React.FC = () => {
             type="text"
             value={form.organizationSignatoryTitleBn}
             onChange={(e) => handleChange('organizationSignatoryTitleBn', e.target.value)}
-            placeholder="কেন্দ্রীয় সমন্বয়ক, রক্তবন্ধন"
+            placeholder="কেন্দ্রীয় সমন্বয়ক, রক্ত দান পরিবার কালামপুর"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden transition-all"
           />
         </div>

@@ -88,7 +88,7 @@ export const RequestDetailPage: React.FC = () => {
   const handleShare = () => {
     const patientText = request.patientName ? `রোগী: ${request.patientName}\n` : '';
     const contactText = request.contactNumber ? `মোবাইল: ${request.contactNumber}\n` : '';
-    const text = `জরুরি রক্তের প্রয়োজন!\n${patientText}গ্রুপ: ${request.bloodGroup} (${request.requiredUnits} ব্যাগ)\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactText}রক্তবন্ধন লিঙ্ক: ${window.location.href}`;
+    const text = `জরুরি রক্তের প্রয়োজন!\n${patientText}গ্রুপ: ${request.bloodGroup} (${request.requiredUnits} ব্যাগ)\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactText}রক্ত দান পরিবার কালামপুর লিঙ্ক: ${window.location.href}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);
       dialog.alert({

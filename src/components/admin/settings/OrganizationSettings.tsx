@@ -78,7 +78,7 @@ export const OrganizationSettings: React.FC = () => {
             required
             value={formData.organizationNameBn}
             onChange={(e) => handleChange('organizationNameBn', e.target.value)}
-            placeholder="রক্তবন্ধন রক্তদান সংগঠন"
+            placeholder="রক্ত দান পরিবার কালামপুর"
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white font-medium"
           />
         </div>
@@ -91,7 +91,7 @@ export const OrganizationSettings: React.FC = () => {
             type="text"
             value={formData.shortName}
             onChange={(e) => handleChange('shortName', e.target.value)}
-            placeholder="রক্তবন্ধন"
+            placeholder="রক্ত দান পরিবার কালামপুর"
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white"
           />
         </div>

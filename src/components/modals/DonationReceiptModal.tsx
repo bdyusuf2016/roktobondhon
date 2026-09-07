@@ -20,7 +20,7 @@ export const DonationReceiptModal: React.FC<DonationReceiptModalProps> = ({
   if (!donation) return null;
 
   const handleCopyReceipt = () => {
-    const text = `রক্তবন্ধন অনুদান স্বীকৃতি রসিদ\nরসিদ নং: ${donation.id}\nদাতা: ${donation.isAnonymous ? 'গোপন শুভানুধ্যায়ী' : donation.donorName}\nপরিমাণ: ৳${donation.amount.toLocaleString()}\nপেমেন্ট মেথড: ${donation.paymentMethod}\nTrxID: ${donation.transactionId}\nতারিখ: ${new Date(donation.createdAt).toLocaleDateString()}`;
+    const text = `রক্ত দান পরিবার কালামপুর অনুদান স্বীকৃতি রসিদ\nরসিদ নং: ${donation.id}\nদাতা: ${donation.isAnonymous ? 'গোপন শুভানুধ্যায়ী' : donation.donorName}\nপরিমাণ: ৳${donation.amount.toLocaleString()}\nপেমেন্ট মেথড: ${donation.paymentMethod}\nTrxID: ${donation.transactionId}\nতারিখ: ${new Date(donation.createdAt).toLocaleDateString()}`;
     navigator.clipboard?.writeText(text);
     dialog.alert({
       title: 'রসিদ কপি হয়েছে',
@@ -37,7 +37,7 @@ export const DonationReceiptModal: React.FC<DonationReceiptModalProps> = ({
       size="md"
       icon={<Heart className="w-5 h-5 text-red-600 fill-red-600" />}
       title="অনুদান সফলভাবে জমা হয়েছে!"
-      subtitle="মানবতার সেবায় রক্তবন্ধনকে সহায়তা করার জন্য আপনাকে আন্তরিক কৃতজ্ঞতা।"
+      subtitle="মানবতার সেবায় রক্ত দান পরিবার কালামপুরকে সহায়তা করার জন্য আপনাকে আন্তরিক কৃতজ্ঞতা।"
       footer={
         <div className="flex items-center justify-between w-full">
           <button
@@ -68,7 +68,7 @@ export const DonationReceiptModal: React.FC<DonationReceiptModalProps> = ({
               </div>
               <div>
                 <span className="font-bold text-xs text-slate-900 block leading-tight">
-                  রক্তবন্ধন মানবকল্যাণ সংস্থা
+                  রক্ত দান পরিবার কালামপুর
                 </span>
                 <span className="text-[10px] text-red-600 font-semibold">
                   স্বীকৃতি ও অনুদান রসিদ

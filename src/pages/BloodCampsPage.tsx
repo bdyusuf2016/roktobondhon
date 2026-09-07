@@ -42,7 +42,7 @@ export const BloodCampsPage: React.FC = () => {
   const [newCamp, setNewCamp] = useState({
     titleBn: '',
     titleEn: '',
-    organizerName: 'রক্তবন্ধন স্বেচ্ছাসেবী দল',
+    organizerName: 'রক্ত দান পরিবার কালামপুর স্বেচ্ছাসেবী দল',
     partnerHospital: 'ধামরাই উপজেলা স্বাস্থ্য কমপ্লেক্স',
     division: 'Dhaka',
     district: 'Dhaka',

@@ -19,7 +19,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
   const signatoryName =
     gamificationConfig?.organizationSignatoryNameBn ||
     gamificationConfig?.organizationSignatoryName ||
-    'রক্তবন্ধন পরিষদ';
+    'রক্ত দান পরিবার কালামপুর';
 
   const signatoryTitle =
     gamificationConfig?.organizationSignatoryTitleBn ||
@@ -37,11 +37,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
   };
 
   const handleShare = async () => {
-    const text = `🩸 আমি রক্তবন্ধন প্ল্যাটফর্মে ভেরিফাইড রক্তদাতা হিসেবে ${donor.totalDonations} বার রক্তদান করেছি! আমার ডোনার আইডি: ${donor.donorId}`;
+    const text = `🩸 আমি রক্ত দান পরিবার কালামপুর প্ল্যাটফর্মে ভেরিফাইড রক্তদাতা হিসেবে ${donor.totalDonations} বার রক্তদান করেছি! আমার ডোনার আইডি: ${donor.donorId}`;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'আমার রক্তবন্ধন ডোনার সার্টিফিকেট',
+          title: 'আমার রক্ত দান পরিবার কালামপুর ডোনার সার্টিফিকেট',
           text,
           url: window.location.href,
         });
@@ -133,7 +133,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
           </div>
 
           <p className="max-w-2xl mx-auto text-slate-700 text-base md:text-lg leading-relaxed font-normal">
-            স্বেচ্ছায় <strong>{donor.totalDonations} বার</strong> রক্তদান করে মুমূর্ষু রোগীর জীবন রক্ষা ও মানবতার সেবায় অনন্য সাধারণ অবদান রাখার জন্য ‘রক্তবন্ধন’ প্ল্যাটফর্মের পক্ষ থেকে এই বিশেষ সম্মাননা স্বীকৃতি প্রদান করা হলো।
+            স্বেচ্ছায় <strong>{donor.totalDonations} বার</strong> রক্তদান করে মুমূর্ষু রোগীর জীবন রক্ষা ও মানবতার সেবায় অনন্য সাধারণ অবদান রাখার জন্য ‘রক্ত দান পরিবার কালামপুর’ প্ল্যাটফর্মের পক্ষ থেকে এই বিশেষ সম্মাননা স্বীকৃতি প্রদান করা হলো।
           </p>
 
           {/* Achievement Badge Banner */}
@@ -198,7 +198,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
                 <Droplet className="w-5 h-5 fill-current" />
               </div>
               <div>
-                <h4 className="font-black text-sm tracking-wide">রক্তবন্ধন</h4>
+                <h4 className="font-black text-sm tracking-wide">রক্ত দান পরিবার কালামপুর</h4>
                 <p className="text-[10px] text-rose-300">DONOR DIGITAL CARD</p>
               </div>
             </div>

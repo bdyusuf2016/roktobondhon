@@ -1489,7 +1489,7 @@ export const ProfilePage: React.FC = () => {
                   <ShieldCheck className="w-3 h-3 text-emerald-300" />
                   ভেরিফায়েড সদস্য
                 </span>
-                <span>রক্তবন্ধন নেটওয়ার্ক</span>
+                <span>রক্ত দান পরিবার কালামপুর নেটওয়ার্ক</span>
               </div>
             </div>
 

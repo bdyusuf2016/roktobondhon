@@ -27,7 +27,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   organization: {
     organizationName: 'রক্ত দান পরিবার কালামপুর (Rokto Dan Poribar Kalampur)',
     organizationNameBn: 'রক্ত দান পরিবার কালামপুর',
-    shortName: 'রক্ত দান পরিবার',
+    shortName: 'রক্ত দান পরিবার কালামপুর',
     slogan: 'Saving lives through voluntary blood donation',
     sloganBn: 'রক্তের বন্ধনে বাঁচুক প্রতিটি প্রাণ — কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জ',
     description: 'A voluntary blood donation network connecting donors with recipients.',
@@ -43,7 +43,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     logoUrl: '',
     faviconUrl: '',
     primaryColor: '#dc2626',
-    headerTitle: 'রক্ত দান পরিবার',
+    headerTitle: 'রক্ত দান পরিবার কালামপুর',
     headerSubtitle: 'কালামপুর • ধামরাই • সাভার',
     headerSubtitleBn: 'কালামপুর • ধামরাই • সাভার • মানিকগঞ্জ এলাকা',
     footerAboutBn: 'রক্ত দান পরিবার কালামপুর একটি সম্পূর্ণ অলাভজনক ও স্বেচ্ছাসেবী মানবিক উদ্যোগ। কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জে রক্তের সংকটে বিনামূল্যে সাহায্য করতে আমরা নিবেদিত।',
@@ -118,7 +118,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   pwa: {
     appName: 'Rokto Dan Poribar Kalampur Blood Donation Network',
     appNameBn: 'রক্ত দান পরিবার কালামপুর - রক্তদান প্ল্যাটফর্ম',
-    shortName: 'রক্ত দান পরিবার',
+    shortName: 'রক্ত দান পরিবার কালামপুর',
     shortNameBn: 'রক্ত দান পরিবার কালামপুর',
     descriptionBn: 'কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জে জরুরি রক্তের প্রয়োজনে রক্তদাতা অনুসন্ধান ও স্বেচ্ছাসেবী প্ল্যাটফর্ম।',
     themeColor: '#dc2626',

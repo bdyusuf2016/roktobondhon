@@ -32,7 +32,7 @@ export const InstallPwaBanner: React.FC = () => {
           </div>
           <div>
             <h4 className="font-bold text-xs text-white">
-              {config.pwa?.appNameBn || 'রক্ত দান পরিবার অ্যাপ ইনস্টল করুন'}
+              {config.pwa?.appNameBn || 'রক্ত দান পরিবার কালামপুর অ্যাপ ইনস্টল করুন'}
             </h4>
             <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
               অফলাইনে রক্তদাতা খুঁজতে এবং দ্রুত জরুরি রক্তের আবেদন পেতে ফোনে অ্যাপটি যোগ করুন।

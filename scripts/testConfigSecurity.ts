@@ -47,10 +47,10 @@ async function runConfigSecurityTests() {
   };
   const authResult = await updateConfig(
     'organization',
-    { shortName: 'রক্তবন্ধন টেস্ট' },
+    { shortName: 'রক্ত দান পরিবার কালামপুর টেস্ট' },
     adminActor
   );
-  if (authResult.success && authResult.data.shortName === 'রক্তবন্ধন টেস্ট') {
+  if (authResult.success && authResult.data.shortName === 'রক্ত দান পরিবার কালামপুর টেস্ট') {
     console.log('✓ Authorized write succeeded and updated configuration state.');
   } else {
     throw new Error('Failed to update config with authorized admin.');

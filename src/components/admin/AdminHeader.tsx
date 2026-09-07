@@ -30,7 +30,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-red-600/90 text-white border border-red-500/40 shadow-xs">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>রক্তবন্ধন কন্ট্রোল সেন্টার</span>
+              <span>রক্ত দান পরিবার কালামপুর কন্ট্রোল সেন্টার</span>
             </span>
 
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">

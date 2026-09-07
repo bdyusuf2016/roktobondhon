@@ -57,7 +57,7 @@ export const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
           </div>
           <h4 className="text-lg font-bold text-slate-900">ধন্যবাদ! আপনার বার্তা জমা হয়েছে</h4>
           <p className="text-xs text-slate-600">
-            রক্তবন্ধন এডমিন ও ভলান্টিয়ার টিম দ্রুত আপনার মতামত পর্যালোচনা করবে।
+            রক্ত দান পরিবার কালামপুর এডমিন ও ভলান্টিয়ার টিম দ্রুত আপনার মতামত পর্যালোচনা করবে।
           </p>
         </div>
       ) : (

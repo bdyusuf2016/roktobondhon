@@ -343,7 +343,7 @@ export const RequestBloodPage: React.FC = () => {
                 <div>
                   <span className="font-bold text-amber-950">✨ অনিবন্ধিত হাসপাতাল সনাক্ত হয়েছে:</span>{' '}
                   <span className="text-amber-800">
-                    &ldquo;{hospital}&rdquo; বর্তমানে ডিরেক্টরিতে নেই। আবেদনটি সাবমিট করলে এটি <strong>স্বয়ংক্রিয়ভাবে রক্তবন্ধনের হাসপাতাল তালিকায়</strong> যুক্ত হয়ে যাবে!
+                    &ldquo;{hospital}&rdquo; বর্তমানে ডিরেক্টরিতে নেই। আবেদনটি সাবমিট করলে এটি <strong>স্বয়ংক্রিয়ভাবে রক্ত দান পরিবার কালামপুরের হাসপাতাল তালিকায়</strong> যুক্ত হয়ে যাবে!
                   </span>
                 </div>
               </div>

@@ -85,7 +85,7 @@ export function applySeoTags(
   const pageDescription = dynamic?.description || config.metaDescriptionBn || config.metaDescription;
   const canonical = dynamic?.canonicalUrl || config.canonicalUrl;
   const ogImage = dynamic?.ogImage || config.ogImageUrl;
-  const ogTitle = dynamic?.title ? `${dynamic.title} — রক্তবন্ধন` : config.ogTitle || pageTitle;
+  const ogTitle = dynamic?.title ? `${dynamic.title} — রক্ত দান পরিবার কালামপুর` : config.ogTitle || pageTitle;
 
   // Title
   document.title = pageTitle;
@@ -111,7 +111,7 @@ export function applySeoTags(
   setMetaTag('property', 'og:description', config.ogDescription || pageDescription);
   if (ogImage) setMetaTag('property', 'og:image', ogImage);
   if (canonical) setMetaTag('property', 'og:url', canonical);
-  setMetaTag('property', 'og:site_name', 'রক্তবন্ধন (RoktoBondon)');
+  setMetaTag('property', 'og:site_name', 'রক্ত দান পরিবার কালামপুর');
   setMetaTag('property', 'og:locale', 'bn_BD');
 
   // Twitter Card

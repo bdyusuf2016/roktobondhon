@@ -381,7 +381,7 @@ export const SystemHealthTab: React.FC = () => {
       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>রক্তবন্ধন অ্যাডমিন কন্ট্রোল সেন্টার • এন্ড-টু-এন্ড সিকিউরড আর্কিটেকচার</span>
+          <span>রক্ত দান পরিবার কালামপুর অ্যাডমিন কন্ট্রোল সেন্টার • এন্ড-টু-এন্ড সিকিউরড আর্কিটেকচার</span>
         </div>
         <div className="flex items-center gap-4 font-mono text-[11px]">
           <span>Env: {isDemoMode ? 'Sandbox Preview' : 'Production Cloud'}</span>

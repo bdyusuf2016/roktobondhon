@@ -71,7 +71,7 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
     e.stopPropagation();
     const patientDisplay = request.patientName ? `রোগী: ${request.patientName}\n` : '';
     const contactDisplay = request.contactNumber ? `যোগাযোগ: ${request.contactNumber}\n` : '';
-    const shareText = `জরুরি রক্তের প্রয়োজন!\n${patientDisplay}রক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${request.requiredUnits} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactDisplay}রক্তবন্ধন প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
+    const shareText = `জরুরি রক্তের প্রয়োজন!\n${patientDisplay}রক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${request.requiredUnits} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactDisplay}রক্ত দান পরিবার কালামপুর প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText);
       dialog.alert({

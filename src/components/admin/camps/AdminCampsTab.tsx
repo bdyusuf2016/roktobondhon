@@ -52,7 +52,7 @@ export const AdminCampsTab: React.FC = () => {
   const [form, setForm] = useState<Partial<BloodCamp>>({
     titleBn: '',
     titleEn: '',
-    organizerName: 'রক্তবন্ধন রক্তদান সংগঠন',
+    organizerName: 'রক্ত দান পরিবার কালামপুর',
     partnerHospital: 'ধামরাই উপজেলা স্বাস্থ্য কমপ্লেক্স',
     division: 'Dhaka',
     district: 'ঢাকা',
@@ -85,7 +85,7 @@ export const AdminCampsTab: React.FC = () => {
     setForm({
       titleBn: '',
       titleEn: '',
-      organizerName: 'রক্তবন্ধন রক্তদান সংগঠন',
+      organizerName: 'রক্ত দান পরিবার কালামপুর',
       partnerHospital: 'ধামরাই উপজেলা স্বাস্থ্য কমপ্লেক্স',
       division: 'Dhaka',
       district: 'ঢাকা',
@@ -583,7 +583,7 @@ export const AdminCampsTab: React.FC = () => {
                     type="text"
                     value={form.organizerName}
                     onChange={(e) => setForm({ ...form, organizerName: e.target.value })}
-                    placeholder="রক্তবন্ধন ও ধামরাই যুব ফাউন্ডেশন"
+                    placeholder="রক্ত দান পরিবার কালামপুর ও ধামরাই যুব ফাউন্ডেশন"
                     className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 outline-hidden"
                   />
                 </div>

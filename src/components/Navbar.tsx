@@ -23,6 +23,7 @@ import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import type { UserRole } from '../types';
+import { scrollToTop } from './ScrollToTop';
 
 export const Navbar: React.FC = () => {
   const { config } = useOrgConfig();
@@ -40,6 +41,11 @@ export const Navbar: React.FC = () => {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleMobileNavClick = () => {
+    setIsMobileMenuOpen(false);
+    scrollToTop(true);
+  };
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -107,7 +113,7 @@ export const Navbar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-17 gap-2 sm:gap-4">
           {/* Logo & Brand Identity */}
-          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 shrink-0 group">
+          <Link to="/" onClick={() => scrollToTop(true)} className="flex items-center gap-2 sm:gap-2.5 shrink-0 group">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center text-white shadow-xs transition-transform group-hover:scale-105 shrink-0">
               <Droplets className="w-5 h-5 sm:w-5.5 sm:h-5.5 fill-white" />
             </div>
@@ -402,16 +408,16 @@ export const Navbar: React.FC = () => {
           <div className="grid grid-cols-2 gap-2">
             <Link
               to="/find-blood"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="p-3 rounded-xl bg-red-50/80 border border-red-100 text-red-700 font-bold text-xs flex items-center gap-2"
+              onClick={handleMobileNavClick}
+              className="p-3 rounded-xl bg-red-50/80 border border-red-100 text-red-700 font-bold text-xs flex items-center gap-2 active:scale-98"
             >
               <Search className="w-4 h-4" />
               <span>রক্তদাতা খুঁজুন</span>
             </Link>
             <Link
               to="/request-blood"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="p-3 rounded-xl bg-rose-50/80 border border-rose-100 text-rose-700 font-bold text-xs flex items-center gap-2"
+              onClick={handleMobileNavClick}
+              className="p-3 rounded-xl bg-rose-50/80 border border-rose-100 text-rose-700 font-bold text-xs flex items-center gap-2 active:scale-98"
             >
               <PlusCircle className="w-4 h-4" />
               <span>রক্তের আবেদন</span>
@@ -421,7 +427,7 @@ export const Navbar: React.FC = () => {
           <div className="space-y-1">
             <Link
               to="/"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/') ? 'bg-red-50 text-red-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -430,7 +436,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/camps"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/camps') ? 'bg-red-50 text-red-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -439,7 +445,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/hospitals"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/hospitals') ? 'bg-red-50 text-red-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -448,7 +454,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/become-donor"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/become-donor') ? 'bg-red-50 text-red-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -457,7 +463,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/certificate"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/certificate') ? 'bg-red-50 text-red-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -466,7 +472,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/health-checker"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/health-checker') ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -475,7 +481,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/donate"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-bold ${
                 isActive('/donate') ? 'bg-red-600 text-white' : 'text-red-700 bg-red-50 hover:bg-red-100'
               }`}
@@ -484,7 +490,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/about"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/about') ? 'bg-slate-100 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -493,7 +499,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/contact"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className={`block px-3 py-2 rounded-xl text-sm font-medium ${
                 isActive('/contact') ? 'bg-slate-100 font-bold' : 'text-slate-700 hover:bg-slate-50'
               }`}
@@ -502,7 +508,7 @@ export const Navbar: React.FC = () => {
             </Link>
             <Link
               to="/admin"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className="block px-3 py-2.5 rounded-xl text-sm font-bold text-white bg-slate-900 shadow-md flex items-center gap-2 mt-2"
             >
               <ShieldCheck className="w-4 h-4 text-red-500" />
@@ -513,7 +519,7 @@ export const Navbar: React.FC = () => {
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
             <Link
               to="/profile"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={handleMobileNavClick}
               className="text-sm font-semibold text-slate-800 hover:text-red-600"
             >
               {currentUser ? `প্রোফাইল: ${currentUser.fullName}` : 'আমার প্রোফাইল'}

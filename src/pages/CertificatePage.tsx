@@ -54,7 +54,7 @@ export const CertificatePage: React.FC = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <Award className="w-6 h-6 text-amber-500" />
-            রক্তবন্ধন অর্জন পদক ও সম্মাননা স্তর (Donor Milestone Badges)
+            রক্ত দান পরিবার কালামপুর অর্জন পদক ও সম্মাননা স্তর (Donor Milestone Badges)
           </h2>
         </div>
 
