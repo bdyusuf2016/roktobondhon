@@ -257,6 +257,62 @@ const SECURITY_TESTS: SecurityTestCase[] = [
       return true;
     },
   },
+  // 9. Live Supabase Database RLS & Trigger Verification (Live Database Connection)
+  {
+    id: 'SEC-09',
+    name: 'Live Supabase Trigger: Block Role Tampering & Escalation',
+    severity: 'CRITICAL',
+    category: 'Database Triggers & RLS',
+    fn: async () => {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) return true; // Skip if no live credentials
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const liveClient = createClient(supabaseUrl, supabaseAnonKey);
+
+      // Attempt role escalation as anonymous client
+      const { data, error } = await liveClient
+        .from('users')
+        .update({ role: 'super_admin' })
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select();
+
+      // Must be rejected by database trigger or return 0 rows
+      const isBlocked = error !== null || !data || data.length === 0;
+      if (!isBlocked) {
+        throw new Error('FAILED: Live Supabase database allowed unauthenticated role update');
+      }
+      return true;
+    },
+  },
+
+  // 10. Live Supabase Storage Private Bucket Access Check
+  {
+    id: 'SEC-10',
+    name: 'Live Supabase Storage: Enforce Private Bucket Boundary',
+    severity: 'HIGH',
+    category: 'Storage Security',
+    fn: async () => {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseAnonKey) return true;
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const liveClient = createClient(supabaseUrl, supabaseAnonKey);
+
+      const { data, error } = await liveClient.storage
+        .from('verification-docs')
+        .list('', { limit: 10 });
+
+      // Unauthenticated client must NOT receive document list
+      const isProtected = error !== null || !data || data.length === 0;
+      if (!isProtected) {
+        throw new Error('FAILED: Anonymous client listed private verification-docs');
+      }
+      return true;
+    },
+  },
 ];
 
 async function runSecurityPenetrationSuite() {
