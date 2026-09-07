@@ -337,6 +337,41 @@ CREATE TABLE IF NOT EXISTS public.system_config (
 );
 
 -- ==============================================================================
+-- AUTOMATIC TIMESTAMP TRIGGERS
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_users_updated_at ON public.users;
+CREATE TRIGGER trigger_users_updated_at
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trigger_donors_updated_at ON public.donors;
+CREATE TRIGGER trigger_donors_updated_at
+  BEFORE UPDATE ON public.donors
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trigger_blood_requests_updated_at ON public.blood_requests;
+CREATE TRIGGER trigger_blood_requests_updated_at
+  BEFORE UPDATE ON public.blood_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trigger_system_config_updated_at ON public.system_config;
+CREATE TRIGGER trigger_system_config_updated_at
+  BEFORE UPDATE ON public.system_config
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ==============================================================================
 -- INDEXES FOR OPTIMAL QUERY PERFORMANCE
 -- ==============================================================================
 CREATE INDEX IF NOT EXISTS idx_donors_blood_group ON public.donors(blood_group);
@@ -344,10 +379,12 @@ CREATE INDEX IF NOT EXISTS idx_donors_district ON public.donors(district);
 CREATE INDEX IF NOT EXISTS idx_donors_upazila ON public.donors(upazila);
 CREATE INDEX IF NOT EXISTS idx_donors_availability ON public.donors(availability);
 CREATE INDEX IF NOT EXISTS idx_donors_verification_status ON public.donors(verification_status);
+CREATE INDEX IF NOT EXISTS idx_donors_matching_composite ON public.donors(blood_group, district, upazila, availability, verification_status);
 
 CREATE INDEX IF NOT EXISTS idx_blood_requests_status ON public.blood_requests(status);
 CREATE INDEX IF NOT EXISTS idx_blood_requests_blood_group ON public.blood_requests(blood_group);
 CREATE INDEX IF NOT EXISTS idx_blood_requests_upazila ON public.blood_requests(upazila);
+CREATE INDEX IF NOT EXISTS idx_blood_requests_emergency ON public.blood_requests(emergency_level);
 CREATE INDEX IF NOT EXISTS idx_blood_requests_created_at ON public.blood_requests(created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_blood_camps_status ON public.blood_camps(status);
@@ -517,3 +554,28 @@ CREATE POLICY "Public can view avatar images" ON storage.objects FOR SELECT USIN
 CREATE POLICY "Public can upload avatar images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars');
 CREATE POLICY "Public can view organization assets" ON storage.objects FOR SELECT USING (bucket_id = 'assets');
 CREATE POLICY "Staff can upload organization assets" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'assets');
+
+-- ==============================================================================
+-- INITIAL SYSTEM CONFIGURATION SEED
+-- ==============================================================================
+INSERT INTO public.system_config (id, config, updated_at)
+VALUES (
+  'default',
+  '{
+    "siteName": "রক্ত দান পরিবার কালামপুর",
+    "siteTagline": "মানবতার কল্যাণে রক্তদান",
+    "primaryColor": "#dc2626",
+    "organizationName": "রক্ত দান পরিবার কালামপুর",
+    "organizationPhone": "+8801700000000",
+    "organizationEmail": "info@roktobondhon.org",
+    "organizationAddress": "কালামপুর, ধামরাই, ঢাকা",
+    "emergencyHotline": "+8801700000000",
+    "matchingRadiusKm": 25,
+    "eligibilityDays": 90,
+    "maintenanceMode": false,
+    "allowRegistrations": true,
+    "autoVerifyDonors": false
+  }'::jsonb,
+  NOW()
+)
+ON CONFLICT (id) DO NOTHING;
