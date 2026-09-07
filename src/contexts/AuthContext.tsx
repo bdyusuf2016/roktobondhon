@@ -158,12 +158,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       if (isSupabaseConfigured && supabase) {
-        const sbUser = await signInEmail(email, pass);
-        setSupabaseUser(sbUser);
-        const profile = await getUserProfile(sbUser.id);
-        if (profile) {
-          setCurrentUser(profile);
-          return;
+        try {
+          const sbUser = await signInEmail(email, pass);
+          setSupabaseUser(sbUser);
+          const profile = await getUserProfile(sbUser.id);
+          if (profile) {
+            setCurrentUser(profile);
+            return;
+          }
+        } catch (signInErr: any) {
+          // If login fails because user doesn't exist yet, attempt automatic signup
+          const msg = signInErr?.message || '';
+          if (msg.includes('Invalid login credentials') || msg.includes('Email not confirmed') || msg.includes('not found')) {
+            try {
+              const registeredUser = await registerEmail(email, pass);
+              setSupabaseUser(registeredUser);
+              const newProfile = await createUserProfile(registeredUser.id, {
+                fullName: email.split('@')[0],
+                email,
+                phone: '+8801700000000',
+                role: email.includes('admin') ? 'super_admin' : 'donor',
+              });
+              setCurrentUser(newProfile);
+              return;
+            } catch {
+              throw signInErr;
+            }
+          } else {
+            throw signInErr;
+          }
         }
       }
 
@@ -173,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fullName: email.split('@')[0],
         email,
         phone: '+8801711000000',
-        role: email.includes('admin') ? ('admin' as UserRole) : ('donor' as UserRole),
+        role: email.includes('admin') ? ('super_admin' as UserRole) : ('donor' as UserRole),
         organizationId: 'org-roktobondon',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
