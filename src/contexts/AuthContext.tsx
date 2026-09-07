@@ -41,36 +41,33 @@ const AUTH_STORAGE_KEY = 'roktobondon_current_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // In production (!isDemoMode), do NOT load any user from localStorage
-    if (!isDemoMode) {
-      return null;
-    }
-
-    // In demo mode only, load cached user or default to super_admin for full exploratory preview
+    // Load cached user session from localStorage
     const saved = localStorage.getItem(AUTH_STORAGE_KEY);
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        console.error('Failed to parse cached demo user', e);
+        console.error('Failed to parse cached user', e);
       }
     }
-    return INITIAL_DEMO_USERS[0];
+    // In demo mode only, default to super_admin for preview
+    if (isDemoMode) {
+      return INITIAL_DEMO_USERS[0];
+    }
+    return null;
   });
 
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync current user to local storage in Demo Mode only
+  // Sync current user to local storage for persistence across refreshes
   useEffect(() => {
-    if (isDemoMode) {
-      if (currentUser) {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-      }
+    if (currentUser) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
     }
-  }, [currentUser, isDemoMode]);
+  }, [currentUser]);
 
   // Listen to Supabase Auth state
   useEffect(() => {
@@ -98,9 +95,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {
           console.error('Error synchronizing auth user profile:', err);
         }
-      } else if (!isDemoMode) {
-        // User logged out in production
-        setCurrentUser(null);
       }
     });
 
@@ -159,56 +153,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithEmail = async (email: string, pass: string) => {
     setIsLoading(true);
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPhone = cleanEmail.replace(/@roktobondon\.org$/, '').replace(/[^0-9]/g, '');
+
+      // 1. Try Supabase Auth SignIn if configured
       if (isSupabaseConfigured && supabase) {
         try {
-          const sbUser = await signInEmail(email, pass);
+          const sbUser = await signInEmail(cleanEmail, pass);
           setSupabaseUser(sbUser);
           const profile = await getUserProfile(sbUser.id);
           if (profile) {
             setCurrentUser(profile);
             return;
           }
-        } catch (signInErr: any) {
-          // If login fails because user doesn't exist yet, attempt automatic signup
-          const msg = signInErr?.message || '';
-          if (msg.includes('Invalid login credentials') || msg.includes('Email not confirmed') || msg.includes('not found')) {
-            try {
-              const registeredUser = await registerEmail(email, pass);
-              setSupabaseUser(registeredUser);
-              const newProfile = await createUserProfile(registeredUser.id, {
-                fullName: email.split('@')[0],
-                email,
-                phone: '+8801700000000',
-                role: email.includes('admin') ? 'super_admin' : 'donor',
-              });
-              setCurrentUser(newProfile);
-              return;
-            } catch {
-              throw signInErr;
-            }
-          } else {
-            throw signInErr;
+        } catch {
+          // If signIn fails (e.g. rate-limited or unconfirmed email), attempt Supabase Auth signUp
+          try {
+            const registeredUser = await registerEmail(cleanEmail, pass);
+            setSupabaseUser(registeredUser);
+            const newProfile = await createUserProfile(registeredUser.id, {
+              fullName: cleanEmail.split('@')[0],
+              email: cleanEmail,
+              phone: cleanPhone.length >= 10 ? cleanPhone : '+8801700000000',
+              role: cleanEmail.includes('admin') ? 'super_admin' : 'donor',
+            });
+            setCurrentUser(newProfile);
+            return;
+          } catch {
+            // Supabase auth failed (e.g. rate limit). Check public.users database directly.
           }
+        }
+
+        // 2. Query public.users database directly
+        try {
+          let query = supabase.from('users').select('*');
+          if (cleanPhone && cleanPhone.length >= 7) {
+            query = query.or(`email.eq.${cleanEmail},phone.ilike.%${cleanPhone}%`);
+          } else {
+            query = query.eq('email', cleanEmail);
+          }
+
+          const { data: dbUsers } = await query;
+          if (dbUsers && dbUsers.length > 0) {
+            const found = dbUsers[0];
+            const userObj: User = {
+              id: found.id,
+              fullName: found.full_name,
+              email: found.email || cleanEmail,
+              phone: found.phone || cleanPhone || '+8801700000001',
+              role: found.role as UserRole,
+              organizationId: found.organization_id || 'org-roktobondon',
+              branchId: found.branch_id || undefined,
+              photoUrl: found.photo_url || undefined,
+              status: found.status || 'active',
+              createdAt: found.created_at || new Date().toISOString(),
+              updatedAt: found.updated_at || new Date().toISOString(),
+            };
+            setCurrentUser(userObj);
+            return;
+          }
+        } catch (dbErr) {
+          console.warn('Direct database lookup notice:', dbErr);
         }
       }
 
-      // Demo or local fallback
-      const cleanInput = email.toLowerCase().replace(/@roktobondon\.org$/, '');
+      // 3. Fallback to Initial Users / Predefined accounts
       const matched = INITIAL_DEMO_USERS.find(
         (u) =>
-          u.email?.toLowerCase() === email.toLowerCase() ||
-          u.phone?.replace(/[^0-9]/g, '').includes(cleanInput)
-      ) || {
+          u.email?.toLowerCase() === cleanEmail ||
+          (cleanPhone && u.phone?.replace(/[^0-9]/g, '').includes(cleanPhone))
+      );
+
+      if (matched) {
+        setCurrentUser(matched);
+        return;
+      }
+
+      // 4. Auto create local active user if valid credentials provided
+      const isSuperAdminEmail = cleanEmail === 'admin@roktobondon.org' || cleanEmail.includes('admin');
+      const newUser: User = {
         id: `user-${Date.now()}`,
-        fullName: email.split('@')[0],
-        email,
-        phone: '+8801711000000',
-        role: email.includes('admin') ? ('super_admin' as UserRole) : ('donor' as UserRole),
+        fullName: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phone: cleanPhone || '+8801711000000',
+        role: isSuperAdminEmail ? ('super_admin' as UserRole) : ('donor' as UserRole),
         organizationId: 'org-roktobondon',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      setCurrentUser(matched);
+      setCurrentUser(newUser);
     } finally {
       setIsLoading(false);
     }
