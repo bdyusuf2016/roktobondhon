@@ -304,6 +304,8 @@ export function validateConfigSection<K extends SystemConfigSection>(
   return { valid: true };
 }
 
+import { supabase, isSupabaseConfigured } from '../supabase/config';
+
 /**
  * Get configuration section with guaranteed fallback to safe defaults.
  * Loading never crashes the application.
@@ -326,6 +328,7 @@ export async function getConfig<K extends SystemConfigSection>(
 
 /**
  * Get the full system configuration object with all sections resolved.
+ * Fetches from Supabase system_config table when available, falling back to local cache & defaults.
  */
 export async function getAllConfig(): Promise<SystemConfig> {
   const sections: SystemConfigSection[] = [
@@ -346,16 +349,48 @@ export async function getAllConfig(): Promise<SystemConfig> {
     'security',
   ];
 
-  const result = { ...DEFAULT_SYSTEM_CONFIG };
+  let resolvedConfig: SystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
+
+  // First load from local storage cache
   for (const section of sections) {
-    result[section] = await getConfig(section) as any;
+    const local = await getConfig(section);
+    if (local) {
+      (resolvedConfig as any)[section] = local;
+    }
   }
-  return result;
+
+  // Then fetch authoritative version from Supabase if online
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('system_config')
+        .select('config')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!error && data && data.config) {
+        resolvedConfig = { ...resolvedConfig, ...data.config };
+        // Sync back to local storage
+        for (const section of sections) {
+          if (resolvedConfig[section]) {
+            safeStorage.setItem(
+              `${CONFIG_STORAGE_PREFIX}${section}`,
+              JSON.stringify(resolvedConfig[section])
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[ConfigService] Supabase config fetch error, using local storage:', err);
+    }
+  }
+
+  return resolvedConfig;
 }
 
 /**
  * Update a configuration section.
- * Enforces authentication, authorization, validation, persistence, and audit trail creation.
+ * Enforces authentication, authorization, validation, persistence (Supabase + localStorage), and audit trail creation.
  */
 export async function updateConfig<K extends SystemConfigSection>(
   section: K,
@@ -387,20 +422,37 @@ export async function updateConfig<K extends SystemConfigSection>(
   const current = await getConfig(section);
   const updated = { ...current, ...updates };
 
-  // 4. Persist
+  // 4. Persist to safe local storage
   try {
     const key = `${CONFIG_STORAGE_PREFIX}${section}`;
     safeStorage.setItem(key, JSON.stringify(updated));
   } catch (err) {
     console.error(`[ConfigService] Failed to persist config for ${section}:`, err);
-    return {
-      success: false,
-      data: current,
-      error: 'কনফিগারেশন সংরক্ষণ করতে সমস্যা হয়েছে।',
-    };
   }
 
-  // 5. Create immutable audit entry
+  // 5. Persist authoritative version to Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const fullConfig = await getAllConfig();
+      fullConfig[section] = updated;
+
+      const { error: dbError } = await supabase
+        .from('system_config')
+        .upsert({
+          id: 'default',
+          config: fullConfig,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (dbError) {
+        console.error('[ConfigService] Supabase config update error:', dbError);
+      }
+    } catch (dbErr) {
+      console.error('[ConfigService] Supabase config update exception:', dbErr);
+    }
+  }
+
+  // 6. Create immutable audit entry
   try {
     await recordAuditLog(
       'UPDATE_CONFIG',

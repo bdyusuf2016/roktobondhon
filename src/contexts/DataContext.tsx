@@ -574,6 +574,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }))
           );
         }
+
+        // 9. Fetch branches
+        const { data: branchesData } = await supabase.from('branches').select('*');
+        if (branchesData && branchesData.length > 0 && isMounted) {
+          setBranches(
+            branchesData.map((row) => ({
+              id: row.id,
+              name: row.name,
+              nameBn: row.name_bn,
+              district: row.district,
+              upazila: row.upazila,
+              coordinatorName: row.coordinator_name || '',
+              coordinatorPhone: row.coordinator_phone || '',
+              isActive: Boolean(row.is_active),
+            }))
+          );
+        }
       } catch (err) {
         console.warn('Supabase initial synchronization notice:', err);
       } finally {
@@ -1066,6 +1083,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const id = `br-${Date.now()}`;
     const newBranch: Branch = { ...branchData, id };
     setBranches((prev) => [...prev, newBranch]);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('branches').insert({
+          id: newBranch.id,
+          name: newBranch.name,
+          name_bn: newBranch.nameBn,
+          district: newBranch.district,
+          upazila: newBranch.upazila,
+          coordinator_name: newBranch.coordinatorName || null,
+          coordinator_phone: newBranch.coordinatorPhone || null,
+          is_active: newBranch.isActive,
+          organization_id: 'org-roktobondon',
+          created_at: new Date().toISOString(),
+        });
+        if (error) console.error('[DataContext] Error inserting branch:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception inserting branch:', err);
+      }
+    }
     addAuditLog('Branch Created', 'Branch', id, { nameBn: newBranch.nameBn });
     return newBranch;
   };
@@ -1074,18 +1110,50 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setBranches((prev) =>
       prev.map((b) => (b.id === id ? { ...b, ...data } : b))
     );
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbUpdates: Record<string, any> = {};
+        if (data.name !== undefined) dbUpdates.name = data.name;
+        if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
+        if (data.district !== undefined) dbUpdates.district = data.district;
+        if (data.upazila !== undefined) dbUpdates.upazila = data.upazila;
+        if (data.coordinatorName !== undefined) dbUpdates.coordinator_name = data.coordinatorName;
+        if (data.coordinatorPhone !== undefined) dbUpdates.coordinator_phone = data.coordinatorPhone;
+        if (data.isActive !== undefined) dbUpdates.is_active = data.isActive;
+
+        const { error } = await supabase.from('branches').update(dbUpdates).eq('id', id);
+        if (error) console.error('[DataContext] Error updating branch in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception updating branch:', err);
+      }
+    }
     addAuditLog('Branch Updated', 'Branch', id, data);
   };
 
   const deleteBranch = async (id: string): Promise<void> => {
     setBranches((prev) => prev.filter((b) => b.id !== id));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('branches').delete().eq('id', id);
+        if (error) console.error('[DataContext] Error deleting branch in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting branch:', err);
+      }
+    }
     addAuditLog('Branch Deleted', 'Branch', id);
   };
 
-  const markNotificationRead = (id: string) => {
+  const markNotificationRead = async (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+      } catch (err) {
+        console.error('[DataContext] Exception updating notification:', err);
+      }
+    }
   };
 
   const addNotification = async (
@@ -1099,16 +1167,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setNotifications((prev) => [newNotif, ...prev]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('notifications').insert({
-        id: newNotif.id,
-        user_id: newNotif.userId,
-        title: newNotif.title,
-        message: newNotif.message,
-        type: newNotif.type,
-        link: newNotif.link || null,
-        is_read: newNotif.isRead,
-        created_at: newNotif.createdAt,
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('notifications').insert({
+          id: newNotif.id,
+          user_id: newNotif.userId,
+          title: newNotif.title,
+          message: newNotif.message,
+          type: newNotif.type,
+          link: newNotif.link || null,
+          is_read: newNotif.isRead,
+          created_at: newNotif.createdAt,
+        });
+        if (error) console.error('[DataContext] Error inserting notification:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception inserting notification:', err);
+      }
     }
     addAuditLog(`নোটিফিকেশন পাঠানো হয়েছে: ${newNotif.title}`, 'NOTIFICATION', newNotif.id, {
       userId: newNotif.userId,
@@ -1120,7 +1193,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteNotification = async (id: string): Promise<void> => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('notifications').delete().eq('id', id).then(() => {});
+      try {
+        await supabase.from('notifications').delete().eq('id', id);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting notification:', err);
+      }
     }
     addAuditLog('নোটিফিকেশন মুছে ফেলা হয়েছে', 'NOTIFICATION', id);
   };
@@ -1134,17 +1211,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
     if (isSupabaseConfigured && supabase) {
-      if (userId) {
-        supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .in('user_id', [userId, 'all'])
-          .then(() => {});
-      } else {
-        supabase
-          .from('notifications')
-          .update({ is_read: true })
-          .then(() => {});
+      try {
+        if (userId) {
+          await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .in('user_id', [userId, 'all']);
+        } else {
+          await supabase
+            .from('notifications')
+            .update({ is_read: true });
+        }
+      } catch (err) {
+        console.error('[DataContext] Exception marking all notifications read:', err);
       }
     }
   };
@@ -1157,26 +1236,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setHospitals((prev) => [newHospital, ...prev]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('hospitals').insert({
-        id: newHospital.id,
-        name_bn: newHospital.nameBn,
-        name_en: newHospital.nameEn,
-        category: newHospital.category,
-        district: newHospital.district,
-        upazila: newHospital.upazila,
-        address: newHospital.address,
-        hotline: newHospital.hotline,
-        emergency_phone: newHospital.emergencyPhone || null,
-        ambulance_phone: newHospital.ambulancePhone || null,
-        has_blood_bank: newHospital.hasBloodBank,
-        has_icu: newHospital.hasICU,
-        is_open_24_hours: newHospital.isOpen24Hours,
-        map_url: newHospital.mapUrl || null,
-        notes: newHospital.notes || null,
-        is_community_added: newHospital.isCommunityAdded || false,
-        verification_status: newHospital.verificationStatus || 'verified',
-        added_by: newHospital.addedBy || null,
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('hospitals').insert({
+          id: newHospital.id,
+          name_bn: newHospital.nameBn,
+          name_en: newHospital.nameEn,
+          category: newHospital.category,
+          district: newHospital.district,
+          upazila: newHospital.upazila,
+          address: newHospital.address,
+          hotline: newHospital.hotline,
+          emergency_phone: newHospital.emergencyPhone || null,
+          ambulance_phone: newHospital.ambulancePhone || null,
+          has_blood_bank: newHospital.hasBloodBank,
+          has_icu: newHospital.hasICU,
+          is_open_24_hours: newHospital.isOpen24Hours,
+          map_url: newHospital.mapUrl || null,
+          notes: newHospital.notes || null,
+          is_community_added: newHospital.isCommunityAdded || false,
+          verification_status: newHospital.verificationStatus || 'verified',
+          added_by: newHospital.addedBy || null,
+        });
+        if (error) console.error('[DataContext] Error adding hospital to Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception adding hospital:', err);
+      }
     }
     addAuditLog(
       `নতুন হাসপাতাল যুক্ত করা হয়েছে: ${newHospital.nameBn}`,
@@ -1192,24 +1276,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((h) => (h.id === id ? { ...h, ...data } : h))
     );
     if (isSupabaseConfigured && supabase) {
-      const dbUpdates: Record<string, any> = {};
-      if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
-      if (data.nameEn !== undefined) dbUpdates.name_en = data.nameEn;
-      if (data.category !== undefined) dbUpdates.category = data.category;
-      if (data.district !== undefined) dbUpdates.district = data.district;
-      if (data.upazila !== undefined) dbUpdates.upazila = data.upazila;
-      if (data.address !== undefined) dbUpdates.address = data.address;
-      if (data.hotline !== undefined) dbUpdates.hotline = data.hotline;
-      if (data.emergencyPhone !== undefined) dbUpdates.emergency_phone = data.emergencyPhone;
-      if (data.ambulancePhone !== undefined) dbUpdates.ambulance_phone = data.ambulancePhone;
-      if (data.hasBloodBank !== undefined) dbUpdates.has_blood_bank = data.hasBloodBank;
-      if (data.hasICU !== undefined) dbUpdates.has_icu = data.hasICU;
-      if (data.isOpen24Hours !== undefined) dbUpdates.is_open_24_hours = data.isOpen24Hours;
-      if (data.mapUrl !== undefined) dbUpdates.map_url = data.mapUrl;
-      if (data.notes !== undefined) dbUpdates.notes = data.notes;
-      if (data.verificationStatus !== undefined) dbUpdates.verification_status = data.verificationStatus;
+      try {
+        const dbUpdates: Record<string, any> = {};
+        if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
+        if (data.nameEn !== undefined) dbUpdates.name_en = data.nameEn;
+        if (data.category !== undefined) dbUpdates.category = data.category;
+        if (data.district !== undefined) dbUpdates.district = data.district;
+        if (data.upazila !== undefined) dbUpdates.upazila = data.upazila;
+        if (data.address !== undefined) dbUpdates.address = data.address;
+        if (data.hotline !== undefined) dbUpdates.hotline = data.hotline;
+        if (data.emergencyPhone !== undefined) dbUpdates.emergency_phone = data.emergencyPhone;
+        if (data.ambulancePhone !== undefined) dbUpdates.ambulance_phone = data.ambulancePhone;
+        if (data.hasBloodBank !== undefined) dbUpdates.has_blood_bank = data.hasBloodBank;
+        if (data.hasICU !== undefined) dbUpdates.has_icu = data.hasICU;
+        if (data.isOpen24Hours !== undefined) dbUpdates.is_open_24_hours = data.isOpen24Hours;
+        if (data.mapUrl !== undefined) dbUpdates.map_url = data.mapUrl;
+        if (data.notes !== undefined) dbUpdates.notes = data.notes;
+        if (data.verificationStatus !== undefined) dbUpdates.verification_status = data.verificationStatus;
 
-      supabase.from('hospitals').update(dbUpdates).eq('id', id).then(() => {});
+        const { error } = await supabase.from('hospitals').update(dbUpdates).eq('id', id);
+        if (error) console.error('[DataContext] Error updating hospital in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception updating hospital:', err);
+      }
     }
     addAuditLog('হাসপাতালের তথ্য আপডেট করা হয়েছে', 'HOSPITAL', id, data);
   };
@@ -1217,7 +1306,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteHospital = async (id: string) => {
     setHospitals((prev) => prev.filter((h) => h.id !== id));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('hospitals').delete().eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('hospitals').delete().eq('id', id);
+        if (error) console.error('[DataContext] Error deleting hospital from Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting hospital:', err);
+      }
     }
     addAuditLog('হাসপাতাল মুছে ফেলা হয়েছে', 'HOSPITAL', id);
   };
@@ -1231,10 +1325,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
     if (isSupabaseConfigured && supabase) {
-      supabase.from('hospitals').update({
-        verification_status: 'verified',
-        is_community_added: false,
-      }).eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('hospitals').update({
+          verification_status: 'verified',
+          is_community_added: false,
+        }).eq('id', id);
+        if (error) console.error('[DataContext] Error verifying hospital in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception verifying hospital:', err);
+      }
     }
     addAuditLog('হাসপাতাল ভেরিফাই ও অনুমোদন করা হয়েছে', 'HOSPITAL', id);
   };
@@ -1251,23 +1350,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setFundDonations((prev) => [newDonation, ...prev]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('fund_donations').insert({
-        id: newDonation.id,
-        donor_name: newDonation.donorName,
-        donor_phone: newDonation.donorPhone,
-        donor_email: newDonation.donorEmail || null,
-        amount: newDonation.amount,
-        payment_method: newDonation.paymentMethod,
-        transaction_id: newDonation.transactionId,
-        account_number: newDonation.accountNumber || null,
-        fund_cause: newDonation.fundCause,
-        area: newDonation.area || null,
-        message: newDonation.message || null,
-        is_anonymous: newDonation.isAnonymous,
-        status: newDonation.status,
-        organization_id: newDonation.organizationId || 'org-roktobondon',
-        created_at: newDonation.createdAt,
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('fund_donations').insert({
+          id: newDonation.id,
+          donor_name: newDonation.donorName,
+          donor_phone: newDonation.donorPhone,
+          donor_email: newDonation.donorEmail || null,
+          amount: newDonation.amount,
+          payment_method: newDonation.paymentMethod,
+          transaction_id: newDonation.transactionId,
+          account_number: newDonation.accountNumber || null,
+          fund_cause: newDonation.fundCause,
+          area: newDonation.area || null,
+          message: newDonation.message || null,
+          is_anonymous: newDonation.isAnonymous,
+          status: newDonation.status,
+          organization_id: newDonation.organizationId || 'org-roktobondon',
+          created_at: newDonation.createdAt,
+        });
+        if (error) console.error('[DataContext] Error inserting fund donation in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception inserting fund donation:', err);
+      }
     }
     addAuditLog(
       `নতুন আর্থিক অনুদান জমা দেওয়া হয়েছে: ৳${newDonation.amount} (${newDonation.paymentMethod})`,
@@ -1287,11 +1391,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
     if (isSupabaseConfigured && supabase) {
-      supabase.from('fund_donations').update({
-        status: 'verified',
-        verified_by: verifierName,
-        verified_at: new Date().toISOString(),
-      }).eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('fund_donations').update({
+          status: 'verified',
+          verified_by: verifierName,
+          verified_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) console.error('[DataContext] Error verifying fund donation in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception verifying fund donation:', err);
+      }
     }
     addAuditLog(`অনুদান ভেরিফাই ও অনুমোদন করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
@@ -1301,7 +1410,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((d) => (d.id === id ? { ...d, status: 'rejected' } : d))
     );
     if (isSupabaseConfigured && supabase) {
-      supabase.from('fund_donations').update({ status: 'rejected' }).eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('fund_donations').update({ status: 'rejected' }).eq('id', id);
+        if (error) console.error('[DataContext] Error rejecting fund donation in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception rejecting fund donation:', err);
+      }
     }
     addAuditLog(`অনুদান বাতিল/অস্বীকৃত করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
@@ -1315,19 +1429,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setFundDisbursements((prev) => [newDisb, ...prev]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('fund_disbursements').insert({
-        id: newDisb.id,
-        title: newDisb.title,
-        cause: newDisb.cause,
-        amount: newDisb.amount,
-        recipient: newDisb.recipient,
-        area: newDisb.area,
-        approved_by: newDisb.approvedBy,
-        voucher_no: newDisb.voucherNo || null,
-        date: newDisb.date,
-        notes: newDisb.notes || null,
-        created_at: new Date().toISOString(),
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('fund_disbursements').insert({
+          id: newDisb.id,
+          title: newDisb.title,
+          cause: newDisb.cause,
+          amount: newDisb.amount,
+          recipient: newDisb.recipient,
+          area: newDisb.area,
+          approved_by: newDisb.approvedBy,
+          voucher_no: newDisb.voucherNo || null,
+          date: newDisb.date,
+          notes: newDisb.notes || null,
+          created_at: new Date().toISOString(),
+        });
+        if (error) console.error('[DataContext] Error inserting disbursement in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception inserting disbursement:', err);
+      }
     }
     addAuditLog(
       `তহবিল থেকে ব্যয়/বিতরণ রেকর্ড করা হয়েছে: ৳${newDisb.amount} (${newDisb.title})`,
@@ -1341,7 +1460,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteFundDisbursement = async (id: string) => {
     setFundDisbursements((prev) => prev.filter((d) => d.id !== id));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('fund_disbursements').delete().eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('fund_disbursements').delete().eq('id', id);
+        if (error) console.error('[DataContext] Error deleting disbursement from Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting disbursement:', err);
+      }
     }
     addAuditLog(`ব্যয় রেকর্ড মুছে ফেলা হয়েছে: ${id}`, 'DISBURSEMENT', id);
   };
@@ -1351,17 +1475,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((m) => (m.id === id ? { ...m, ...data } : m))
     );
     if (isSupabaseConfigured && supabase) {
-      const dbUpdates: Record<string, any> = {};
-      if (data.name !== undefined) dbUpdates.name = data.name;
-      if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
-      if (data.type !== undefined) dbUpdates.type = data.type;
-      if (data.accountNumber !== undefined) dbUpdates.account_number = data.accountNumber;
-      if (data.accountType !== undefined) dbUpdates.account_type = data.accountType;
-      if (data.instructionsBn !== undefined) dbUpdates.instructions_bn = data.instructionsBn;
-      if (data.qrCodeUrl !== undefined) dbUpdates.qr_code_url = data.qrCodeUrl;
-      if (data.isActive !== undefined) dbUpdates.is_active = data.isActive;
+      try {
+        const dbUpdates: Record<string, any> = {};
+        if (data.name !== undefined) dbUpdates.name = data.name;
+        if (data.nameBn !== undefined) dbUpdates.name_bn = data.nameBn;
+        if (data.type !== undefined) dbUpdates.type = data.type;
+        if (data.accountNumber !== undefined) dbUpdates.account_number = data.accountNumber;
+        if (data.accountType !== undefined) dbUpdates.account_type = data.accountType;
+        if (data.instructionsBn !== undefined) dbUpdates.instructions_bn = data.instructionsBn;
+        if (data.qrCodeUrl !== undefined) dbUpdates.qr_code_url = data.qrCodeUrl;
+        if (data.isActive !== undefined) dbUpdates.is_active = data.isActive;
 
-      supabase.from('payment_methods').update(dbUpdates).eq('id', id).then(() => {});
+        const { error } = await supabase.from('payment_methods').update(dbUpdates).eq('id', id);
+        if (error) console.error('[DataContext] Error updating payment method in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception updating payment method:', err);
+      }
     }
     addAuditLog(`পেমেন্ট মেথড আপডেট করা হয়েছে: ${id}`, 'PAYMENT_METHOD', id, data);
   };
@@ -1375,17 +1504,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setPaymentMethods((prev) => [...prev, newMethod]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('payment_methods').insert({
-        id: newMethod.id,
-        name: newMethod.name,
-        name_bn: newMethod.nameBn,
-        type: newMethod.type,
-        account_number: newMethod.accountNumber,
-        account_type: newMethod.accountType,
-        instructions_bn: newMethod.instructionsBn,
-        qr_code_url: newMethod.qrCodeUrl || null,
-        is_active: newMethod.isActive,
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('payment_methods').insert({
+          id: newMethod.id,
+          name: newMethod.name,
+          name_bn: newMethod.nameBn,
+          type: newMethod.type,
+          account_number: newMethod.accountNumber,
+          account_type: newMethod.accountType,
+          instructions_bn: newMethod.instructionsBn,
+          qr_code_url: newMethod.qrCodeUrl || null,
+          is_active: newMethod.isActive,
+        });
+        if (error) console.error('[DataContext] Error adding payment method to Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception adding payment method:', err);
+      }
     }
     addAuditLog(`নতুন পেমেন্ট মেথড যুক্ত করা হয়েছে: ${newMethod.nameBn}`, 'PAYMENT_METHOD', newMethod.id);
     return newMethod;
@@ -1394,7 +1528,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deletePaymentMethod = async (id: string) => {
     setPaymentMethods((prev) => prev.filter((m) => m.id !== id));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('payment_methods').delete().eq('id', id).then(() => {});
+      try {
+        const { error } = await supabase.from('payment_methods').delete().eq('id', id);
+        if (error) console.error('[DataContext] Error deleting payment method from Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting payment method:', err);
+      }
     }
     addAuditLog(`পেমেন্ট মেথড মুছে ফেলা হয়েছে: ${id}`, 'PAYMENT_METHOD', id);
   };
@@ -1425,10 +1564,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
     if (isSupabaseConfigured && supabase) {
-      supabase.from('users').update({
-        role: newRole,
-        updated_at: new Date().toISOString(),
-      }).eq('id', userId).then(() => {});
+      try {
+        const { error } = await supabase.from('users').update({
+          role: newRole,
+          updated_at: new Date().toISOString(),
+        }).eq('id', userId);
+        if (error) console.error('[DataContext] Error updating user role in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception updating user role:', err);
+      }
     }
     addAuditLog(`ব্যবহারকারীর রোল পরিবর্তন করা হয়েছে: ${userId} -> ${newRole}`, 'USER', userId, { newRole });
   };
@@ -1440,16 +1584,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
     if (isSupabaseConfigured && supabase) {
-      const dbUpdates: Record<string, any> = {
-        updated_at: new Date().toISOString(),
-      };
-      if (data.fullName !== undefined) dbUpdates.full_name = data.fullName;
-      if (data.phone !== undefined) dbUpdates.phone = data.phone;
-      if (data.email !== undefined) dbUpdates.email = data.email;
-      if (data.photoUrl !== undefined) dbUpdates.photo_url = data.photoUrl;
-      if (data.status !== undefined) dbUpdates.status = data.status;
+      try {
+        const dbUpdates: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (data.fullName !== undefined) dbUpdates.full_name = data.fullName;
+        if (data.phone !== undefined) dbUpdates.phone = data.phone;
+        if (data.email !== undefined) dbUpdates.email = data.email;
+        if (data.photoUrl !== undefined) dbUpdates.photo_url = data.photoUrl;
+        if (data.status !== undefined) dbUpdates.status = data.status;
 
-      supabase.from('users').update(dbUpdates).eq('id', userId).then(() => {});
+        const { error } = await supabase.from('users').update(dbUpdates).eq('id', userId);
+        if (error) console.error('[DataContext] Error updating user in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception updating user:', err);
+      }
     }
     addAuditLog(`ব্যবহারকারীর তথ্য আপডেট করা হয়েছে: ${userId}`, 'USER', userId, data);
   };
@@ -1465,20 +1614,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setUsers((prev) => [newUser, ...prev]);
     if (isSupabaseConfigured && supabase) {
-      supabase.from('users').insert({
-        id: newUser.id,
-        full_name: newUser.fullName,
-        phone: newUser.phone,
-        email: newUser.email || null,
-        role: newUser.role,
-        organization_id: newUser.organizationId,
-        branch_id: newUser.branchId || null,
-        photo_url: newUser.photoUrl || null,
-        status: newUser.status,
-        phone_verified: newUser.phoneVerified,
-        created_at: newUser.createdAt,
-        updated_at: newUser.updatedAt,
-      }).then(() => {});
+      try {
+        const { error } = await supabase.from('users').insert({
+          id: newUser.id,
+          full_name: newUser.fullName,
+          phone: newUser.phone,
+          email: newUser.email || null,
+          role: newUser.role,
+          organization_id: newUser.organizationId,
+          branch_id: newUser.branchId || null,
+          photo_url: newUser.photoUrl || null,
+          status: newUser.status,
+          phone_verified: newUser.phoneVerified,
+          created_at: newUser.createdAt,
+          updated_at: newUser.updatedAt,
+        });
+        if (error) console.error('[DataContext] Error inserting user in Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception inserting user:', err);
+      }
     }
     addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${newUser.fullName} (${newUser.role})`, 'USER', newUser.id);
     return newUser;
@@ -1487,7 +1641,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteUser = async (userId: string) => {
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('users').delete().eq('id', userId).then(() => {});
+      try {
+        const { error } = await supabase.from('users').delete().eq('id', userId);
+        if (error) console.error('[DataContext] Error deleting user from Supabase:', error);
+      } catch (err) {
+        console.error('[DataContext] Exception deleting user:', err);
+      }
     }
     addAuditLog(`ব্যবহারকারী মুছে ফেলা হয়েছে: ${userId}`, 'USER', userId);
   };
