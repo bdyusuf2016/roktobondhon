@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Heart,
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
   Send,
   Loader2,
   HelpCircle,
+  User,
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
@@ -48,10 +49,29 @@ export const HealthEligibilityPage: React.FC = () => {
   const [step, setStep] = useState<number>(1);
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
 
-  // Gemini AI Chat / Tips State
+  // Gemini AI Conversational Chat State
+  interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant';
+    text: string;
+    time: string;
+  }
+
   const [aiQuestion, setAiQuestion] = useState<string>('');
-  const [aiResponse, setAiResponse] = useState<string>('');
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      text: `আসসালামু আলাইকুম! আমি 'রক্ত দান পরিবার কালামপুর'-এর AI রক্তদান স্বাস্থ্য সহকারী। রক্তদানের যোগ্যতা, প্রস্তুতি, খাদ্যাভ্যাস বা যেকোনো স্বাস্থ্য বিষয়ে আমাকে নির্দ্বিধায় প্রশ্ন করতে পারেন।`,
+      time: 'এখন',
+    },
+  ]);
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isAiLoading]);
 
   // Evaluate Eligibility
   const reasons: string[] = [];
@@ -106,53 +126,153 @@ export const HealthEligibilityPage: React.FC = () => {
     reasons.push('রক্তদানের দিনে নিজেকে শারীরিক ও মানসিকভাবে সম্পূর্ণ সুস্থ ও উদ্যমী বোধ করা প্রয়োজন।');
   }
 
-  const handleAskAI = async (customPrompt?: string) => {
-    const query = customPrompt || aiQuestion;
-    if (!query.trim()) return;
+  const handleSendMessage = async (customPrompt?: string) => {
+    const query = (customPrompt || aiQuestion).trim();
+    if (!query || isAiLoading) return;
 
+    const now = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
+    const userMsg: ChatMessage = {
+      id: 'user-' + Date.now(),
+      role: 'user',
+      text: query,
+      time: now,
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setAiQuestion('');
     setIsAiLoading(true);
-    setAiResponse('');
 
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
         const ai = new GoogleGenAI({ apiKey });
-        let textResult = '';
+
+        const historyText = messages
+          .slice(-6)
+          .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
+          .join('\n');
+
+        const prompt = `You are a friendly, caring, and expert blood donation medical advisor for 'রক্ত দান পরিবার কালামপুর' blood platform in Bangladesh.
+Answer the user's queries in natural, fluent, empathetic, and polite Bengali.
+
+User's Current Screening Profile:
+- Age: ${form.age} years
+- Weight: ${form.weight} kg
+- Gender: ${form.gender === 'male' ? 'পুরুষ' : 'নারী'}
+- Last Donation: ${form.lastDonationMonths} months ago
+- Current Health: ${form.feelingHealthyToday ? 'Feeling healthy' : 'Feeling unwell'}
+
+Recent Conversation:
+${historyText}
+User: ${query}
+
+Behavior Instructions:
+1. If the user greets (e.g. "hi", "hello", "হাই", "হ্যালো", "কেমন আছেন", "সালাম"), greet them warmly and naturally, and ask how you can help them regarding blood donation. Do not output a generic canned speech.
+2. If the user asks questions about blood donation, give clear, medically sound, and reassuring advice in bullet points or short paragraphs.
+3. Keep the conversation lively, friendly, and natural.`;
+
+        let aiText = '';
         try {
           const response = await ai.models.generateContent({
             model: 'gemini-3.5-flash',
-            contents: `You are an expert blood donation medical advisor for 'রক্ত দান পরিবার কালামপুর' blood platform in Bangladesh.
-            Answer the following blood donation health query in clear, reassuring, and fluent Bengali.
-            User Health Profile: Age ${form.age}, Weight ${form.weight}kg, Gender ${form.gender}.
-            Query: ${query}`,
+            contents: prompt,
           });
-          textResult = response.text || '';
+          aiText = response.text || '';
         } catch {
           const fallbackResp = await ai.models.generateContent({
             model: 'gemini-3.5-flash-lite',
-            contents: `You are an expert blood donation medical advisor in Bangladesh. Answer in Bengali: ${query}`,
+            contents: prompt,
           });
-          textResult = fallbackResp.text || '';
+          aiText = fallbackResp.text || '';
         }
-        setAiResponse(textResult || 'পরামর্শ তৈরি করা সম্ভব হয়নি।');
-      } else {
-        // High quality medical guidance fallback
-        await new Promise((r) => setTimeout(r, 800));
-        if (query.includes('খাবার') || query.includes('আয়রন')) {
-          setAiResponse(`🥦 **রক্তদানের পূর্বে ও পরে আদর্শ খাদ্যাভ্যাস:**
-1. **রক্তদানের আগে:** প্রচুর পানি ও স্যালাইন পান করুন। আয়রন সমৃদ্ধ খাবার যেমন—কচু শাক, ডিম, কলিজা, ডালিম, বেদানা ও খেজুর খান। খালি পেটে রক্ত দেবেন না।
-2. **রক্তদানের পরে:** ফলের জুস বা মিষ্টি শরবত পান করুন এবং ১৫-২০ মিনিট বিশ্রাম নিন। অন্তত ২ ঘণ্টা ধূমপান ও ভারী ওজন উত্তোলন থেকে বিরত থাকুন।`);
-        } else {
-          setAiResponse(`🩺 **রক্তদান ও স্বাস্থ্য সংক্রান্ত পরামর্শ:**
-রক্তদান একটি সম্পূর্ণ নিরাপদ ও মহৎ প্রক্রিয়া। একজন সুস্থ ব্যক্তি প্রতি ৩-৪ মাস পর পর রক্ত দিলে শরীরের অস্থিমজ্জা সক্রিয় হয় এবং নতুন রক্তকণিকা তৈরি বৃদ্ধি পায়, যা হৃদরোগের ঝুঁকি কমাতেও সাহায্য করে। পর্যাপ্ত ঘুম (৬-৮ ঘণ্টা) ও হালকা খাবার খেয়ে রক্তদান কেন্দ্রে আসুন।`);
+
+        if (aiText) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'ai-' + Date.now(),
+              role: 'assistant',
+              text: aiText,
+              time: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+            },
+          ]);
+          return;
         }
       }
+
+      // Smart Conversational Fallback if no API key or offline
+      await new Promise((r) => setTimeout(r, 600));
+      const lower = query.toLowerCase();
+      let smartResponse = '';
+
+      if (
+        lower.includes('hi') ||
+        lower.includes('hello') ||
+        lower.includes('হাই') ||
+        lower.includes('হ্যালো') ||
+        lower.includes('কেমন') ||
+        lower.includes('সালাম')
+      ) {
+        smartResponse = `হ্যালো! আসসালামু আলাইকুম। আমি 'রক্ত দান পরিবার কালামপুর'-এর AI স্বাস্থ্য সহকারী। আপনাকে কীভাবে সাহায্য করতে পারি? রক্তদানের প্রস্তুতি, খাদ্যতালিকা, কিংবা রক্তদান সংক্রান্ত যেকোনো প্রশ্ন আমাকে করতে পারেন।`;
+      } else if (
+        lower.includes('খাবার') ||
+        lower.includes('খাদ্য') ||
+        lower.includes('আয়রন') ||
+        lower.includes('পানি')
+      ) {
+        smartResponse = `🥦 **রক্তদানের আগে ও পরের আদর্শ খাদ্যাভ্যাস:**\n• **রক্তদানের আগে:** প্রচুর পানি ও স্যালাইন পান করুন। আয়রন সমৃদ্ধ খাবার যেমন—কচু শাক, ডিম, কলিজা, ডালিম, বেদানা ও খেজুর খান। খালি পেটে রক্ত দেবেন না।\n• **রক্তদানের পরে:** ফলের জুস বা মিষ্টি শরবত পান করুন এবং ১৫-২০ মিনিট বিশ্রাম নিন। অন্তত ২ ঘণ্টা ধূমপান ও ভারী ওজন উত্তোলন থেকে বিরত থাকুন।`;
+      } else if (
+        lower.includes('উপকারিতা') ||
+        lower.includes('লাভ') ||
+        lower.includes('সুবিধা') ||
+        lower.includes('কেন')
+      ) {
+        smartResponse = `💪 **নিয়মিত রক্তদানের স্বাস্থ্য উপকারিতা:**\n1. শরীরে নতুন রক্তকণিকা দ্রুত তৈরি হয় এবং অস্থিমজ্জা সতেজ থাকে।\n2. হৃদরোগ ও হার্ট অ্যাটাকের ঝুঁকি বহুলাংশে হ্রাস পায়।\n3. শরীরে অতিরিক্ত ক্ষতিকর আয়রনের মাত্রা নিয়ন্ত্রণে থাকে।\n4. বিনামূল্যে হেপাটাইটিস, সিফিলিস, এইচআইভি ইত্যাদি রোগ স্ক্রিনিং হয়ে যায়।`;
+      } else if (
+        lower.includes('যোগ্য') ||
+        lower.includes('পারব') ||
+        lower.includes('ওজন') ||
+        lower.includes('বয়স')
+      ) {
+        smartResponse = `🩸 **রক্তদানের প্রাথমিক যোগ্যতা:**\n• বয়স: ১৮ থেকে ৬০ বছর।\n• ওজন: কমপক্ষে ৪৫ কেজি (পুরুষদের ৫০ কেজি আদর্শ)।\n• বিরতি: পুরুষদের ক্ষেত্রে অন্তত ৩ মাস, নারীদের ক্ষেত্রে ৪ মাস।\n• সুস্থতা: রক্তচাপ ও হিমোগ্লোবিন স্বাভাবিক থাকতে হবে।`;
+      } else {
+        smartResponse = `ধন্যবাদ আপনার বার্তার জন্য! রক্তদান একটি সম্পূর্ণ নিরাপদ ও মানবিক কাজ। আপনার স্বাস্থ্য স্ক্রিনিং অনুযায়ী (বয়স: ${form.age}, ওজন: ${form.weight} কেজি), আপনি যদি নিজেকে শারীরিকভাবে সুস্থ বোধ করেন এবং কোনো জটিল ওষুধ না খান, তবে রক্তদানে কোনো বাধা নেই। আপনার সুনির্দিষ্ট কোনো বিষয়ে জানার থাকলে বলুন!`;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'ai-' + Date.now(),
+          role: 'assistant',
+          text: smartResponse,
+          time: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
     } catch (err) {
       console.error(err);
-      setAiResponse('রক্তদান পূর্ববর্তী পরামর্শ: পর্যাপ্ত পানি পান করুন, পুষ্টিকর খাবার গ্রহণ করুন এবং কোনো অসুস্থতা বোধ করলে রক্তদান পিছিয়ে দিন।');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'ai-' + Date.now(),
+          role: 'assistant',
+          text: 'দুঃখিত, সংযোগে কিছুটা বিলম্ব হয়েছে। রক্তদান সংক্রান্ত যেকোনো প্রয়োজনে প্রচুর পানি পান করুন ও সুস্থ থাকুন।',
+          time: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  const handleResetChat = () => {
+    setMessages([
+      {
+        id: 'welcome-' + Date.now(),
+        role: 'assistant',
+        text: `আসসালামু আলাইকুম! আমি 'রক্ত দান পরিবার কালামপুর'-এর AI রক্তদান স্বাস্থ্য সহকারী। রক্তদানের যোগ্যতা, প্রস্তুতি, খাদ্যাভ্যাস বা যেকোনো বিষয়ে আমাকে প্রশ্ন করতে পারেন।`,
+        time: 'এখন',
+      },
+    ]);
   };
 
   return (
@@ -409,67 +529,148 @@ export const HealthEligibilityPage: React.FC = () => {
             )}
           </div>
 
-          {/* AI Advisor Card */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-slate-800">
-              <Bot className="w-5 h-5 text-indigo-600" />
-              <h3 className="font-bold text-base text-slate-900">AI রক্তদান স্বাস্থ্য গাইড</h3>
+          {/* AI Conversational Advisor Card */}
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-sm space-y-4 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/80 flex items-center justify-center text-indigo-600 shadow-2xs">
+                  <Bot className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
+                    AI রক্তদান স্বাস্থ্য গাইড
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>সক্রিয় অনলাইন সহকারী</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetChat}
+                title="নতুন চ্যাট শুরু করুন"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-medium hidden sm:inline">নতুন চ্যাট</span>
+              </button>
             </div>
 
-            {/* Quick Prompts */}
-            <div className="flex flex-wrap gap-2">
+            {/* Quick Suggestion Chips */}
+            <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => handleAskAI('রক্তদানের আগে ও পরে কোন কোন খাবার খাওয়া উচিত?')}
-                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
+                type="button"
+                onClick={() => handleSendMessage('হাই, আপনি কেমন আছেন?')}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[11px] font-medium transition cursor-pointer"
+              >
+                👋 হাই, কেমন আছেন?
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSendMessage('রক্তদানের আগে ও পরে কোন খাবারগুলো খাওয়া উচিত?')}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[11px] font-medium transition cursor-pointer"
               >
                 🥗 আদর্শ খাবার তালিকা
               </button>
               <button
-                onClick={() => handleAskAI('রক্ত দিলে শরীরে কী কী স্বাস্থ্যগত উপকারিতা পাওয়া যায়?')}
-                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
+                type="button"
+                onClick={() => handleSendMessage('রক্ত দিলে শরীরে কী কী স্বাস্থ্যগত উপকারিতা পাওয়া যায়?')}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[11px] font-medium transition cursor-pointer"
               >
                 💪 রক্তদানের উপকারিতা
               </button>
               <button
-                onClick={() => handleAskAI('রক্তদানের পরে কী কী সতর্কতা অবলম্বন করা উচিত?')}
-                className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
+                type="button"
+                onClick={() => handleSendMessage('রক্তদানের পরে কী কী সতর্কতা অবলম্বন করা উচিত?')}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-[11px] font-medium transition cursor-pointer"
               >
                 ⚠️ রক্তদানের পর করণীয়
               </button>
             </div>
 
-            {/* AI Response Display */}
-            {isAiLoading && (
-              <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-xs">
-                <Loader2 className="w-4 h-4 animate-spin text-red-600" />
-                AI স্বাস্থ্য পরামর্শ তৈরি হচ্ছে...
-              </div>
-            )}
+            {/* Conversation Messages Container */}
+            <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-3 sm:p-4 min-h-[220px] max-h-[360px] overflow-y-auto space-y-3">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex items-start gap-2 ${
+                    m.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {m.role === 'assistant' && (
+                    <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                      <Bot className="w-3.5 h-3.5" />
+                    </div>
+                  )}
 
-            {aiResponse && !isAiLoading && (
-              <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-xs text-slate-700 leading-relaxed whitespace-pre-line">
-                {aiResponse}
-              </div>
-            )}
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                      m.role === 'user'
+                        ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-tr-none shadow-xs font-medium'
+                        : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none shadow-2xs whitespace-pre-line'
+                    }`}
+                  >
+                    <p>{m.text}</p>
+                    <div
+                      className={`text-[9px] mt-1 text-right ${
+                        m.role === 'user' ? 'text-red-100' : 'text-slate-400'
+                      }`}
+                    >
+                      {m.time}
+                    </div>
+                  </div>
 
-            {/* Chat Input */}
-            <div className="flex items-center gap-2 pt-2">
+                  {m.role === 'user' && (
+                    <div className="w-6 h-6 rounded-lg bg-red-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {isAiLoading && (
+                <div className="flex items-start gap-2 justify-start">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                    <Bot className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-none px-3.5 py-2 text-xs text-slate-600 shadow-2xs flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>AI উত্তর লিখছে...</span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat Input Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="flex items-center gap-2 pt-1"
+            >
               <input
                 type="text"
                 value={aiQuestion}
                 onChange={(e) => setAiQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAskAI()}
-                placeholder="রক্তদান সংক্রান্ত যেকোনো প্রশ্ন লিখুন..."
-                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:outline-none"
+                placeholder="রক্তদান বা স্বাস্থ্য বিষয়ে যেকোনো প্রশ্ন লিখুন (যেমন: 'hi')..."
+                disabled={isAiLoading}
+                className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none bg-white transition-all placeholder:text-slate-400"
               />
               <button
-                onClick={() => handleAskAI()}
+                type="submit"
                 disabled={isAiLoading || !aiQuestion.trim()}
-                className="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow transition cursor-pointer"
+                className="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+                title="পাঠান"
               >
                 <Send className="w-4 h-4" />
               </button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
