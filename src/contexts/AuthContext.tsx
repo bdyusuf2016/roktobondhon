@@ -11,6 +11,7 @@ import {
   sendSupabasePhoneOtp,
   confirmSupabasePhoneOtp,
   signInGoogle,
+  updateUserPassword,
 } from '../services/authService';
 import {
   getUserProfile,
@@ -27,6 +28,7 @@ interface AuthContextType {
   loginWithPhoneOtp: (phone: string, otp: string) => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  changePassword: (newPassword: string) => Promise<void>;
   register: (fullName: string, email: string, phone: string, role: UserRole, pass?: string) => Promise<User>;
   logout: () => Promise<void>;
   switchDemoRole: (role: UserRole) => void;
@@ -286,6 +288,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const changePassword = async (newPassword: string) => {
+    setIsLoading(true);
+    try {
+      await updateUserPassword(newPassword);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const updateCurrentUser = async (data: Partial<User>) => {
     if (currentUser) {
       const updated = { ...currentUser, ...data, updatedAt: new Date().toISOString() };
@@ -317,6 +328,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithPhoneOtp,
         loginWithEmail,
         loginWithGoogle,
+        changePassword,
         register,
         logout,
         switchDemoRole,

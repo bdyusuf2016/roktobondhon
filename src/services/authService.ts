@@ -119,6 +119,21 @@ export async function signInGoogle(): Promise<void> {
 }
 
 /**
+ * Update user password (Self Account Security)
+ */
+export async function updateUserPassword(newPassword: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) {
+    return; // Local simulation / demo mode succeeds
+  }
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+  if (error) {
+    throw new Error(error.message || 'পাসওয়ার্ড পরিবর্তন করতে সমস্যা হয়েছে।');
+  }
+}
+
+/**
  * Sign out user
  */
 export async function signOutUser(): Promise<void> {
@@ -142,3 +157,4 @@ export function subscribeToAuth(callback: (user: SupabaseUser | null) => void): 
   callback(null);
   return () => {};
 }
+
