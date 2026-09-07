@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext';
+import { usePermission } from '../../hooks/usePermission';
 import { AdminGuard } from '../../components/admin/AdminGuard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminSidebar, type AdminTabKey } from '../../components/admin/AdminSidebar';
@@ -42,6 +43,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   initialTab = 'overview',
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab);
+  const { can, currentRole, isSuperAdmin } = usePermission();
   const {
     donors,
     bloodRequests,
@@ -54,6 +56,40 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     notifications,
     auditLogs,
   } = useData();
+
+  // Validate activeTab when role changes or when navigating
+  useEffect(() => {
+    if (isSuperAdmin) return;
+
+    // Check specific tab restrictions for lower roles
+    const adminOnlyTabs: AdminTabKey[] = [
+      'health',
+      'blood_groups',
+      'matching',
+      'eligibility',
+      'request_rules',
+      'branches',
+      'users',
+      'notifications',
+      'organization',
+      'branding',
+      'website',
+      'seo',
+      'gamification',
+      'pwa',
+      'backup',
+      'audit',
+      'settings',
+    ];
+
+    const isRestrictedForCurrent =
+      (currentRole === 'volunteer' && (adminOnlyTabs.includes(activeTab) || activeTab === 'donors' || activeTab === 'emergency' || activeTab === 'hospitals' || activeTab === 'funds' || activeTab === 'analytics')) ||
+      (currentRole === 'moderator' && adminOnlyTabs.includes(activeTab));
+
+    if (isRestrictedForCurrent) {
+      setActiveTab('overview');
+    }
+  }, [currentRole, activeTab, isSuperAdmin]);
 
   const counts = {
     donors: donors.length,
