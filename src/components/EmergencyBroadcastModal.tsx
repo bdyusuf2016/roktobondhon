@@ -31,7 +31,7 @@ export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = (
   if (!isOpen) return null;
 
   // Generate Bangla formatted broadcast message
-  const broadcastText = `🚨 *জরুরি রক্তের আবেদন (রক্তবন্ধন প্ল্যাটফর্ম)* 🚨
+  const broadcastText = `🚨 *জরুরি রক্তের আবেদন (রক্ত দান পরিবার কালামপুর)* 🚨
 ━━━━━━━━━━━━━━━━━━━━
 🩸 *ব্লাড গ্রুপ:* ${request.bloodGroup}
 📦 *প্রয়োজনীয় পরিমাণ:* ${request.requiredUnits} ব্যাগ
