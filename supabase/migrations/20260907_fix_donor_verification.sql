@@ -1,31 +1,113 @@
 -- ==============================================================================
 -- ROKTOBONDHON - ATOMIC DONOR VERIFICATION RPC & RLS SYNCHRONIZATION
 -- ==============================================================================
--- Fixes live production bug where verification_logs was inserted but public.donors
--- verification_status remained 'pending'.
+-- Fixes live production bug where verification failed with:
+-- "Unauthorized: Only staff can verify or change donor verification status."
 -- 
--- Enforces:
--- 1. Atomic logical transaction: update donors + insert verification_logs together.
--- 2. Caller authorization: authenticated staff/admin check in PostgreSQL.
--- 3. Idempotency: prevents duplicate verification logs on repeated clicks.
--- 4. Server-verified verifier identity (no client-forged verified_by).
--- 5. Strict row-count validation (ensures exactly 1 donor row was updated).
+-- ROOT CAUSE:
+-- In public.users, administrative accounts seeded prior to auth registration
+-- had custom string IDs (e.g. 'user-superadmin') while auth.uid() produces an
+-- auth.users UUID. is_staff() checked ONLY id = auth.uid()::text without
+-- joining auth.users or checking verified JWT email.
+--
+-- ENFORCES:
+-- 1. Synchronized is_staff(), is_admin(), is_super_admin() matching by Auth UID,
+--    auth.users table join, or verified JWT email claim.
+-- 2. Single canonical authorization mechanism: verify_donor() calls public.is_staff().
+-- 3. Automatic user ID synchronization: updates public.users.id to match auth.users.id.
+-- 4. Atomic PostgreSQL transaction: update donors + insert verification_logs together.
+-- 5. Idempotency: prevents duplicate verification logs on repeated clicks.
 -- ==============================================================================
 
--- 1. Helper function ensure is_staff() is up-to-date with secure search_path
+-- 1. Synchronize existing public.users IDs with auth.users UUIDs based on verified email
+UPDATE public.users u
+SET id = a.id::text,
+    updated_at = clock_timestamp()
+FROM auth.users a
+WHERE lower(u.email) = lower(a.email)
+  AND u.id <> a.id::text;
+
+-- 2. Canonical Authorization Functions (Fixed search_path, multi-attribute resolution)
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
 BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
   RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid()::text
-      AND role IN ('super_admin', 'admin', 'moderator', 'volunteer')
-      AND status = 'active'
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
+    AND u.status = 'active'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
--- 2. Atomic Donor Verification RPC Function
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role IN ('super_admin', 'admin')
+    AND u.status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role = 'super_admin'
+    AND u.status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- 3. Atomic Donor Verification RPC Function
+-- Leverages canonical public.is_staff() to guarantee single source of authorization truth.
 CREATE OR REPLACE FUNCTION public.verify_donor(
   p_donor_id TEXT,
   p_status TEXT DEFAULT 'verified',
@@ -37,26 +119,31 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_caller_id TEXT := auth.uid()::text;
-  v_user_role TEXT;
   v_user_name TEXT;
   v_donor RECORD;
   v_log_id TEXT;
   v_now TIMESTAMPTZ := clock_timestamp();
   v_rows_updated INT;
 BEGIN
-  -- A. Ensure caller is authenticated
-  IF v_caller_id IS NULL THEN
-    RAISE EXCEPTION 'Unauthorized: Authentication required to verify donors.';
+  -- A. Canonical role check: super_admin, admin, moderator, volunteer permitted
+  IF NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Unauthorized: Only staff can verify or change donor verification status.';
   END IF;
 
-  -- B. Validate caller role and retrieve authoritative full name from public.users
-  SELECT role, full_name INTO v_user_role, v_user_name
-  FROM public.users
-  WHERE id = v_caller_id AND status = 'active';
+  -- B. Retrieve server-authoritative caller name
+  SELECT u.full_name INTO v_user_name
+  FROM public.users u
+  WHERE (
+    u.id = auth.uid()::text
+    OR (auth.jwt() ->> 'email' IS NOT NULL AND lower(u.email) = lower(auth.jwt() ->> 'email'))
+    OR EXISTS (SELECT 1 FROM auth.users a WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email))
+  )
+  AND u.status = 'active'
+  ORDER BY CASE WHEN u.id = auth.uid()::text THEN 0 ELSE 1 END
+  LIMIT 1;
 
-  IF v_user_role IS NULL OR v_user_role NOT IN ('super_admin', 'admin', 'moderator', 'volunteer') THEN
-    RAISE EXCEPTION 'Unauthorized: Only active staff and administrators can verify donors.';
+  IF v_user_name IS NULL OR TRIM(v_user_name) = '' THEN
+    v_user_name := COALESCE(auth.jwt() ->> 'user_metadata' ->> 'full_name', 'Staff Verifier');
   END IF;
 
   -- C. Validate target status
@@ -100,7 +187,7 @@ BEGIN
   UPDATE public.donors
   SET
     verification_status = p_status,
-    verified_by = COALESCE(v_user_name, 'Staff Verifier'),
+    verified_by = v_user_name,
     verified_at = v_now,
     admin_notes = CASE 
       WHEN p_notes IS NOT NULL AND TRIM(p_notes) <> '' THEN TRIM(p_notes)
@@ -129,7 +216,7 @@ BEGIN
     v_log_id,
     v_donor.id,
     p_status,
-    COALESCE(v_user_name, 'Staff Verifier'),
+    v_user_name,
     COALESCE(TRIM(p_notes), ''),
     v_now
   );
@@ -141,17 +228,36 @@ BEGIN
     'donor_id', v_donor.id,
     'human_id', v_donor.donor_id,
     'status', p_status,
-    'verified_by', COALESCE(v_user_name, 'Staff Verifier'),
+    'verified_by', v_user_name,
     'verified_at', v_now,
     'log_id', v_log_id
   );
 END;
 $$;
 
--- Grant execution to authenticated users (role checked inside function)
+-- Grant execution to authenticated users (role checked inside function via public.is_staff())
 GRANT EXECUTE ON FUNCTION public.verify_donor(TEXT, TEXT, TEXT) TO authenticated;
 
--- 3. Synchronize donors UPDATE policy
+-- 4. Synchronize trigger guard on public.donors
+CREATE OR REPLACE FUNCTION public.protect_donor_verification()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.verification_status IS DISTINCT FROM OLD.verification_status) OR (NEW.verified_by IS DISTINCT FROM OLD.verified_by) OR (NEW.verified_at IS DISTINCT FROM OLD.verified_at) THEN
+    IF NOT public.is_staff() THEN
+      RAISE EXCEPTION 'Unauthorized: Only staff can verify or change donor verification status.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_donor_verification ON public.donors;
+CREATE TRIGGER trg_protect_donor_verification
+  BEFORE UPDATE ON public.donors
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_donor_verification();
+
+-- 5. Synchronize donors UPDATE policy
 DROP POLICY IF EXISTS "Donors can update own record" ON public.donors;
 DROP POLICY IF EXISTS "Donors/Admins can update donor records" ON public.donors;
 
@@ -159,7 +265,7 @@ CREATE POLICY "Donors can update own record" ON public.donors
   FOR UPDATE USING (auth.uid()::text = user_id OR public.is_staff())
   WITH CHECK (auth.uid()::text = user_id OR public.is_staff());
 
--- 4. Synchronize verification_logs INSERT policy
+-- 6. Synchronize verification_logs INSERT policy
 DROP POLICY IF EXISTS "Admins can insert verification logs" ON public.verification_logs;
 DROP POLICY IF EXISTS "Staff can record verification logs" ON public.verification_logs;
 

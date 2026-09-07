@@ -25,14 +25,28 @@ function mapUserRow(row: any): User {
 /**
  * Fetch user profile from Supabase: users table
  */
-export async function getUserProfile(uid: string): Promise<User | null> {
+export async function getUserProfile(uid: string, email?: string | null): Promise<User | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
-    const { data, error } = await supabase
+    // 1. Primary lookup by id
+    let { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', uid)
       .maybeSingle();
+
+    // 2. Fallback lookup by email if id didn't match (e.g., auth UUID vs seeded string ID)
+    if (!data && email) {
+      const emailQuery = await supabase
+        .from('users')
+        .select('*')
+        .ilike('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (emailQuery.data) {
+        data = emailQuery.data;
+      }
+    }
 
     if (error) {
       console.error('Error fetching user profile from Supabase:', error);
@@ -80,6 +94,19 @@ export async function createUserProfile(
 
   if (isSupabaseConfigured && supabase) {
     try {
+      // First, check if a profile already exists by email (prevent overwriting super_admin/staff roles)
+      if (profile.email) {
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('email', profile.email.trim().toLowerCase())
+          .maybeSingle();
+
+        if (existingUser) {
+          return mapUserRow(existingUser);
+        }
+      }
+
       const { error } = await supabase.from('users').upsert({
         id: uid,
         full_name: newUser.fullName,

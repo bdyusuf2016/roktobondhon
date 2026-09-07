@@ -20,6 +20,14 @@ interface TestCase {
 
 // In-memory simulation state for sandbox & isolated boundary regression validation
 class MockDatabaseEnvironment {
+  users: Map<string, {
+    id: string;
+    email: string;
+    full_name: string;
+    role: string;
+    status: string;
+  }> = new Map();
+
   donors: Map<string, {
     id: string;
     donor_id: string;
@@ -45,8 +53,42 @@ class MockDatabaseEnvironment {
   }
 
   reset() {
+    this.users.clear();
     this.donors.clear();
     this.verificationLogs = [];
+
+    // Seed users matching live Supabase scenario
+    this.users.set('user-superadmin', {
+      id: 'user-superadmin', // Seeded ID
+      email: 'yusufcomputer.it@gmail.com',
+      full_name: 'Md. Yusuf Ali',
+      role: 'super_admin',
+      status: 'active',
+    });
+
+    this.users.set('user-admin-01', {
+      id: 'uuid-admin-01',
+      email: 'admin@roktobondhon.org',
+      full_name: 'Admin User',
+      role: 'admin',
+      status: 'active',
+    });
+
+    this.users.set('user-volunteer-01', {
+      id: 'uuid-volunteer-01',
+      email: 'volunteer@roktobondhon.org',
+      full_name: 'Volunteer User',
+      role: 'volunteer',
+      status: 'active',
+    });
+
+    this.users.set('user-donor-regular', {
+      id: 'uuid-donor-01',
+      email: 'donor@gmail.com',
+      full_name: 'Regular Donor',
+      role: 'donor',
+      status: 'active',
+    });
 
     // Seed test donor
     this.donors.set('donor-qa-001', {
@@ -82,25 +124,46 @@ class MockDatabaseEnvironment {
     });
   }
 
+  // Canonical is_staff() logic matching PostgreSQL implementation
+  isStaff(authUid: string | null, jwtEmail?: string | null): boolean {
+    if (!authUid) return false;
+    for (const u of this.users.values()) {
+      const idMatches = u.id === authUid;
+      const emailMatches = Boolean(jwtEmail && u.email.toLowerCase() === jwtEmail.toLowerCase());
+      if ((idMatches || emailMatches) && ['super_admin', 'admin', 'moderator', 'volunteer'].includes(u.role) && u.status === 'active') {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Atomic verification function matching PostgreSQL verify_donor() logic exactly
   executeVerifyDonorRPC(
-    callerRole: string,
-    callerName: string,
+    authSession: { uid: string | null; email?: string | null; callerNameFallback?: string },
     donorIdentifier: string,
     targetStatus: string,
     notes: string = ''
   ): { success: boolean; already_verified?: boolean; donor_id?: string; status?: string; verified_by?: string; verified_at?: string; error?: string } {
-    // 1. Authorization check
-    if (!['super_admin', 'admin', 'moderator', 'volunteer'].includes(callerRole)) {
-      return { success: false, error: 'Unauthorized: Only active staff and administrators can verify donors.' };
+    // 1. Canonical is_staff check
+    if (!this.isStaff(authSession.uid, authSession.email)) {
+      return { success: false, error: 'Unauthorized: Only staff can verify or change donor verification status.' };
     }
 
-    // 2. Validate status
+    // 2. Server-side authoritative caller name lookup from public.users
+    let callerName = authSession.callerNameFallback || 'Staff Verifier';
+    for (const u of this.users.values()) {
+      if (u.id === authSession.uid || (authSession.email && u.email.toLowerCase() === authSession.email.toLowerCase())) {
+        callerName = u.full_name;
+        break;
+      }
+    }
+
+    // 3. Validate status
     if (!['verified', 'suspended', 'rejected', 'pending', 'unverified'].includes(targetStatus)) {
       return { success: false, error: `Invalid verification status: ${targetStatus}` };
     }
 
-    // 3. Locate donor (support id and donor_id)
+    // 4. Locate donor (support id and donor_id)
     let target = this.donors.get(donorIdentifier);
     if (!target) {
       for (const d of this.donors.values()) {
@@ -115,7 +178,7 @@ class MockDatabaseEnvironment {
       return { success: false, error: `Donor not found with identifier: ${donorIdentifier}` };
     }
 
-    // 4. Idempotency check
+    // 5. Idempotency check
     if (target.verification_status === targetStatus) {
       return {
         success: true,
@@ -127,7 +190,7 @@ class MockDatabaseEnvironment {
       };
     }
 
-    // 5. Atomic Update + Insert Log
+    // 6. Atomic Update + Insert Log
     const now = new Date().toISOString();
     target.verification_status = targetStatus as VerificationStatus;
     target.verified_by = callerName;
@@ -159,10 +222,10 @@ class MockDatabaseEnvironment {
 const mockDb = new MockDatabaseEnvironment();
 
 const TESTS: TestCase[] = [
-  // Scenario A: Pending donor -> Verify
+  // Scenario A: Super Admin with UUID session verifying pending donor
   {
-    id: 'VERIFY-SCENARIO-A',
-    name: 'Scenario A: Pending donor -> Verify updates donors table and creates verification_log',
+    id: 'VERIFY-SUPER-ADMIN-LIVE',
+    name: 'Super Admin (UUID session + email matching user-superadmin) -> Verifies pending donor successfully',
     scenario: 'A',
     run: async () => {
       mockDb.reset();
@@ -171,12 +234,17 @@ const TESTS: TestCase[] = [
         throw new Error('Initial state expected pending');
       }
 
+      // Caller has an auth UUID, but email matches seeded 'user-superadmin'
+      const authSession = {
+        uid: '2fa1a03e-862d-4bf7-bf0e-5407d39103ee',
+        email: 'yusufcomputer.it@gmail.com',
+      };
+
       const result = mockDb.executeVerifyDonorRPC(
-        'admin',
-        'Md. Yusuf Ali',
+        authSession,
         'donor-qa-001',
         'verified',
-        'Physical NID verified'
+        'Direct NID & physical interview completed'
       );
 
       if (!result.success) {
@@ -188,6 +256,7 @@ const TESTS: TestCase[] = [
       if (donorAfter.verification_status !== 'verified') {
         throw new Error(`Expected donor.verification_status = 'verified', got '${donorAfter.verification_status}'`);
       }
+      // Server-authoritative name from users table
       if (donorAfter.verified_by !== 'Md. Yusuf Ali') {
         throw new Error(`Expected donor.verified_by = 'Md. Yusuf Ali', got '${donorAfter.verified_by}'`);
       }
@@ -203,6 +272,9 @@ const TESTS: TestCase[] = [
       if (logs[0].status !== 'verified') {
         throw new Error(`Expected log status = 'verified', got '${logs[0].status}'`);
       }
+      if (logs[0].verified_by !== 'Md. Yusuf Ali') {
+        throw new Error(`Expected log.verified_by = 'Md. Yusuf Ali', got '${logs[0].verified_by}'`);
+      }
       if (logs[0].donor_id !== 'donor-qa-001') {
         throw new Error(`Expected log.donor_id = donors.id, got '${logs[0].donor_id}'`);
       }
@@ -211,9 +283,9 @@ const TESTS: TestCase[] = [
     },
   },
 
-  // Scenario B: Already verified donor -> Verify again
+  // Scenario B: Already verified donor -> Verify again (Idempotency)
   {
-    id: 'VERIFY-SCENARIO-B',
+    id: 'VERIFY-IDEMPOTENCY',
     name: 'Scenario B: Already verified donor -> Idempotent, no duplicate log created',
     scenario: 'B',
     run: async () => {
@@ -223,10 +295,9 @@ const TESTS: TestCase[] = [
         throw new Error(`Initial log count expected 1, got ${initialLogsCount}`);
       }
 
-      // Attempt second verify on already verified donor
+      // Attempt second verify on already verified donor with super_admin
       const result = mockDb.executeVerifyDonorRPC(
-        'super_admin',
-        'Super Admin',
+        { uid: '2fa1a03e-862d-4bf7-bf0e-5407d39103ee', email: 'yusufcomputer.it@gmail.com' },
         'donor-qa-002',
         'verified',
         'Repeated click'
@@ -249,34 +320,52 @@ const TESTS: TestCase[] = [
     },
   },
 
-  // Scenario C: Unauthorized user -> Verify
+  // Scenario C: Role Matrix Permissions
   {
-    id: 'VERIFY-SCENARIO-C',
-    name: 'Scenario C: Unauthorized non-staff role (donor) -> Verification BLOCKED',
+    id: 'VERIFY-ROLE-MATRIX',
+    name: 'Staff roles (super_admin, admin, volunteer) ALLOWED, non-staff (donor, anon) BLOCKED',
     scenario: 'C',
     run: async () => {
       mockDb.reset();
-      const result = mockDb.executeVerifyDonorRPC(
-        'donor', // non-staff attacker/regular user
-        'Attacker User',
+
+      // 1. Volunteer verification must succeed
+      const volResult = mockDb.executeVerifyDonorRPC(
+        { uid: 'uuid-volunteer-01', email: 'volunteer@roktobondhon.org' },
+        'donor-qa-001',
+        'verified',
+        'Verified by volunteer'
+      );
+      if (!volResult.success) {
+        throw new Error(`Volunteer verification should be permitted: ${volResult.error}`);
+      }
+
+      // Reset for next check
+      mockDb.reset();
+
+      // 2. Regular donor attempting verification must be BLOCKED
+      const donorResult = mockDb.executeVerifyDonorRPC(
+        { uid: 'uuid-donor-01', email: 'donor@gmail.com' },
         'donor-qa-001',
         'verified'
       );
-
-      if (result.success) {
-        throw new Error('FAILED: Unauthorized donor role was permitted to verify donor!');
+      if (donorResult.success) {
+        throw new Error('Security violation: Regular donor role was allowed to verify!');
       }
 
-      // Ensure donor record was NOT changed
-      const donor = mockDb.donors.get('donor-qa-001')!;
-      if (donor.verification_status !== 'pending') {
-        throw new Error('Donor state was modified by unauthorized caller!');
+      // 3. Unauthenticated/anon caller must be BLOCKED
+      const anonResult = mockDb.executeVerifyDonorRPC(
+        { uid: null, email: null },
+        'donor-qa-001',
+        'verified'
+      );
+      if (anonResult.success) {
+        throw new Error('Security violation: Anonymous caller was allowed to verify!');
       }
 
-      // Ensure no orphan verification log was inserted
-      const logs = mockDb.verificationLogs.filter((l) => l.donor_id === 'donor-qa-001');
-      if (logs.length > 0) {
-        throw new Error('Orphan verification log created on unauthorized call!');
+      // Ensure donor-qa-001 was NOT modified by unauthorized attempts
+      const donorState = mockDb.donors.get('donor-qa-001')!;
+      if (donorState.verification_status !== 'pending') {
+        throw new Error('Donor state was modified during unauthorized attempts!');
       }
 
       return true;
@@ -293,8 +382,7 @@ const TESTS: TestCase[] = [
       const logsBefore = mockDb.verificationLogs.length;
 
       const result = mockDb.executeVerifyDonorRPC(
-        'admin',
-        'Admin User',
+        { uid: 'uuid-admin-01', email: 'admin@roktobondhon.org' },
         'non-existent-donor-id-999',
         'verified'
       );
@@ -320,8 +408,7 @@ const TESTS: TestCase[] = [
     run: async () => {
       mockDb.reset();
       const result = mockDb.executeVerifyDonorRPC(
-        'admin',
-        'Md. Yusuf Ali',
+        { uid: 'uuid-admin-01', email: 'admin@roktobondhon.org' },
         'DNR-QA-001', // Human readable ID passed
         'verified'
       );

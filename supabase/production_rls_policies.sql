@@ -6,29 +6,83 @@
 -- ==============================================================================
 
 -- ------------------------------------------------------------------------------
--- 0. SECURITY DEFINER HELPER FUNCTIONS (Protected Search Path)
+-- 0. SECURITY DEFINER HELPER FUNCTIONS (Protected Search Path & Multi-Attribute)
 -- ------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
 BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
   RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid()::text
-      AND role IN ('super_admin', 'admin', 'moderator', 'volunteer')
-      AND status = 'active'
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
+    AND u.status = 'active'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
 BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
   RETURN EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid()::text
-      AND role IN ('super_admin', 'admin')
-      AND status = 'active'
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role IN ('super_admin', 'admin')
+    AND u.status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_uid TEXT := auth.uid()::text;
+  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.users u
+    WHERE (
+      u.id = v_uid
+      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR EXISTS (
+        SELECT 1 FROM auth.users a 
+        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+      )
+    )
+    AND u.role = 'super_admin'
+    AND u.status = 'active'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
@@ -513,34 +567,39 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_caller_id TEXT := auth.uid()::text;
-  v_user_role TEXT;
   v_user_name TEXT;
   v_donor RECORD;
   v_log_id TEXT;
   v_now TIMESTAMPTZ := clock_timestamp();
   v_rows_updated INT;
 BEGIN
-  -- Validate authenticated caller
-  IF v_caller_id IS NULL THEN
-    RAISE EXCEPTION 'Unauthorized: Authentication required to verify donors.';
+  -- A. Canonical role check: super_admin, admin, moderator, volunteer permitted
+  IF NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Unauthorized: Only staff can verify or change donor verification status.';
   END IF;
 
-  -- Validate caller role
-  SELECT role, full_name INTO v_user_role, v_user_name
-  FROM public.users
-  WHERE id = v_caller_id AND status = 'active';
+  -- B. Retrieve server-authoritative caller name
+  SELECT u.full_name INTO v_user_name
+  FROM public.users u
+  WHERE (
+    u.id = auth.uid()::text
+    OR (auth.jwt() ->> 'email' IS NOT NULL AND lower(u.email) = lower(auth.jwt() ->> 'email'))
+    OR EXISTS (SELECT 1 FROM auth.users a WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email))
+  )
+  AND u.status = 'active'
+  ORDER BY CASE WHEN u.id = auth.uid()::text THEN 0 ELSE 1 END
+  LIMIT 1;
 
-  IF v_user_role IS NULL OR v_user_role NOT IN ('super_admin', 'admin', 'moderator', 'volunteer') THEN
-    RAISE EXCEPTION 'Unauthorized: Only active staff and administrators can verify donors.';
+  IF v_user_name IS NULL OR TRIM(v_user_name) = '' THEN
+    v_user_name := COALESCE(auth.jwt() ->> 'user_metadata' ->> 'full_name', 'Staff Verifier');
   END IF;
 
-  -- Validate target status
+  -- C. Validate target status
   IF p_status NOT IN ('verified', 'suspended', 'rejected', 'pending', 'unverified') THEN
     RAISE EXCEPTION 'Invalid verification status: %', p_status;
   END IF;
 
-  -- Lookup target donor (id first, then donor_id)
+  -- D. Locate target donor (support primary key donors.id, with fallback to donors.donor_id)
   SELECT * INTO v_donor
   FROM public.donors
   WHERE id = p_donor_id
@@ -557,7 +616,8 @@ BEGIN
     END IF;
   END IF;
 
-  -- Idempotency check
+  -- E. Duplicate Verification Protection / Idempotency
+  -- If donor is already in target status, return cleanly without creating duplicate audit records
   IF v_donor.verification_status = p_status THEN
     RETURN jsonb_build_object(
       'success', true,
@@ -571,11 +631,11 @@ BEGIN
     );
   END IF;
 
-  -- Atomic UPDATE on public.donors
+  -- F. Atomic UPDATE on public.donors
   UPDATE public.donors
   SET
     verification_status = p_status,
-    verified_by = COALESCE(v_user_name, 'Staff Verifier'),
+    verified_by = v_user_name,
     verified_at = v_now,
     admin_notes = CASE 
       WHEN p_notes IS NOT NULL AND TRIM(p_notes) <> '' THEN TRIM(p_notes)
@@ -589,7 +649,8 @@ BEGIN
     RAISE EXCEPTION 'Failed to update donor record: expected 1 row, got %', v_rows_updated;
   END IF;
 
-  -- Atomic INSERT into public.verification_logs
+  -- G. Atomic INSERT into public.verification_logs
+  -- Preserves verification_logs.donor_id = donors.id foreign key relationship
   v_log_id := 'vlog-' || EXTRACT(EPOCH FROM v_now)::bigint || '-' || substr(md5(random()::text), 1, 6);
 
   INSERT INTO public.verification_logs (
@@ -603,18 +664,19 @@ BEGIN
     v_log_id,
     v_donor.id,
     p_status,
-    COALESCE(v_user_name, 'Staff Verifier'),
+    v_user_name,
     COALESCE(TRIM(p_notes), ''),
     v_now
   );
 
+  -- H. Return authoritative response
   RETURN jsonb_build_object(
     'success', true,
     'already_verified', false,
     'donor_id', v_donor.id,
     'human_id', v_donor.donor_id,
     'status', p_status,
-    'verified_by', COALESCE(v_user_name, 'Staff Verifier'),
+    'verified_by', v_user_name,
     'verified_at', v_now,
     'log_id', v_log_id
   );
