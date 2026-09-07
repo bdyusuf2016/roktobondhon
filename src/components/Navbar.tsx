@@ -63,6 +63,7 @@ export const Navbar: React.FC = () => {
 
   const roles: { role: UserRole; labelBn: string; color: string }[] = [
     { role: 'super_admin', labelBn: 'সুপার এডমিন', color: 'bg-purple-100 text-purple-800' },
+    { role: 'admin', labelBn: 'এডমিন', color: 'bg-red-100 text-red-800' },
     { role: 'moderator', labelBn: 'মডারেটর', color: 'bg-blue-100 text-blue-800' },
     { role: 'volunteer', labelBn: 'স্বেচ্ছাসেবক', color: 'bg-emerald-100 text-emerald-800' },
     { role: 'donor', labelBn: 'রক্তদাতা', color: 'bg-rose-100 text-rose-800' },
@@ -302,15 +303,15 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Quick Demo Role Switcher Badge (Only in Sandbox / Demo Mode) */}
             {isDemoMode && (
-              <div className="relative" ref={roleMenuRef}>
+              <div className="relative shrink-0" ref={roleMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors cursor-pointer ${currentRoleInfo.color}`}
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${currentRoleInfo.color}`}
                   title="রোল পরিবর্তন করে সিস্টেম পরীক্ষা করুন"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  <span className="max-w-[75px] sm:max-w-none truncate">{currentRoleInfo.labelBn}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
+                  <span className="whitespace-nowrap font-bold tracking-tight inline-block">{currentRoleInfo.labelBn}</span>
                   <ChevronDown className="w-3 h-3 shrink-0" />
                 </button>
 
