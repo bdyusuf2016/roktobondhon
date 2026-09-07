@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import type { OrganizationConfig } from '../types';
 import { DEFAULT_SYSTEM_CONFIG } from '../services/configService';
+import { useSystemConfig } from './SystemConfigContext';
 
 const DEFAULT_ORG_CONFIG: OrganizationConfig = {
   id: 'org-roktobondon',
@@ -14,7 +15,7 @@ const DEFAULT_ORG_CONFIG: OrganizationConfig = {
   email: DEFAULT_SYSTEM_CONFIG.organization.email,
   address: DEFAULT_SYSTEM_CONFIG.organization.address,
   facebookUrl: DEFAULT_SYSTEM_CONFIG.organization.facebookUrl,
-  activeDistricts: ['ঢাকা (ধামরাই ও সাভার)', 'মানিকগঞ্জ'],
+  activeDistricts: ['ঢাকা (ধামরাই ও সাভার)', 'মানিকগঞ্জ', 'গাজীপুর'],
   // Dynamic Announcement Banner
   showAnnouncement: DEFAULT_SYSTEM_CONFIG.website.showAnnouncement,
   announcementTextBn: DEFAULT_SYSTEM_CONFIG.website.announcementText,
@@ -32,125 +33,117 @@ const DEFAULT_ORG_CONFIG: OrganizationConfig = {
 
 interface OrgConfigContextType {
   config: OrganizationConfig;
-  updateConfig: (newConfig: Partial<OrganizationConfig>) => void;
+  updateConfig: (newConfig: Partial<OrganizationConfig>) => Promise<void>;
   resetConfig: () => void;
 }
 
 const OrgConfigContext = createContext<OrgConfigContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'roktobondon_org_config';
-
 export const OrgConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [config, setConfig] = useState<OrganizationConfig>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        return { ...DEFAULT_ORG_CONFIG, ...JSON.parse(saved) };
-      }
-      // Check if central sys_config exists
-      const sysOrg = localStorage.getItem('roktobondon_sys_config_organization');
-      const sysBrand = localStorage.getItem('roktobondon_sys_config_branding');
-      const sysWeb = localStorage.getItem('roktobondon_sys_config_website');
+  const { config: sysConfig, updateSection } = useSystemConfig();
 
-      if (sysOrg || sysBrand || sysWeb) {
-        const org = sysOrg ? JSON.parse(sysOrg) : {};
-        const brand = sysBrand ? JSON.parse(sysBrand) : {};
-        const web = sysWeb ? JSON.parse(sysWeb) : {};
-        return {
-          ...DEFAULT_ORG_CONFIG,
-          name: org.organizationName || DEFAULT_ORG_CONFIG.name,
-          nameBn: org.organizationNameBn || DEFAULT_ORG_CONFIG.nameBn,
-          sloganBn: org.sloganBn || DEFAULT_ORG_CONFIG.sloganBn,
-          emergencyHotline: org.emergencyPhone || DEFAULT_ORG_CONFIG.emergencyHotline,
-          email: org.email || DEFAULT_ORG_CONFIG.email,
-          address: org.address || DEFAULT_ORG_CONFIG.address,
-          facebookUrl: org.facebookUrl || DEFAULT_ORG_CONFIG.facebookUrl,
-          primaryColor: brand.primaryColor || DEFAULT_ORG_CONFIG.primaryColor,
-          headerSubtitleBn: brand.headerSubtitleBn || DEFAULT_ORG_CONFIG.headerSubtitleBn,
-          footerAboutBn: brand.footerAboutBn || DEFAULT_ORG_CONFIG.footerAboutBn,
-          footerSecurityBadgeBn: brand.footerSecurityBadgeBn || DEFAULT_ORG_CONFIG.footerSecurityBadgeBn,
-          footerTaglineBn: brand.footerTaglineBn || DEFAULT_ORG_CONFIG.footerTaglineBn,
-          footerCopyrightText: brand.footerCopyrightText || DEFAULT_ORG_CONFIG.footerCopyrightText,
-          coverageArea1Title: brand.coverageArea1Title || DEFAULT_ORG_CONFIG.coverageArea1Title,
-          coverageArea1Details: brand.coverageArea1Details || DEFAULT_ORG_CONFIG.coverageArea1Details,
-          coverageArea2Title: brand.coverageArea2Title || DEFAULT_ORG_CONFIG.coverageArea2Title,
-          coverageArea2Details: brand.coverageArea2Details || DEFAULT_ORG_CONFIG.coverageArea2Details,
-          showAnnouncement: web.showAnnouncement ?? DEFAULT_ORG_CONFIG.showAnnouncement,
-          announcementTextBn: web.announcementText || DEFAULT_ORG_CONFIG.announcementTextBn,
-          announcementLink: web.announcementLink || DEFAULT_ORG_CONFIG.announcementLink,
-        };
-      }
-    } catch (e) {
-      console.error('Failed to parse saved org config', e);
+  // Directly derive live OrganizationConfig from the central SystemConfigContext
+  const config: OrganizationConfig = useMemo(() => {
+    const org = sysConfig?.organization || DEFAULT_SYSTEM_CONFIG.organization;
+    const brand = sysConfig?.branding || DEFAULT_SYSTEM_CONFIG.branding;
+    const web = sysConfig?.website || DEFAULT_SYSTEM_CONFIG.website;
+
+    return {
+      id: 'org-roktobondon',
+      name: org.organizationName || DEFAULT_ORG_CONFIG.name,
+      nameBn: org.organizationNameBn || DEFAULT_ORG_CONFIG.nameBn,
+      sloganBn: org.sloganBn || DEFAULT_ORG_CONFIG.sloganBn,
+      headerSubtitleBn: brand.headerSubtitleBn || DEFAULT_ORG_CONFIG.headerSubtitleBn,
+      logoUrl: brand.logoUrl || DEFAULT_ORG_CONFIG.logoUrl,
+      primaryColor: brand.primaryColor || DEFAULT_ORG_CONFIG.primaryColor,
+      emergencyHotline: org.emergencyPhone || org.phone || DEFAULT_ORG_CONFIG.emergencyHotline,
+      email: org.email || DEFAULT_ORG_CONFIG.email,
+      address: org.address || DEFAULT_ORG_CONFIG.address,
+      facebookUrl: org.facebookUrl || DEFAULT_ORG_CONFIG.facebookUrl,
+      activeDistricts: ['ঢাকা (ধামরাই ও সাভার)', 'মানিকগঞ্জ', 'গাজীপুর'],
+      showAnnouncement: web.showAnnouncement ?? DEFAULT_ORG_CONFIG.showAnnouncement,
+      announcementTextBn: web.announcementText || DEFAULT_ORG_CONFIG.announcementTextBn,
+      announcementLink: web.announcementLink || DEFAULT_ORG_CONFIG.announcementLink,
+      footerAboutBn: brand.footerAboutBn || DEFAULT_ORG_CONFIG.footerAboutBn,
+      footerSecurityBadgeBn: brand.footerSecurityBadgeBn || DEFAULT_ORG_CONFIG.footerSecurityBadgeBn,
+      footerTaglineBn: brand.footerTaglineBn || DEFAULT_ORG_CONFIG.footerTaglineBn,
+      footerCopyrightText: brand.footerCopyrightText || DEFAULT_ORG_CONFIG.footerCopyrightText,
+      coverageArea1Title: brand.coverageArea1Title || DEFAULT_ORG_CONFIG.coverageArea1Title,
+      coverageArea1Details: brand.coverageArea1Details || DEFAULT_ORG_CONFIG.coverageArea1Details,
+      coverageArea2Title: brand.coverageArea2Title || DEFAULT_ORG_CONFIG.coverageArea2Title,
+      coverageArea2Details: brand.coverageArea2Details || DEFAULT_ORG_CONFIG.coverageArea2Details,
+    };
+  }, [sysConfig]);
+
+  const updateConfig = async (newConfig: Partial<OrganizationConfig>) => {
+    // 1. Sync Organization Section
+    if (
+      newConfig.name ||
+      newConfig.nameBn ||
+      newConfig.sloganBn ||
+      newConfig.emergencyHotline ||
+      newConfig.email ||
+      newConfig.address ||
+      newConfig.facebookUrl
+    ) {
+      await updateSection('organization', {
+        organizationName: newConfig.name || config.name,
+        organizationNameBn: newConfig.nameBn || config.nameBn,
+        sloganBn: newConfig.sloganBn || config.sloganBn,
+        emergencyPhone: newConfig.emergencyHotline || config.emergencyHotline,
+        phone: newConfig.emergencyHotline || config.emergencyHotline,
+        email: newConfig.email || config.email,
+        address: newConfig.address || config.address,
+        facebookUrl: newConfig.facebookUrl || config.facebookUrl,
+      });
     }
-    return DEFAULT_ORG_CONFIG;
-  });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    } catch (e) {
-      console.warn('Storage set error:', e);
+    // 2. Sync Branding Section
+    if (
+      newConfig.primaryColor ||
+      newConfig.logoUrl ||
+      newConfig.headerSubtitleBn ||
+      newConfig.footerAboutBn ||
+      newConfig.footerSecurityBadgeBn ||
+      newConfig.footerTaglineBn ||
+      newConfig.footerCopyrightText ||
+      newConfig.coverageArea1Title ||
+      newConfig.coverageArea1Details ||
+      newConfig.coverageArea2Title ||
+      newConfig.coverageArea2Details
+    ) {
+      await updateSection('branding', {
+        primaryColor: newConfig.primaryColor || config.primaryColor,
+        logoUrl: newConfig.logoUrl || config.logoUrl,
+        headerSubtitleBn: newConfig.headerSubtitleBn || config.headerSubtitleBn,
+        footerAboutBn: newConfig.footerAboutBn || config.footerAboutBn,
+        footerSecurityBadgeBn: newConfig.footerSecurityBadgeBn || config.footerSecurityBadgeBn,
+        footerTaglineBn: newConfig.footerTaglineBn || config.footerTaglineBn,
+        footerCopyrightText: newConfig.footerCopyrightText || config.footerCopyrightText,
+        coverageArea1Title: newConfig.coverageArea1Title || config.coverageArea1Title,
+        coverageArea1Details: newConfig.coverageArea1Details || config.coverageArea1Details,
+        coverageArea2Title: newConfig.coverageArea2Title || config.coverageArea2Title,
+        coverageArea2Details: newConfig.coverageArea2Details || config.coverageArea2Details,
+      });
     }
-  }, [config]);
 
-  const updateConfig = (newConfig: Partial<OrganizationConfig>) => {
-    setConfig((prev) => {
-      const merged = { ...prev, ...newConfig };
-      // Also sync to systemConfig localStorage keys so central system stays in lockstep
-      try {
-        if (newConfig.name || newConfig.nameBn || newConfig.sloganBn || newConfig.emergencyHotline || newConfig.email || newConfig.address || newConfig.facebookUrl) {
-          const rawOrg = localStorage.getItem('roktobondon_sys_config_organization');
-          const currOrg = rawOrg ? JSON.parse(rawOrg) : DEFAULT_SYSTEM_CONFIG.organization;
-          localStorage.setItem('roktobondon_sys_config_organization', JSON.stringify({
-            ...currOrg,
-            organizationName: merged.name,
-            organizationNameBn: merged.nameBn,
-            sloganBn: merged.sloganBn,
-            emergencyPhone: merged.emergencyHotline,
-            phone: merged.emergencyHotline,
-            email: merged.email,
-            address: merged.address,
-            facebookUrl: merged.facebookUrl,
-          }));
-        }
-        if (newConfig.primaryColor || newConfig.headerSubtitleBn || newConfig.footerAboutBn || newConfig.footerSecurityBadgeBn || newConfig.footerTaglineBn || newConfig.footerCopyrightText || newConfig.coverageArea1Title || newConfig.coverageArea1Details || newConfig.coverageArea2Title || newConfig.coverageArea2Details) {
-          const rawBrand = localStorage.getItem('roktobondon_sys_config_branding');
-          const currBrand = rawBrand ? JSON.parse(rawBrand) : DEFAULT_SYSTEM_CONFIG.branding;
-          localStorage.setItem('roktobondon_sys_config_branding', JSON.stringify({
-            ...currBrand,
-            primaryColor: merged.primaryColor,
-            headerSubtitleBn: merged.headerSubtitleBn,
-            footerAboutBn: merged.footerAboutBn,
-            footerSecurityBadgeBn: merged.footerSecurityBadgeBn,
-            footerTaglineBn: merged.footerTaglineBn,
-            footerCopyrightText: merged.footerCopyrightText,
-            coverageArea1Title: merged.coverageArea1Title,
-            coverageArea1Details: merged.coverageArea1Details,
-            coverageArea2Title: merged.coverageArea2Title,
-            coverageArea2Details: merged.coverageArea2Details,
-          }));
-        }
-        if (newConfig.showAnnouncement !== undefined || newConfig.announcementTextBn !== undefined || newConfig.announcementLink !== undefined) {
-          const rawWeb = localStorage.getItem('roktobondon_sys_config_website');
-          const currWeb = rawWeb ? JSON.parse(rawWeb) : DEFAULT_SYSTEM_CONFIG.website;
-          localStorage.setItem('roktobondon_sys_config_website', JSON.stringify({
-            ...currWeb,
-            showAnnouncement: merged.showAnnouncement,
-            announcementText: merged.announcementTextBn,
-            announcementLink: merged.announcementLink,
-          }));
-        }
-      } catch (err) {
-        console.warn('Sync to sys config notice:', err);
-      }
-      return merged;
-    });
+    // 3. Sync Website Section
+    if (
+      newConfig.showAnnouncement !== undefined ||
+      newConfig.announcementTextBn !== undefined ||
+      newConfig.announcementLink !== undefined
+    ) {
+      await updateSection('website', {
+        showAnnouncement: newConfig.showAnnouncement ?? config.showAnnouncement,
+        announcementText: newConfig.announcementTextBn || config.announcementTextBn,
+        announcementLink: newConfig.announcementLink || config.announcementLink,
+      });
+    }
   };
 
   const resetConfig = () => {
-    setConfig(DEFAULT_ORG_CONFIG);
-    localStorage.removeItem(STORAGE_KEY);
+    // Reset to defaults
+    updateConfig(DEFAULT_ORG_CONFIG);
   };
 
   return (
@@ -167,3 +160,4 @@ export function useOrgConfig(): OrgConfigContextType {
   }
   return context;
 }
+

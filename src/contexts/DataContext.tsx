@@ -164,55 +164,79 @@ const STORAGE_KEYS = {
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [donors, setDonors] = useState<Donor[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONORS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
-    return generateSeedDonors();
+    return isDemoMode ? generateSeedDonors() : [];
   });
 
   const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.REQUESTS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
-    return generateSeedRequests();
+    return isDemoMode ? generateSeedRequests() : [];
   });
 
   const [donorRequests, setDonorRequests] = useState<DonorRequest[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONOR_REQUESTS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return [];
   });
 
   const [donations, setDonations] = useState<Donation[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.DONATIONS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
-    return generateSeedDonations(generateSeedDonors(), generateSeedRequests());
+    return isDemoMode ? generateSeedDonations(generateSeedDonors(), generateSeedRequests()) : [];
   });
 
   const [locations, setLocations] = useState<LocationItem[]>(() => {
-    if (!isDemoMode) return INITIAL_LOCATIONS;
     const saved = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return INITIAL_LOCATIONS;
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
-    if (!isDemoMode) return INITIAL_BRANCHES;
     const saved = localStorage.getItem(STORAGE_KEYS.BRANCHES);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return INITIAL_BRANCHES;
   });
@@ -229,36 +253,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       },
     ];
-    if (!isDemoMode) return defaultNotif;
     const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return defaultNotif;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    if (!isDemoMode) return [];
-    const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
+    const defaultAudit = [
       {
         id: 'log-init',
         userId: 'system',
         userName: 'System Initialization',
-        userRole: 'super_admin',
+        userRole: 'super_admin' as UserRole,
         action: 'System Bootstrapped',
         targetType: 'SYSTEM',
         targetId: 'GLOBAL',
         timestamp: new Date().toISOString(),
       },
     ];
+    const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return defaultAudit;
   });
 
   const [hospitals, setHospitals] = useState<Hospital[]>(() => {
-    if (!isDemoMode) return HOSPITALS_DATA;
     const saved = localStorage.getItem(STORAGE_KEYS.HOSPITALS);
     if (saved) {
       try {
@@ -272,7 +304,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDonations, setFundDonations] = useState<FundDonation[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.FUND_DONATIONS);
     if (saved) {
       try {
@@ -282,11 +313,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_FUND_DONATIONS;
+    return isDemoMode ? INITIAL_FUND_DONATIONS : [];
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(() => {
-    if (!isDemoMode) return INITIAL_PAYMENT_METHODS;
     const saved = localStorage.getItem(STORAGE_KEYS.PAYMENT_METHODS);
     if (saved) {
       try {
@@ -300,7 +330,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donationCauses, setDonationCauses] = useState<DonationCauseConfig[]>(() => {
-    if (!isDemoMode) return INITIAL_DONATION_CAUSES;
     const saved = localStorage.getItem(STORAGE_KEYS.DONATION_CAUSES);
     if (saved) {
       try {
@@ -314,7 +343,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDisbursements, setFundDisbursements] = useState<FundDisbursement[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.FUND_DISBURSEMENTS);
     if (saved) {
       try {
@@ -324,11 +352,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_FUND_DISBURSEMENTS;
+    return isDemoMode ? INITIAL_FUND_DISBURSEMENTS : [];
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.USERS);
     if (saved) {
       try {
@@ -338,11 +365,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     }
-    return INITIAL_DEMO_USERS;
+    return isDemoMode ? INITIAL_DEMO_USERS : [];
   });
 
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix>(() => {
-    if (!isDemoMode) return DEFAULT_PERMISSION_MATRIX;
     const saved = localStorage.getItem(STORAGE_KEYS.PERMISSION_MATRIX);
     if (saved) {
       try {
@@ -355,7 +381,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [bloodCamps, setBloodCamps] = useState<BloodCamp[]>(() => {
-    if (!isDemoMode) return INITIAL_BLOOD_CAMPS;
     const saved = localStorage.getItem(STORAGE_KEYS.BLOOD_CAMPS);
     if (saved) {
       try {
@@ -369,7 +394,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [campRegistrations, setCampRegistrations] = useState<CampRegistration[]>(() => {
-    if (!isDemoMode) return [];
     const saved = localStorage.getItem(STORAGE_KEYS.CAMP_REGISTRATIONS);
     if (saved) {
       try {
@@ -564,107 +588,73 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Sync to localStorage in Demo Mode only
+  // Sync to localStorage for instant local caching and fast reloads
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
-    }
+    localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
   }, [donors]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(bloodRequests));
-    }
+    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(bloodRequests));
   }, [bloodRequests]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.DONOR_REQUESTS, JSON.stringify(donorRequests));
-    }
+    localStorage.setItem(STORAGE_KEYS.DONOR_REQUESTS, JSON.stringify(donorRequests));
   }, [donorRequests]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
-    }
+    localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
   }, [donations]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
-    }
+    localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
   }, [locations]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(branches));
-    }
+    localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(branches));
   }, [branches]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-    }
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
-    }
+    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
   }, [auditLogs]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.HOSPITALS, JSON.stringify(hospitals));
-    }
+    localStorage.setItem(STORAGE_KEYS.HOSPITALS, JSON.stringify(hospitals));
   }, [hospitals]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.FUND_DONATIONS, JSON.stringify(fundDonations));
-    }
+    localStorage.setItem(STORAGE_KEYS.FUND_DONATIONS, JSON.stringify(fundDonations));
   }, [fundDonations]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.PAYMENT_METHODS, JSON.stringify(paymentMethods));
-    }
+    localStorage.setItem(STORAGE_KEYS.PAYMENT_METHODS, JSON.stringify(paymentMethods));
   }, [paymentMethods]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.DONATION_CAUSES, JSON.stringify(donationCauses));
-    }
+    localStorage.setItem(STORAGE_KEYS.DONATION_CAUSES, JSON.stringify(donationCauses));
   }, [donationCauses]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.FUND_DISBURSEMENTS, JSON.stringify(fundDisbursements));
-    }
+    localStorage.setItem(STORAGE_KEYS.FUND_DISBURSEMENTS, JSON.stringify(fundDisbursements));
   }, [fundDisbursements]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-    }
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(permissionMatrix));
-    }
+    localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(permissionMatrix));
   }, [permissionMatrix]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.BLOOD_CAMPS, JSON.stringify(bloodCamps));
-    }
+    localStorage.setItem(STORAGE_KEYS.BLOOD_CAMPS, JSON.stringify(bloodCamps));
   }, [bloodCamps]);
 
   useEffect(() => {
-    if (isDemoMode) {
-      localStorage.setItem(STORAGE_KEYS.CAMP_REGISTRATIONS, JSON.stringify(campRegistrations));
-    }
+    localStorage.setItem(STORAGE_KEYS.CAMP_REGISTRATIONS, JSON.stringify(campRegistrations));
   }, [campRegistrations]);
 
   const addAuditLog = useCallback(
