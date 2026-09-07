@@ -147,8 +147,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
             }
           }
-        } catch (authErr) {
+        } catch (authErr: any) {
           console.warn('Supabase auth attempt notice:', authErr);
+          // In production mode, do not bypass real Supabase Auth to prevent ghost/unauthenticated sessions
+          if (!isDemoMode) {
+            const errDetail = authErr.message || '';
+            if (errDetail.toLowerCase().includes('email not confirmed')) {
+              throw new Error('আপনার ইমেইলটি Supabase Auth-এ এখনও কনফার্ম করা হয়নি। অনুগ্রহ করে Supabase Dashboard > Authentication > Users থেকে ব্যবহারকারীকে কনফার্ম করুন অথবা SQL স্ক্রিপ্ট রান করুন।');
+            } else if (errDetail.toLowerCase().includes('invalid login credentials')) {
+              throw new Error('ভুল ইমেইল বা পাসওয়ার্ড প্রদান করেছেন। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।');
+            }
+            throw new Error(errDetail || 'Supabase অথেন্টিকেশন ব্যর্থ হয়েছে।');
+          }
         }
       }
 
