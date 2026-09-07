@@ -119,7 +119,7 @@ export const HealthEligibilityPage: React.FC = () => {
         const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
-          contents: `You are an expert blood donation medical advisor for 'RoktoBondhon' blood platform in Bangladesh.
+          contents: `You are an expert blood donation medical advisor for 'রক্ত দান পরিবার কালামপুর' blood platform in Bangladesh.
           Answer the following blood donation health query in clear, reassuring, and fluent Bengali.
           User Health Profile: Age ${form.age}, Weight ${form.weight}kg, Gender ${form.gender}.
           Query: ${query}`,
