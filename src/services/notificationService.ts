@@ -71,7 +71,7 @@ export async function sendNotificationToSupabase(
 }
 
 /**
- * Mark notification as read
+ * Mark a single notification as read
  */
 export async function markNotificationAsReadInSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
@@ -83,6 +83,68 @@ export async function markNotificationAsReadInSupabase(id: string): Promise<void
   if (error) {
     console.error('Error marking notification read in Supabase:', error);
   }
+}
+
+/**
+ * Mark all notifications as read for a user
+ */
+export async function markAllNotificationsAsReadInSupabase(userId: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .in('user_id', [userId, 'all']);
+
+  if (error) {
+    console.error('Error marking all notifications read in Supabase:', error);
+  }
+}
+
+/**
+ * Delete a notification
+ */
+export async function deleteNotificationInSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting notification in Supabase:', error);
+  }
+}
+
+/**
+ * Subscribe to real-time notification broadcasts
+ */
+export function subscribeToRealtimeNotifications(
+  userId: string,
+  onNewNotification: (notif: NotificationItem) => void
+): () => void {
+  if (!isSupabaseConfigured || !supabase) return () => {};
+
+  const channel = supabase
+    .channel(`notifications-${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+      },
+      (payload) => {
+        const row = payload.new;
+        if (row && (row.user_id === userId || row.user_id === 'all')) {
+          onNewNotification(mapNotificationRow(row));
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // Compatibility aliases
