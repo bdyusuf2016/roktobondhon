@@ -8,6 +8,21 @@ export const AdminDonorsTab: React.FC = () => {
   const { currentUser } = useAuth();
   const [donorFilterStatus, setDonorFilterStatus] = useState<string>('all');
   const [donorSearch, setDonorSearch] = useState('');
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleStatusChange = async (donorId: string, newStatus: 'verified' | 'suspended') => {
+    if (verifyingId) return; // Prevent concurrent clicks
+    setVerifyingId(donorId);
+    setActionError(null);
+    try {
+      await verifyDonor(donorId, newStatus, currentUser?.fullName || 'Admin');
+    } catch (err: any) {
+      setActionError(err.message || 'স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে।');
+    } finally {
+      setVerifyingId(null);
+    }
+  };
 
   const filteredDonors = donors.filter((d) => {
     if (donorFilterStatus !== 'all' && d.verificationStatus !== donorFilterStatus) return false;
@@ -25,6 +40,19 @@ export const AdminDonorsTab: React.FC = () => {
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+      {actionError && (
+        <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-700 rounded-lg flex items-center justify-between">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-red-600 hover:text-red-800 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           {['all', 'pending', 'verified', 'unverified'].map((status) => (
@@ -75,57 +103,70 @@ export const AdminDonorsTab: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredDonors.slice(0, 50).map((d) => (
-              <tr key={d.id} className="hover:bg-slate-50/60">
-                <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                  {d.donorId}
-                </td>
-                <td className="py-2.5 px-3 font-semibold text-slate-900">
-                  {d.fullName}
-                </td>
-                <td className="py-2.5 px-3">
-                  <span className="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                    {d.bloodGroup}
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-slate-600">
-                  {d.area}, {d.upazila}
-                </td>
-                <td className="py-2.5 px-3 text-slate-700 font-mono">
-                  {d.phone}
-                </td>
-                <td className="py-2.5 px-3">
-                  {d.verificationStatus === 'verified' ? (
-                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold border border-emerald-200">
-                      ✓ Verified
+            {filteredDonors.slice(0, 50).map((d) => {
+              const isCurrentVerifying = verifyingId === d.id;
+              return (
+                <tr key={d.id} className="hover:bg-slate-50/60">
+                  <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                    {d.donorId}
+                  </td>
+                  <td className="py-2.5 px-3 font-semibold text-slate-900">
+                    {d.fullName}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <span className="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                      {d.bloodGroup}
                     </span>
-                  ) : (
-                    <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">
-                      Pending
-                    </span>
-                  )}
-                </td>
-                <td className="py-2.5 px-3 text-right space-x-1">
-                  {d.verificationStatus !== 'verified' ? (
-                    <button
-                      type="button"
-                      onClick={() => verifyDonor(d.id, 'verified', currentUser?.fullName || 'Admin')}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors"
-                    >
-                      Verify
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => verifyDonor(d.id, 'suspended', currentUser?.fullName || 'Admin')}
-                      className="px-2 py-1 bg-slate-200 hover:bg-red-100 text-slate-700 hover:text-red-700 rounded text-[11px] transition-colors"
-                    >
-                      Suspend
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-600">
+                    {d.area}, {d.upazila}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-700 font-mono">
+                    {d.phone}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    {d.verificationStatus === 'verified' ? (
+                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold border border-emerald-200">
+                        ✓ Verified
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">
+                        Pending
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-right space-x-1">
+                    {d.verificationStatus !== 'verified' ? (
+                      <button
+                        type="button"
+                        disabled={Boolean(verifyingId)}
+                        onClick={() => handleStatusChange(d.id, 'verified')}
+                        className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                          isCurrentVerifying
+                            ? 'bg-emerald-400 text-white cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                      >
+                        {isCurrentVerifying ? 'যাচাই হচ্ছে...' : 'Verify'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={Boolean(verifyingId)}
+                        onClick={() => handleStatusChange(d.id, 'suspended')}
+                        className={`px-2 py-1 rounded text-[11px] transition-colors ${
+                          isCurrentVerifying
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                            : 'bg-slate-200 hover:bg-red-100 text-slate-700 hover:text-red-700'
+                        }`}
+                      >
+                        {isCurrentVerifying ? 'প্রসেস হচ্ছে...' : 'Suspend'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -821,3 +821,128 @@ VALUES (
   NOW()
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- ==============================================================================
+-- 19. ATOMIC DONOR VERIFICATION RPC FUNCTION
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.verify_donor(
+  p_donor_id TEXT,
+  p_status TEXT DEFAULT 'verified',
+  p_notes TEXT DEFAULT ''
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_caller_id TEXT := auth.uid()::text;
+  v_user_role TEXT;
+  v_user_name TEXT;
+  v_donor RECORD;
+  v_log_id TEXT;
+  v_now TIMESTAMPTZ := clock_timestamp();
+  v_rows_updated INT;
+BEGIN
+  -- Validate authenticated caller
+  IF v_caller_id IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: Authentication required to verify donors.';
+  END IF;
+
+  -- Validate caller role
+  SELECT role, full_name INTO v_user_role, v_user_name
+  FROM public.users
+  WHERE id = v_caller_id AND status = 'active';
+
+  IF v_user_role IS NULL OR v_user_role NOT IN ('super_admin', 'admin', 'moderator', 'volunteer') THEN
+    RAISE EXCEPTION 'Unauthorized: Only active staff and administrators can verify donors.';
+  END IF;
+
+  -- Validate target status
+  IF p_status NOT IN ('verified', 'suspended', 'rejected', 'pending', 'unverified') THEN
+    RAISE EXCEPTION 'Invalid verification status: %', p_status;
+  END IF;
+
+  -- Lookup target donor (id first, then donor_id)
+  SELECT * INTO v_donor
+  FROM public.donors
+  WHERE id = p_donor_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    SELECT * INTO v_donor
+    FROM public.donors
+    WHERE donor_id = p_donor_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Donor not found with identifier: %', p_donor_id;
+    END IF;
+  END IF;
+
+  -- Idempotency check: prevent duplicate logs if already in requested status
+  IF v_donor.verification_status = p_status THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'already_verified', true,
+      'message', 'Donor is already in status ' || p_status,
+      'donor_id', v_donor.id,
+      'human_id', v_donor.donor_id,
+      'status', v_donor.verification_status,
+      'verified_by', v_donor.verified_by,
+      'verified_at', v_donor.verified_at
+    );
+  END IF;
+
+  -- Atomic UPDATE on public.donors
+  UPDATE public.donors
+  SET
+    verification_status = p_status,
+    verified_by = COALESCE(v_user_name, 'Staff Verifier'),
+    verified_at = v_now,
+    admin_notes = CASE 
+      WHEN p_notes IS NOT NULL AND TRIM(p_notes) <> '' THEN TRIM(p_notes)
+      ELSE admin_notes 
+    END,
+    updated_at = v_now
+  WHERE id = v_donor.id;
+
+  GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
+  IF v_rows_updated <> 1 THEN
+    RAISE EXCEPTION 'Failed to update donor record: expected 1 row, got %', v_rows_updated;
+  END IF;
+
+  -- Atomic INSERT into public.verification_logs
+  v_log_id := 'vlog-' || EXTRACT(EPOCH FROM v_now)::bigint || '-' || substr(md5(random()::text), 1, 6);
+
+  INSERT INTO public.verification_logs (
+    id,
+    donor_id,
+    status,
+    verified_by,
+    notes,
+    timestamp
+  ) VALUES (
+    v_log_id,
+    v_donor.id,
+    p_status,
+    COALESCE(v_user_name, 'Staff Verifier'),
+    COALESCE(TRIM(p_notes), ''),
+    v_now
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'already_verified', false,
+    'donor_id', v_donor.id,
+    'human_id', v_donor.donor_id,
+    'status', p_status,
+    'verified_by', COALESCE(v_user_name, 'Staff Verifier'),
+    'verified_at', v_now,
+    'log_id', v_log_id
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.verify_donor(TEXT, TEXT, TEXT) TO authenticated;
+

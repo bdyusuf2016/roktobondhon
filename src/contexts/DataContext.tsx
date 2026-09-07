@@ -891,26 +891,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifierName: string,
     notes?: string
   ) => {
-    setDonors((prev) =>
-      prev.map((d) =>
-        d.id === donorId
-          ? {
-              ...d,
-              verificationStatus: status,
-              verifiedBy: verifierName,
-              verifiedAt: new Date().toISOString(),
-              adminNotes: notes || d.adminNotes,
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
-    );
-
-    if (isSupabaseConfigured) {
-      await verifyDonorStatus(donorId, status, verifierName, notes);
+    // 1. Client-side idempotency guard: avoid redundant mutation if already in target status
+    const currentDonor = donors.find((d) => d.id === donorId || d.donorId === donorId);
+    if (currentDonor && currentDonor.verificationStatus === status) {
+      return;
     }
 
-    addAuditLog(`Donor Verification: ${status}`, 'Donor', donorId, { verifierName, notes });
+    try {
+      // 2. Execute authoritative database verification
+      const result = await verifyDonorStatus(donorId, status, verifierName, notes);
+
+      // 3. Synchronize local state with authoritative database confirmation
+      setDonors((prev) =>
+        prev.map((d) =>
+          d.id === donorId || d.donorId === donorId || d.id === result.donorId
+            ? {
+                ...d,
+                verificationStatus: result.status,
+                verifiedBy: result.verifiedBy,
+                verifiedAt: result.verifiedAt,
+                adminNotes: notes || d.adminNotes,
+                updatedAt: result.verifiedAt || new Date().toISOString(),
+              }
+            : d
+        )
+      );
+
+      addAuditLog(`Donor Verification: ${status}`, 'Donor', result.donorId, {
+        verifierName: result.verifiedBy,
+        notes,
+        alreadyVerified: result.alreadyVerified,
+      });
+    } catch (err: any) {
+      console.error('Error in verifyDonor:', err);
+      throw err;
+    }
   };
 
   const sendDonorRequest = async (

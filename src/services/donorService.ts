@@ -262,19 +262,109 @@ export async function updateDonorRecord(
 }
 
 /**
+ * Result returned by donor verification
+ */
+export interface VerifyDonorResult {
+  success: boolean;
+  alreadyVerified?: boolean;
+  donorId: string;
+  humanId?: string;
+  status: VerificationStatus;
+  verifiedBy: string;
+  verifiedAt: string;
+  logId?: string;
+}
+
+/**
  * Verify a donor (authorized staff only)
+ * Executes atomic PostgreSQL transaction via verify_donor RPC,
+ * with strict row-count validation, idempotency guards, and fallback sync.
  */
 export async function verifyDonorStatus(
   donorId: string,
   status: VerificationStatus,
   verifierName: string,
   notes?: string
-): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return;
+): Promise<VerifyDonorResult> {
   const now = new Date().toISOString();
 
-  // Update donor status
-  await supabase
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: true,
+      donorId,
+      status,
+      verifiedBy: verifierName,
+      verifiedAt: now,
+    };
+  }
+
+  // 1. Primary Path: Execute atomic PostgreSQL RPC function (single ACID transaction)
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('verify_donor', {
+      p_donor_id: donorId,
+      p_status: status,
+      p_notes: notes || '',
+    });
+
+    if (!rpcError && rpcData && rpcData.success) {
+      return {
+        success: true,
+        alreadyVerified: Boolean(rpcData.already_verified),
+        donorId: rpcData.donor_id || donorId,
+        humanId: rpcData.human_id,
+        status: (rpcData.status as VerificationStatus) || status,
+        verifiedBy: rpcData.verified_by || verifierName,
+        verifiedAt: rpcData.verified_at || now,
+        logId: rpcData.log_id,
+      };
+    }
+
+    if (rpcError) {
+      const msg = rpcError.message || '';
+      // If error is an explicit domain authorization or validation failure, reject immediately
+      if (
+        msg.includes('Unauthorized') ||
+        msg.includes('not found') ||
+        msg.includes('Invalid verification status')
+      ) {
+        throw new Error(msg);
+      }
+      console.warn('RPC verify_donor failed, attempting guarded fallback:', msg);
+    }
+  } catch (err: any) {
+    if (err.message && (err.message.includes('Unauthorized') || err.message.includes('not found'))) {
+      throw err;
+    }
+    console.warn('Exception during RPC verify_donor call:', err);
+  }
+
+  // 2. Fallback Path: Coordinated mutation with row-count verification and idempotency check
+  // Locate target donor row by id or human-readable donor_id
+  const { data: existingDonor, error: lookupError } = await supabase
+    .from('donors')
+    .select('id, donor_id, verification_status, verified_by, verified_at')
+    .or(`id.eq.${donorId},donor_id.eq.${donorId}`)
+    .maybeSingle();
+
+  if (lookupError || !existingDonor) {
+    throw new Error(`রক্তদাতা পাওয়া যায়নি (Donor not found: ${donorId})`);
+  }
+
+  // Idempotency: prevent duplicate verification logs if already in target status
+  if (existingDonor.verification_status === status) {
+    return {
+      success: true,
+      alreadyVerified: true,
+      donorId: existingDonor.id,
+      humanId: existingDonor.donor_id,
+      status,
+      verifiedBy: existingDonor.verified_by || verifierName,
+      verifiedAt: existingDonor.verified_at || now,
+    };
+  }
+
+  // Execute UPDATE on public.donors FIRST and verify exactly 1 row was updated
+  const { data: updatedDonors, error: updateError } = await supabase
     .from('donors')
     .update({
       verification_status: status,
@@ -283,15 +373,43 @@ export async function verifyDonorStatus(
       admin_notes: notes || '',
       updated_at: now,
     })
-    .eq('id', donorId);
+    .eq('id', existingDonor.id)
+    .select('id, donor_id, verification_status, verified_by, verified_at');
 
-  // Insert verification log
-  await supabase.from('verification_logs').insert({
-    id: `vlog-${Date.now()}`,
-    donor_id: donorId,
+  if (updateError) {
+    throw new Error(`ডোনার স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে: ${updateError.message}`);
+  }
+
+  if (!updatedDonors || updatedDonors.length === 0) {
+    throw new Error(
+      'ডোনার ডাটাবেজ আপডেট ব্যর্থ হয়েছে (০ টি রেকর্ড পরিবর্তিত হয়েছে)। আপনার অনুমতি বা আরএলএস পলিসি পরীক্ষা করুন।'
+    );
+  }
+
+  // Insert verification log ONLY after donor row update has succeeded
+  const logId = `vlog-${Date.now()}`;
+  const { error: logError } = await supabase.from('verification_logs').insert({
+    id: logId,
+    donor_id: existingDonor.id, // Primary key donors.id
     status,
     verified_by: verifierName,
     notes: notes || '',
     timestamp: now,
   });
+
+  if (logError) {
+    console.error('Notice: Verification log insert failed after donor update:', logError);
+  }
+
+  const updatedRecord = updatedDonors[0];
+  return {
+    success: true,
+    donorId: updatedRecord.id,
+    humanId: updatedRecord.donor_id,
+    status,
+    verifiedBy: updatedRecord.verified_by || verifierName,
+    verifiedAt: updatedRecord.verified_at || now,
+    logId,
+  };
 }
+

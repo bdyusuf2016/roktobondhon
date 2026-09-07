@@ -87,6 +87,11 @@ const TEST_SUITES: TestSuite[] = [
     file: 'scripts/testPwaAndSystemHealth.ts',
     description: 'Verifies Service Worker queue, offline caching, and diagnostic metrics',
   },
+  {
+    name: '16. Donor Verification State Sync & Idempotency',
+    file: 'scripts/testDonorVerificationSync.ts',
+    description: 'Verifies atomic donor verification, idempotency protection, and RLS/role boundaries',
+  },
 ];
 
 async function runMasterRegressionSuite() {
