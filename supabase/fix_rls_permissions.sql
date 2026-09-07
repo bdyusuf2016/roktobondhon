@@ -30,15 +30,36 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()::text
+      AND role = 'super_admin'
+      AND status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
 -- 2. Prevent arbitrary vertical role escalation on users table
 CREATE OR REPLACE FUNCTION public.protect_user_roles()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Prevent elevating anyone to super_admin unless the caller is already a super_admin
+  IF (NEW.role = 'super_admin' AND (OLD.role IS DISTINCT FROM 'super_admin')) THEN
+    IF NOT public.is_super_admin() THEN
+      RAISE EXCEPTION 'Unauthorized: Only super administrators can assign super_admin role.';
+    END IF;
+  END IF;
+
+  -- Prevent modifying role, status, or organization_id unless administrator
   IF (NEW.role IS DISTINCT FROM OLD.role) OR (NEW.status IS DISTINCT FROM OLD.status) OR (NEW.organization_id IS DISTINCT FROM OLD.organization_id) THEN
     IF NOT public.is_admin() THEN
       RAISE EXCEPTION 'Unauthorized: Only administrators can modify user role, status, or organization.';
     END IF;
   END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
@@ -68,24 +89,22 @@ CREATE TRIGGER trg_protect_donor_verification
   FOR EACH ROW
   EXECUTE FUNCTION public.protect_donor_verification();
 
--- 4. Prevent fund donation status forgery
-CREATE OR REPLACE FUNCTION public.protect_fund_donation_verification()
+-- 4. Prevent fund donation status forgery & non-admin mutations
+CREATE OR REPLACE FUNCTION public.protect_fund_donations()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF (NEW.status IS DISTINCT FROM OLD.status) OR (NEW.verified_by IS DISTINCT FROM OLD.verified_by) OR (NEW.verified_at IS DISTINCT FROM OLD.verified_at) THEN
-    IF NOT public.is_admin() THEN
-      RAISE EXCEPTION 'Unauthorized: Only administrators can verify fund donations.';
-    END IF;
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators can modify or verify fund donations.';
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
-DROP TRIGGER IF EXISTS trg_protect_fund_donation_verification ON public.fund_donations;
-CREATE TRIGGER trg_protect_fund_donation_verification
+DROP TRIGGER IF EXISTS trg_protect_fund_donations ON public.fund_donations;
+CREATE TRIGGER trg_protect_fund_donations
   BEFORE UPDATE ON public.fund_donations
   FOR EACH ROW
-  EXECUTE FUNCTION public.protect_fund_donation_verification();
+  EXECUTE FUNCTION public.protect_fund_donations();
 
 -- 5. Strict immutable audit trail
 DROP POLICY IF EXISTS "Prevent updating audit logs" ON public.audit_logs;
@@ -96,3 +115,4 @@ CREATE POLICY "Prevent updating audit logs" ON public.audit_logs
 
 CREATE POLICY "Prevent deleting audit logs" ON public.audit_logs
   FOR DELETE USING (false);
+
