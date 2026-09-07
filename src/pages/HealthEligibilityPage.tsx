@@ -117,14 +117,24 @@ export const HealthEligibilityPage: React.FC = () => {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: `You are an expert blood donation medical advisor for 'রক্ত দান পরিবার কালামপুর' blood platform in Bangladesh.
-          Answer the following blood donation health query in clear, reassuring, and fluent Bengali.
-          User Health Profile: Age ${form.age}, Weight ${form.weight}kg, Gender ${form.gender}.
-          Query: ${query}`,
-        });
-        setAiResponse(response.text || 'পরামর্শ তৈরি করা সম্ভব হয়নি।');
+        let textResult = '';
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.5-flash',
+            contents: `You are an expert blood donation medical advisor for 'রক্ত দান পরিবার কালামপুর' blood platform in Bangladesh.
+            Answer the following blood donation health query in clear, reassuring, and fluent Bengali.
+            User Health Profile: Age ${form.age}, Weight ${form.weight}kg, Gender ${form.gender}.
+            Query: ${query}`,
+          });
+          textResult = response.text || '';
+        } catch {
+          const fallbackResp = await ai.models.generateContent({
+            model: 'gemini-3.5-flash-lite',
+            contents: `You are an expert blood donation medical advisor in Bangladesh. Answer in Bengali: ${query}`,
+          });
+          textResult = fallbackResp.text || '';
+        }
+        setAiResponse(textResult || 'পরামর্শ তৈরি করা সম্ভব হয়নি।');
       } else {
         // High quality medical guidance fallback
         await new Promise((r) => setTimeout(r, 800));
