@@ -1,0 +1,48 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' || 
+        request.auth.token.role == 'super_admin'
+      );
+    }
+
+    function isVolunteer() {
+      return isAuthenticated() && (
+        isAdmin() || 
+        request.auth.token.role == 'moderator' || 
+        request.auth.token.role == 'volunteer'
+      );
+    }
+
+    // Public branding assets & profile pictures
+    match /branding/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /profile_photos/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Confidential donor verification documents (NID, blood test reports)
+    match /verification_documents/{donorId}/{fileName} {
+      allow read: if isVolunteer() || (isAuthenticated() && request.auth.uid == donorId);
+      allow write: if isAuthenticated() && request.auth.uid == donorId;
+      allow delete: if isAdmin();
+    }
+
+    // Donation certificates
+    match /certificates/{certificateId} {
+      allow read: if true;
+      allow write: if isVolunteer();
+    }
+  }
+}

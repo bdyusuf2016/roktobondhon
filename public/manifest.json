@@ -1,22 +1,51 @@
 {
   "short_name": "রক্তবন্ধন",
   "name": "রক্তবন্ধন (RoktoBondon) - রক্তদান প্ল্যাটফর্ম",
+  "description": "ধামরাই, সাভার ও মানিকগঞ্জে জরুরি রক্তের প্রয়োজনে রক্তদাতা অনুসন্ধান ও স্বেচ্ছাসেবী প্ল্যাটফর্ম।",
   "icons": [
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' fill='%23dc2626'><path d='M96 170.8l-11.6-10.56C43.2 122.88 16 98.24 16 68 16 43.36 35.36 24 60 24c13.92 0 27.28 6.48 36 16.72C104.72 30.48 118.08 24 132 24c24.64 0 44 19.36 44 44 0 30.24-27.2 54.88-68.4 92.32L96 170.8z'/></svg>",
       "type": "image/svg+xml",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%23dc2626'><path d='M256 455.5l-30.9-28.16C115.2 327.68 42.67 261.97 42.67 181.33 42.67 115.63 94.29 64 160 64c37.12 0 72.75 17.28 96 44.59C279.25 81.28 314.88 64 352 64c65.71 0 117.33 51.63 117.33 117.33 0 80.64-72.53 146.35-182.4 246.19L256 455.5z'/></svg>",
       "type": "image/svg+xml",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
   "background_color": "#ffffff",
   "theme_color": "#dc2626",
   "display": "standalone",
-  "orientation": "portrait",
-  "scope": "/"
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["medical", "health", "social", "utilities"],
+  "lang": "bn",
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "রক্তদাতা খুঁজুন",
+      "short_name": "ডোনার খুঁজুন",
+      "description": "জরুরি রক্তের গ্রুপের ডোনার খুঁজুন",
+      "url": "/find-blood",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23dc2626'><path d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/></svg>", "sizes": "96x96" }]
+    },
+    {
+      "name": "জরুরি রক্তের আবেদন",
+      "short_name": "রক্তের আবেদন",
+      "description": "দ্রুত রক্তের আবেদন পোস্ট করুন",
+      "url": "/request-blood",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23dc2626'><path d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/></svg>", "sizes": "96x96" }]
+    },
+    {
+      "name": "ব্লাড ক্যাম্প ও ইভেন্ট",
+      "short_name": "ক্যাম্প",
+      "description": "চলমান ও আসন্ন রক্তদান ক্যাম্পেইন",
+      "url": "/camps",
+      "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23dc2626'><path d='M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'/></svg>", "sizes": "96x96" }]
+    }
+  ]
 }

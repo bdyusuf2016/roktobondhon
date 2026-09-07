@@ -1,7 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const env = (typeof import.meta !== 'undefined' && import.meta.env) || (typeof process !== 'undefined' && process.env) || {};
+
+const supabaseUrl = env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -12,8 +14,8 @@ export const isSupabaseConfigured = Boolean(
 
 // Demo mode is active when explicitly set or when Supabase credentials are not provided
 export const isDemoMode =
-  import.meta.env.VITE_DEMO_MODE === 'true' ||
-  (!isSupabaseConfigured && import.meta.env.DEV);
+  env.VITE_DEMO_MODE === 'true' ||
+  (!isSupabaseConfigured && (env.DEV ?? true));
 
 let supabase: SupabaseClient | null = null;
 

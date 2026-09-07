@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 import type { BloodGroup, EmergencyLevel } from '../types';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -24,10 +25,13 @@ export const RequestBloodPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { createBloodRequest, hospitals, addHospital } = useData();
   const { currentUser } = useAuth();
+  const { config } = useSystemConfig();
+
+  const reqConfig = config.bloodRequests;
 
   const [patientName, setPatientName] = useState('');
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
-  const [requiredUnits, setRequiredUnits] = useState(1);
+  const [requiredUnits, setRequiredUnits] = useState(reqConfig?.minimumUnits || 1);
   const [requiredDate, setRequiredDate] = useState(
     new Date().toISOString().split('T')[0]
   );
@@ -44,6 +48,9 @@ export const RequestBloodPage: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Check if request system is disabled by admin
+  const isRequestDisabled = reqConfig?.requestEnabled === false;
 
   // Check if current hospital input matches any registered hospital
   const trimmedHospital = hospital.trim().toLowerCase();
@@ -62,16 +69,28 @@ export const RequestBloodPage: React.FC = () => {
     e.preventDefault();
     setErrorMessage('');
 
+    if (isRequestDisabled && currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin') {
+      setErrorMessage('রক্তের নতুন আবেদন গ্রহণ সাময়িকভাবে স্থগিত রাখা হয়েছে। জরুরি সহায়তার জন্য হটলাইনে কল করুন।');
+      return;
+    }
+
     if (!patientName.trim()) {
       setErrorMessage('অনুগ্রহ করে রোগীর নাম প্রদান করুন।');
       return;
     }
-    if (!hospital.trim()) {
+    if ((reqConfig?.requireHospital ?? true) && !hospital.trim()) {
       setErrorMessage('অনুগ্রহ করে হাসপাতালের নাম প্রদান করুন।');
       return;
     }
     if (!contactNumber.trim() || contactNumber.length < 11) {
       setErrorMessage('অনুগ্রহ করে সঠিক মোবাইল নম্বর প্রদান করুন।');
+      return;
+    }
+
+    const minUnits = reqConfig?.minimumUnits ?? 1;
+    const maxUnits = reqConfig?.maximumUnits ?? 10;
+    if (requiredUnits < minUnits || requiredUnits > maxUnits) {
+      setErrorMessage(`রক্তের ব্যাগের পরিমাণ ${minUnits} থেকে ${maxUnits} ব্যাগের মধ্যে হতে হবে।`);
       return;
     }
 
@@ -108,6 +127,9 @@ export const RequestBloodPage: React.FC = () => {
         }
       }
 
+      const expiryHours = reqConfig?.requestExpiryHours || 48;
+      const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
+
       const created = await createBloodRequest({
         userId: currentUser?.id || 'guest-recipient',
         patientName: patientName.trim(),
@@ -126,10 +148,11 @@ export const RequestBloodPage: React.FC = () => {
         emergencyLevel,
         notes: notes.trim(),
         organizationId: 'org-roktobondon',
+        expiresAt,
       });
 
       // Redirect immediately to matching engine for this request
-      navigate(`/request/${created.id}`);
+      navigate(`/blood-requests/${created.id}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'রক্তের আবেদন তৈরি করতে সমস্যা হয়েছে।');
     } finally {
@@ -151,6 +174,18 @@ export const RequestBloodPage: React.FC = () => {
           তথ্য জমা দিলে সিস্টেম তাৎক্ষণিকভাবে ধামরাই, সাভার ও মানিকগঞ্জের উপযুক্ত রক্তদাতাদের স্কোরিং করে ম্যাচ করাবে।
         </p>
       </div>
+
+      {isRequestDisabled && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-bold text-sm block">অনলাইন আবেদন গ্রহণ সাময়িকভাবে স্থগিত</span>
+            <p className="text-amber-800">
+              প্ল্যাটফর্ম রক্ষণাবেক্ষণ বা বিশেষ কারণে বর্তমানে অনলাইন ফর্মের মাধ্যমে নতুন আবেদন গ্রহণ বন্ধ রয়েছে। জরুরি রক্তের সহায়তার জন্য আমাদের কেন্দ্রীয় হটলাইনে কল করুন।
+            </p>
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2.5">

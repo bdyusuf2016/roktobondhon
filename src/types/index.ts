@@ -65,6 +65,7 @@ export interface DonorPublic {
   id: string; // doc ID (e.g. donorId)
   donorId: string; // DNR-DHM-000125
   fullName: string;
+  name?: string;
   photoUrl?: string;
   bloodGroup: BloodGroup;
   division?: string;
@@ -75,11 +76,19 @@ export interface DonorPublic {
   areaId?: string;
   area: string;
   locationLabel?: string;
+  age?: number;
+  weight?: number;
   availability: boolean;
   emergencyAvailable: boolean;
   lastDonationDate?: string;
+  nextEligibleDate?: string;
   firstDonationDate?: string;
   totalDonations: number;
+  donationCount?: number;
+  eligibilityStatus?: 'eligible' | 'deferred' | 'interval_pending' | 'ineligible';
+  temporaryDeferral?: boolean;
+  deferralReason?: string;
+  deferralUntil?: string;
   verificationStatus: VerificationStatus;
   organizationId: string;
   branchId?: string;
@@ -302,7 +311,12 @@ export interface MatchResult {
     verified: number;
     location: number;
     emergency: number;
+    eligibility?: number;
+    reliability?: number;
+    responseRate?: number;
   };
+  eligibilityStatus?: 'eligible' | 'ineligible' | 'deferred';
+  reasons?: string[];
 }
 
 export type HospitalCategory = 'government' | 'medical_college' | 'private' | 'blood_bank';

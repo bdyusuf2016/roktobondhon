@@ -18,10 +18,12 @@ import {
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDialog } from '../contexts/DialogContext';
-import { findCompatibleDonors } from '../services/matchingService';
+import { useSmartMatching } from '../hooks/useSmartMatching';
 import { DonorCard } from '../components/DonorCard';
 import { RequestDonorModal } from '../components/RequestDonorModal';
 import { EmergencyBroadcastModal } from '../components/EmergencyBroadcastModal';
+import { SocialShareBar } from '../components/common/SocialShareBar';
+import { useSEO } from '../hooks/useSEO';
 import type { Donor } from '../types';
 
 export const RequestDetailPage: React.FC = () => {
@@ -40,16 +42,23 @@ export const RequestDetailPage: React.FC = () => {
 
   const request = bloodRequests.find((r) => r.id === id || r.requestId === id);
 
-  // Compute smart matching results using the 100-point algorithm
-  const matchedDonors = useMemo(() => {
-    if (!request) return [];
-    return findCompatibleDonors(donors, {
+  useSEO({
+    title: request ? `${request.bloodGroup} রক্তের জরুরি প্রয়োজন - ${request.patientName || request.hospital}` : 'রক্তের আবেদন বিবরণ',
+    description: request ? `${request.hospital}, ${request.district}-এ ${request.bloodGroup} রক্তের জরুরি প্রয়োজন। প্রয়োজনীয় পরিমাণ: ${request.requiredUnits} ব্যাগ।` : undefined,
+    bloodRequest: request,
+  });
+
+  const matchCriteria = useMemo(() => {
+    if (!request) return null;
+    return {
       patientBloodGroup: request.bloodGroup,
       district: request.district,
       upazila: request.upazila,
       isEmergency: request.emergencyLevel === 'CRITICAL' || request.emergencyLevel === 'URGENT',
-    });
-  }, [request, donors]);
+    };
+  }, [request]);
+
+  const { matchedDonors, weightsDescription } = useSmartMatching(donors, matchCriteria);
 
   if (!request) {
     return (
@@ -223,6 +232,9 @@ export const RequestDetailPage: React.FC = () => {
         )}
       </div>
 
+      {/* Social Sharing Crisis Broadcast Bar */}
+      <SocialShareBar request={request} />
+
       {/* Smart Matching Engine Section */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200 pb-3">
@@ -234,7 +246,7 @@ export const RequestDetailPage: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              অ্যালগরিদম: রক্তের সামঞ্জস্য (৪০) + প্রাপ্যতা (২০) + ভেরিফিকেশন (১৫) + ভৌগোলিক অবস্থান (১৫) + জরুরি প্রস্তুতি (১০) = ১০০ পয়েন্ট
+              {weightsDescription}
             </p>
           </div>
 
@@ -249,7 +261,7 @@ export const RequestDetailPage: React.FC = () => {
               <DonorCard
                 key={m.donor.id}
                 donor={m.donor}
-                matchScore={m.score}
+                matchScore={m.matchScore}
                 onSendRequestSuccess={() => {
                   dialog.alert({
                     title: 'অনুরোধ পাঠানো হয়েছে',

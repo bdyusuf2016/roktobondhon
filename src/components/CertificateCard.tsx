@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import type { Donor, DonorBadge } from '../types';
 import { Award, ShieldCheck, Heart, Droplet, Download, Printer, Share2, CheckCircle2, Sparkles, Calendar, MapPin, User as UserIcon } from 'lucide-react';
 import { DONOR_BADGES_LIST } from '../data/seedData';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 interface CertificateCardProps {
   donor: Donor;
@@ -9,8 +10,21 @@ interface CertificateCardProps {
 }
 
 export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose }) => {
+  const { config } = useSystemConfig();
+  const gamificationConfig = config?.gamification;
+
   const certificateRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const signatoryName =
+    gamificationConfig?.organizationSignatoryNameBn ||
+    gamificationConfig?.organizationSignatoryName ||
+    'রক্তবন্ধন পরিষদ';
+
+  const signatoryTitle =
+    gamificationConfig?.organizationSignatoryTitleBn ||
+    gamificationConfig?.organizationSignatoryTitle ||
+    'অনুমোদিত কেন্দ্রীয় সমন্বয়ক';
 
   // Calculate earned badges
   const earnedBadges = DONOR_BADGES_LIST.filter(
@@ -156,9 +170,9 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
           {/* Authority Signature */}
           <div className="space-y-1 text-right">
             <div className="inline-block border-b-2 border-slate-700 pb-1 px-4">
-              <span className="font-serif italic text-slate-800 font-bold text-sm md:text-base">রক্তবন্ধন অ্যাডমিন পরিষদ</span>
+              <span className="font-serif italic text-slate-800 font-bold text-sm md:text-base">{signatoryName}</span>
             </div>
-            <p className="text-xs text-slate-500">অনুমোদিত স্বাক্ষরকারী</p>
+            <p className="text-xs text-slate-500">{signatoryTitle}</p>
           </div>
         </div>
       </div>

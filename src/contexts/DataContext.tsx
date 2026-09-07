@@ -59,6 +59,8 @@ import {
 } from '../services/donorRequestService';
 import { recordDonationInFirestore } from '../services/donationService';
 import { recordAuditLog } from '../services/auditService';
+import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
+import type { BackupCollectionKey, PlatformBackupPayload } from '../types/backup';
 
 interface DataContextType {
   donors: Donor[];
@@ -86,6 +88,7 @@ interface DataContextType {
   createBloodRequest: (data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>) => Promise<BloodRequest>;
   updateBloodRequestStatus: (id: string, status: BloodRequest['status']) => Promise<void>;
   verifyBloodRequest: (id: string, verifierName: string) => Promise<void>;
+  deleteBloodRequest: (id: string) => Promise<void>;
   registerDonor: (data: Omit<Donor, 'id' | 'donorId' | 'createdAt' | 'updatedAt' | 'verificationStatus' | 'totalDonations'>) => Promise<Donor>;
   updateDonor: (id: string, data: Partial<Donor>) => Promise<void>;
   verifyDonor: (donorId: string, status: VerificationStatus, verifierName: string, notes?: string) => Promise<void>;
@@ -97,7 +100,11 @@ interface DataContextType {
   deleteBloodCamp: (id: string) => Promise<void>;
   registerForCamp: (registration: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>) => Promise<CampRegistration>;
   addLocation: (location: Omit<LocationItem, 'id'>) => Promise<LocationItem>;
+  updateLocation: (id: string, data: Partial<LocationItem>) => Promise<void>;
+  deleteLocation: (id: string) => Promise<void>;
   addBranch: (branch: Omit<Branch, 'id'>) => Promise<Branch>;
+  updateBranch: (id: string, data: Partial<Branch>) => Promise<void>;
+  deleteBranch: (id: string) => Promise<void>;
   addHospital: (hospital: Omit<Hospital, 'id'>) => Promise<Hospital>;
   updateHospital: (id: string, data: Partial<Hospital>) => Promise<void>;
   deleteHospital: (id: string) => Promise<void>;
@@ -118,8 +125,16 @@ interface DataContextType {
   deleteUser: (userId: string) => Promise<void>;
   exportBackupData: () => string;
   importBackupData: (jsonStr: string) => { success: boolean; message: string };
+  restoreSelectiveBackup?: (
+    payload: any,
+    selectedKeys: string[],
+    strategy?: 'replace' | 'merge'
+  ) => { success: boolean; message: string; restoredCounts: Record<string, number> };
   addAuditLog: (action: string, targetType: string, targetId: string, metadata?: Record<string, any>, user?: { id: string; name: string; role: UserRole }) => void;
   markNotificationRead: (id: string) => void;
+  addNotification: (notification: Omit<NotificationItem, 'id' | 'createdAt'>) => Promise<NotificationItem>;
+  deleteNotification: (id: string) => Promise<void>;
+  markAllNotificationsRead: (userId?: string) => Promise<void>;
   resetDemoData: () => void;
   migrateLocalToFirestore: () => Promise<{ success: boolean; message: string }>;
   migrateLocalToSupabase?: () => Promise<{ success: boolean; message: string }>;
@@ -769,6 +784,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog('Request Verified', 'BloodRequest', id, { verifierName });
   };
 
+  const deleteBloodRequest = async (id: string) => {
+    setBloodRequests((prev) => prev.filter((r) => r.id !== id));
+    addAuditLog('Blood Request Deleted', 'BloodRequest', id, {});
+  };
+
   const registerDonor = async (
     data: Omit<Donor, 'id' | 'donorId' | 'createdAt' | 'updatedAt' | 'verificationStatus' | 'totalDonations'>
   ): Promise<Donor> => {
@@ -1040,6 +1060,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newLoc;
   };
 
+  const updateLocation = async (id: string, data: Partial<LocationItem>): Promise<void> => {
+    setLocations((prev) =>
+      prev.map((loc) => (loc.id === id ? { ...loc, ...data } : loc))
+    );
+    addAuditLog('Location Updated', 'Location', id, data);
+  };
+
+  const deleteLocation = async (id: string): Promise<void> => {
+    setLocations((prev) => prev.filter((loc) => loc.id !== id));
+    addAuditLog('Location Deleted', 'Location', id);
+  };
+
   const addBranch = async (branchData: Omit<Branch, 'id'>): Promise<Branch> => {
     const id = `br-${Date.now()}`;
     const newBranch: Branch = { ...branchData, id };
@@ -1048,10 +1080,83 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newBranch;
   };
 
+  const updateBranch = async (id: string, data: Partial<Branch>): Promise<void> => {
+    setBranches((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, ...data } : b))
+    );
+    addAuditLog('Branch Updated', 'Branch', id, data);
+  };
+
+  const deleteBranch = async (id: string): Promise<void> => {
+    setBranches((prev) => prev.filter((b) => b.id !== id));
+    addAuditLog('Branch Deleted', 'Branch', id);
+  };
+
   const markNotificationRead = (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
+  };
+
+  const addNotification = async (
+    notificationData: Omit<NotificationItem, 'id' | 'createdAt'>
+  ): Promise<NotificationItem> => {
+    const id = `notif-${Date.now()}`;
+    const newNotif: NotificationItem = {
+      ...notificationData,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('notifications').insert({
+        id: newNotif.id,
+        user_id: newNotif.userId,
+        title: newNotif.title,
+        message: newNotif.message,
+        type: newNotif.type,
+        link: newNotif.link || null,
+        is_read: newNotif.isRead,
+        created_at: newNotif.createdAt,
+      }).then(() => {});
+    }
+    addAuditLog(`নোটিফিকেশন পাঠানো হয়েছে: ${newNotif.title}`, 'NOTIFICATION', newNotif.id, {
+      userId: newNotif.userId,
+      type: newNotif.type,
+    });
+    return newNotif;
+  };
+
+  const deleteNotification = async (id: string): Promise<void> => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('notifications').delete().eq('id', id).then(() => {});
+    }
+    addAuditLog('নোটিফিকেশন মুছে ফেলা হয়েছে', 'NOTIFICATION', id);
+  };
+
+  const markAllNotificationsRead = async (userId?: string): Promise<void> => {
+    setNotifications((prev) =>
+      prev.map((n) =>
+        !userId || n.userId === userId || n.userId === 'all'
+          ? { ...n, isRead: true }
+          : n
+      )
+    );
+    if (isSupabaseConfigured && supabase) {
+      if (userId) {
+        supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .in('user_id', [userId, 'all'])
+          .then(() => {});
+      } else {
+        supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .then(() => {});
+      }
+    }
   };
 
   const addHospital = async (hospitalData: Omit<Hospital, 'id'>): Promise<Hospital> => {
@@ -1433,11 +1538,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    const backupObj = {
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      platform: 'RoktoBondon Blood Donation Platform',
+    const savedSysConfig = localStorage.getItem('roktobondon_system_config');
+    let systemConfig;
+    if (savedSysConfig) {
+      try {
+        systemConfig = JSON.parse(savedSysConfig);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const { jsonString } = generatePlatformBackup({
       orgConfig,
+      systemConfig,
       permissionMatrix,
       donors,
       bloodRequests,
@@ -1452,10 +1565,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fundDisbursements,
       users,
       auditLogs,
-    };
-    const jsonStr = JSON.stringify(backupObj, null, 2);
+    });
+
     try {
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -1468,7 +1581,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Auto download error', e);
     }
     addAuditLog('সম্পূর্ণ ডাটাবেজ, পারমিশন ম্যাট্রিক্স ও প্ল্যাটফর্ম সেটিংস ব্যাকআপ এক্সপোর্ট করা হয়েছে', 'BACKUP', 'EXPORT');
-    return jsonStr;
+    return jsonString;
   };
 
   const importBackupData = (jsonStr: string): { success: boolean; message: string } => {
@@ -1480,6 +1593,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data.orgConfig && typeof data.orgConfig === 'object') {
         localStorage.setItem('roktobondon_org_config', JSON.stringify(data.orgConfig));
+      }
+      if (data.systemConfig && typeof data.systemConfig === 'object') {
+        localStorage.setItem('roktobondon_system_config', JSON.stringify(data.systemConfig));
       }
       if (data.permissionMatrix && typeof data.permissionMatrix === 'object') {
         setPermissionMatrix(data.permissionMatrix);
@@ -1502,6 +1618,77 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true, message: 'ব্যাকআপ সফলভাবে রিস্টোর হয়েছে এবং প্ল্যাটফর্ম সেটিংস ও পারমিশন আপডেট হয়েছে!' };
     } catch (err: any) {
       return { success: false, message: err.message || 'ব্যাকআপ ফাইল রিস্টোর করতে ব্যর্থ হয়েছে।' };
+    }
+  };
+
+  const restoreSelectiveBackup = (
+    payload: PlatformBackupPayload,
+    selectedKeys: string[],
+    strategy: 'replace' | 'merge' = 'replace'
+  ): { success: boolean; message: string; restoredCounts: Record<string, number> } => {
+    try {
+      const { restoredCounts, restoredData } = resolveSelectiveRestore(
+        payload,
+        selectedKeys as BackupCollectionKey[],
+        strategy,
+        {
+          donors,
+          bloodRequests,
+          donorRequests,
+          donations,
+          locations,
+          branches,
+          hospitals,
+          fundDonations,
+          paymentMethods,
+          donationCauses,
+          fundDisbursements,
+          users,
+          auditLogs,
+        }
+      );
+
+      if (restoredData.orgConfig && typeof restoredData.orgConfig === 'object') {
+        localStorage.setItem('roktobondon_org_config', JSON.stringify(restoredData.orgConfig));
+      }
+      if (restoredData.systemConfig && typeof restoredData.systemConfig === 'object') {
+        localStorage.setItem('roktobondon_system_config', JSON.stringify(restoredData.systemConfig));
+      }
+      if (restoredData.permissionMatrix && typeof restoredData.permissionMatrix === 'object') {
+        setPermissionMatrix(restoredData.permissionMatrix);
+        localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(restoredData.permissionMatrix));
+      }
+      if (Array.isArray(restoredData.donors)) setDonors(restoredData.donors);
+      if (Array.isArray(restoredData.bloodRequests)) setBloodRequests(restoredData.bloodRequests);
+      if (Array.isArray(restoredData.donorRequests)) setDonorRequests(restoredData.donorRequests);
+      if (Array.isArray(restoredData.donations)) setDonations(restoredData.donations);
+      if (Array.isArray(restoredData.locations)) setLocations(restoredData.locations);
+      if (Array.isArray(restoredData.branches)) setBranches(restoredData.branches);
+      if (Array.isArray(restoredData.hospitals)) setHospitals(restoredData.hospitals);
+      if (Array.isArray(restoredData.fundDonations)) setFundDonations(restoredData.fundDonations);
+      if (Array.isArray(restoredData.paymentMethods)) setPaymentMethods(restoredData.paymentMethods);
+      if (Array.isArray(restoredData.donationCauses)) setDonationCauses(restoredData.donationCauses);
+      if (Array.isArray(restoredData.fundDisbursements)) setFundDisbursements(restoredData.fundDisbursements);
+      if (Array.isArray(restoredData.users)) setUsers(restoredData.users);
+
+      addAuditLog(
+        `সিলেক্টিভ ব্যাকআপ রিস্টোর সম্পন্ন হয়েছে (${selectedKeys.join(', ')}) [Strategy: ${strategy}]`,
+        'BACKUP',
+        'SELECTIVE_RESTORE',
+        { selectedKeys, restoredCounts, strategy }
+      );
+
+      return {
+        success: true,
+        message: `নির্বাচিত মডিউল (${selectedKeys.length}টি) সফলভাবে রিস্টোর হয়েছে!`,
+        restoredCounts,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'সিলেক্টিভ ব্যাকআপ রিস্টোর করতে ব্যর্থ হয়েছে।',
+        restoredCounts: {},
+      };
     }
   };
 
@@ -1759,6 +1946,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createBloodRequest,
         updateBloodRequestStatus,
         verifyBloodRequest,
+        deleteBloodRequest,
         registerDonor,
         updateDonor,
         verifyDonor,
@@ -1770,7 +1958,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteBloodCamp,
         registerForCamp,
         addLocation,
+        updateLocation,
+        deleteLocation,
         addBranch,
+        updateBranch,
+        deleteBranch,
         addHospital,
         updateHospital,
         deleteHospital,
@@ -1795,8 +1987,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasPermission,
         exportBackupData,
         importBackupData,
+        restoreSelectiveBackup,
         addAuditLog,
         markNotificationRead,
+        addNotification,
+        deleteNotification,
+        markAllNotificationsRead,
         resetDemoData,
         migrateLocalToFirestore,
         migrateLocalToSupabase: migrateLocalToFirestore,

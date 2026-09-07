@@ -16,7 +16,7 @@ function mapAuditLogRow(row: any): AuditLog {
 }
 
 /**
- * Record an immutable audit log entry in Supabase
+ * Record an immutable audit log entry in Supabase / Local Storage
  */
 export async function recordAuditLog(
   action: string,
@@ -81,4 +81,69 @@ export async function getAuditLogsFromFirestore(limitCount: number = 100): Promi
     console.error('Exception fetching audit logs:', err);
     return [];
   }
+}
+
+/**
+ * Filter audit logs by search query, target type, and user role
+ */
+export function filterAuditLogs(
+  logs: AuditLog[],
+  params: {
+    searchTerm?: string;
+    targetType?: string;
+    userRole?: string;
+    timeRangeDays?: number;
+  }
+): AuditLog[] {
+  const { searchTerm = '', targetType = 'all', userRole = 'all', timeRangeDays } = params;
+
+  return logs.filter((log) => {
+    if (targetType !== 'all' && log.targetType.toLowerCase() !== targetType.toLowerCase()) {
+      return false;
+    }
+    if (userRole !== 'all' && log.userRole !== userRole) {
+      return false;
+    }
+    if (timeRangeDays && timeRangeDays > 0) {
+      const logTime = new Date(log.timestamp).getTime();
+      const cutoff = Date.now() - timeRangeDays * 24 * 60 * 60 * 1000;
+      if (logTime < cutoff) return false;
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      const matchAction = log.action.toLowerCase().includes(q);
+      const matchUser = log.userName.toLowerCase().includes(q) || log.userId.toLowerCase().includes(q);
+      const matchTarget = log.targetId.toLowerCase().includes(q) || log.targetType.toLowerCase().includes(q);
+      const matchMeta = log.metadata ? JSON.stringify(log.metadata).toLowerCase().includes(q) : false;
+      return matchAction || matchUser || matchTarget || matchMeta;
+    }
+    return true;
+  });
+}
+
+/**
+ * Identify high-risk security governance events
+ */
+export function isSecurityCriticalEvent(log: AuditLog): boolean {
+  const criticalKeywords = [
+    'role',
+    'permission',
+    'security',
+    'config',
+    'settings',
+    'delete',
+    'suspend',
+    'escalation',
+    'backup',
+    'restore',
+    'পাসওয়ার্ড',
+    'রোল',
+    'মুছে',
+    'স্থগিত',
+  ];
+
+  const actionLower = log.action.toLowerCase();
+  const targetLower = log.targetType.toLowerCase();
+
+  return criticalKeywords.some((kw) => actionLower.includes(kw) || targetLower.includes(kw));
 }

@@ -17,13 +17,13 @@ import {
 
 interface EmergencyBroadcastModalProps {
   request: BloodRequest;
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
 }
 
 export const EmergencyBroadcastModal: React.FC<EmergencyBroadcastModalProps> = ({
   request,
-  isOpen,
+  isOpen = true,
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
