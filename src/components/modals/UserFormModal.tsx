@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal';
-import { UserPlus, ShieldCheck } from 'lucide-react';
+import { UserPlus, ShieldCheck, Lock } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { canManageRole, ROLE_LABELS } from '../../services/permissionService';
 import type { User, UserRole } from '../../types';
 
 interface UserFormModalProps {
@@ -16,6 +18,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   userToEdit,
   onSave,
 }) => {
+  const { currentUser } = useAuth();
   const isEditing = Boolean(userToEdit);
 
   const [fullName, setFullName] = useState('');
@@ -26,6 +29,22 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Calculate assignable roles based on actor privileges
+  const getAssignableRoles = (): UserRole[] => {
+    if (isSuperAdmin) {
+      return ['super_admin', 'admin', 'moderator', 'volunteer', 'donor', 'recipient'];
+    }
+    if (isAdmin) {
+      return ['moderator', 'volunteer', 'donor', 'recipient'];
+    }
+    return ['donor', 'recipient'];
+  };
+
+  const assignableRoles = getAssignableRoles();
 
   useEffect(() => {
     if (userToEdit) {
@@ -162,12 +181,11 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               onChange={(e) => setRole(e.target.value as UserRole)}
               className="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold bg-slate-50 focus:bg-white text-red-700"
             >
-              <option value="volunteer">স্বেচ্ছাসেবক (Volunteer)</option>
-              <option value="moderator">মডারেটর (Moderator)</option>
-              <option value="admin">এডমিন (Admin)</option>
-              <option value="super_admin">সুপার এডমিন (Super Admin)</option>
-              <option value="donor">রক্তদাতা (Donor)</option>
-              <option value="recipient">রক্ত গ্রহীতা (Recipient)</option>
+              {assignableRoles.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]?.bn || r}
+                </option>
+              ))}
             </select>
           </div>
 

@@ -294,7 +294,7 @@ export const AdminUsersTab: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <select
                             value={u.role}
-                            disabled={!canManageRole(currentUser?.role, u.role) && u.id !== currentUser?.id}
+                            disabled={!canManageRole(currentUser?.role, u.role)}
                             onChange={(e) => handleRoleChange(u, e.target.value as UserRole)}
                             className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                               u.role === 'super_admin'
@@ -308,12 +308,20 @@ export const AdminUsersTab: React.FC = () => {
                                 : 'bg-slate-50 text-slate-700 border-slate-200'
                             }`}
                           >
-                            <option value="super_admin">সুপার এডমিন</option>
-                            <option value="admin">এডমিন</option>
-                            <option value="moderator">মডারেটর</option>
-                            <option value="volunteer">স্বেচ্ছাসেবক</option>
-                            <option value="donor">রক্তদাতা</option>
-                            <option value="recipient">রক্ত গ্রহীতা</option>
+                            {/* Only show roles that the actor is allowed to assign */}
+                            {isSuperAdmin && <option value="super_admin">সুপার এডমিন</option>}
+                            {isSuperAdmin && <option value="admin">এডমিন</option>}
+                            {(isSuperAdmin || currentUser?.role === 'admin') && (
+                              <>
+                                <option value="moderator">মডারেটর</option>
+                                <option value="volunteer">স্বেচ্ছাসেবক</option>
+                                <option value="donor">রক্তদাতা</option>
+                                <option value="recipient">রক্ত গ্রহীতা</option>
+                              </>
+                            )}
+                            {!isSuperAdmin && currentUser?.role !== 'admin' && (
+                              <option value={u.role}>{ROLE_LABELS[u.role]?.bn || u.role}</option>
+                            )}
                           </select>
 
                           {u.status === 'suspended' ? (
@@ -341,13 +349,20 @@ export const AdminUsersTab: React.FC = () => {
                           {/* Suspension toggle */}
                           <button
                             type="button"
+                            disabled={!canManageRole(currentUser?.role, u.role)}
                             onClick={() => handleToggleSuspension(u)}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                               u.status === 'suspended'
                                 ? 'text-emerald-600 hover:bg-emerald-50'
                                 : 'text-amber-600 hover:bg-amber-50'
                             }`}
-                            title={u.status === 'suspended' ? 'পুনরায় সক্রিয় করুন' : 'সাময়িক স্থগিত করুন'}
+                            title={
+                              !canManageRole(currentUser?.role, u.role)
+                                ? 'অননুমোদিত'
+                                : u.status === 'suspended'
+                                ? 'পুনরায় সক্রিয় করুন'
+                                : 'সাময়িক স্থগিত করুন'
+                            }
                           >
                             {u.status === 'suspended' ? (
                               <UserCheck className="w-3.5 h-3.5" />
@@ -358,20 +373,30 @@ export const AdminUsersTab: React.FC = () => {
 
                           <button
                             type="button"
+                            disabled={!canManageRole(currentUser?.role, u.role)}
                             onClick={() => {
+                              if (!canManageRole(currentUser?.role, u.role)) {
+                                dialog.alert({
+                                  title: 'অননুমোদিত অ্যাকশন',
+                                  message: 'আপনার এই ইউজার সম্পাদনা করার অনুমতি নেই।',
+                                  theme: 'error',
+                                });
+                                return;
+                              }
                               setSelectedUserForEdit(u);
                               setShowUserModal(true);
                             }}
-                            className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="ইউজার এডিট"
+                            className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={!canManageRole(currentUser?.role, u.role) ? 'অননুমোদিত' : 'ইউজার এডিট'}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
+                            disabled={!canManageRole(currentUser?.role, u.role)}
                             onClick={() => handleDeleteUser(u)}
-                            className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            title="ইউজার ডিলিট"
+                            className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={!canManageRole(currentUser?.role, u.role) ? 'অননুমোদিত' : 'ইউজার ডিলিট'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -571,6 +596,22 @@ export const AdminUsersTab: React.FC = () => {
         }}
         userToEdit={selectedUserForEdit}
         onSave={async (data) => {
+          const currentRoleTarget = selectedUserForEdit ? selectedUserForEdit.role : 'volunteer';
+          const validation = validateRoleAssignment(
+            currentUser?.role,
+            currentRoleTarget,
+            data.role
+          );
+
+          if (!validation.allowed) {
+            dialog.alert({
+              title: 'অননুমোদিত রোল নির্ধারণ',
+              message: validation.reason || 'আপনার এই ইউজার বা রোল অ্যাসাইন করার অনুমতি নেই।',
+              theme: 'error',
+            });
+            return;
+          }
+
           if (selectedUserForEdit) {
             await updateUser(selectedUserForEdit.id, data);
             dialog.alert({
