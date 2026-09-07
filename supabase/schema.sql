@@ -372,6 +372,57 @@ CREATE TRIGGER trigger_system_config_updated_at
   EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ==============================================================================
+-- SUPABASE AUTH SYNCHRONIZATION TRIGGER
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (
+    id,
+    full_name,
+    email,
+    phone,
+    role,
+    organization_id,
+    status,
+    phone_verified,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'নতুন রক্তদাতা'),
+    NEW.email,
+    COALESCE(NEW.phone, NEW.raw_user_meta_data->>'phone', '01700000000'),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'donor'),
+    'org-roktobondon',
+    'active',
+    NEW.phone_confirmed_at IS NOT NULL,
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    email = EXCLUDED.email,
+    phone = CASE WHEN EXCLUDED.phone <> '01700000000' THEN EXCLUDED.phone ELSE public.users.phone END,
+    updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger execution hook on auth.users (if auth schema exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+    DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW
+      EXECUTE FUNCTION public.handle_new_user();
+  END IF;
+END $$;
+
+-- ==============================================================================
 -- INDEXES FOR OPTIMAL QUERY PERFORMANCE
 -- ==============================================================================
 CREATE INDEX IF NOT EXISTS idx_donors_blood_group ON public.donors(blood_group);

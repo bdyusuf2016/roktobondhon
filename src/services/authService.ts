@@ -134,6 +134,21 @@ export async function updateUserPassword(newPassword: string): Promise<void> {
 }
 
 /**
+ * Request Password Reset Email
+ */
+export async function resetPasswordForEmail(email: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase Authentication কনফিগার করা নেই।');
+  }
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) {
+    throw new Error(error.message || 'পাসওয়ার্ড রিসেট ইমেইল পাঠাতে সমস্যা হয়েছে।');
+  }
+}
+
+/**
  * Sign out user
  */
 export async function signOutUser(): Promise<void> {
