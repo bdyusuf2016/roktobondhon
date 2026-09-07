@@ -193,7 +193,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Demo or local fallback
-      const matched = INITIAL_DEMO_USERS.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || {
+      const cleanInput = email.toLowerCase().replace(/@roktobondon\.org$/, '');
+      const matched = INITIAL_DEMO_USERS.find(
+        (u) =>
+          u.email?.toLowerCase() === email.toLowerCase() ||
+          u.phone?.replace(/[^0-9]/g, '').includes(cleanInput)
+      ) || {
         id: `user-${Date.now()}`,
         fullName: email.split('@')[0],
         email,
