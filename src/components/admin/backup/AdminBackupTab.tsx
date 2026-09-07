@@ -42,7 +42,7 @@ export const AdminBackupTab: React.FC = () => {
     exportBackupData,
     importBackupData,
     restoreSelectiveBackup,
-    migrateLocalToFirestore,
+    migrateLocalToSupabase,
   } = useData();
   const { currentUser } = useAuth();
   const dialog = useDialog();
@@ -268,7 +268,9 @@ export const AdminBackupTab: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      const res = await migrateLocalToFirestore();
+      const res = migrateLocalToSupabase
+        ? await migrateLocalToSupabase()
+        : { success: false, message: 'সিঙ্ক মেথড পাওয়া যায়নি।' };
       if (res.success) {
         dialog.alert({
           title: 'ক্লাউড সিঙ্ক সম্পন্ন',
