@@ -2,13 +2,15 @@
 -- র ক্ত ব ন্ধ ন (ROKTOBONDON) - COMPLETE SUPABASE POSTGRESQL DATABASE SCHEMA
 -- ==============================================================================
 -- Run this SQL in your Supabase Dashboard > SQL Editor to initialize all tables,
--- indexes, row-level security (RLS), and storage buckets.
+-- indexes, row-level security (RLS), storage buckets, and initial system config.
 -- ==============================================================================
 
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ==============================================================================
 -- 1. USERS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY, -- Maps to Supabase Auth UID or custom ID
   full_name TEXT NOT NULL,
@@ -25,7 +27,25 @@ CREATE TABLE IF NOT EXISTS public.users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 2. DONORS TABLE (Combines public directory info & private profile fields with privacy toggle)
+-- ==============================================================================
+-- 2. BRANCHES / CHAPTERS TABLE
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.branches (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL DEFAULT 'org-roktobondon',
+  name TEXT NOT NULL,
+  name_bn TEXT NOT NULL,
+  district TEXT NOT NULL,
+  upazila TEXT NOT NULL,
+  coordinator_name TEXT,
+  coordinator_phone TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 3. DONORS TABLE (Full Profile & Public Directory)
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.donors (
   id TEXT PRIMARY KEY,
   donor_id TEXT NOT NULL UNIQUE, -- e.g. DNR-DHM-000101
@@ -41,9 +61,12 @@ CREATE TABLE IF NOT EXISTS public.donors (
   area_id TEXT,
   area TEXT NOT NULL DEFAULT 'ধামরাই সদর',
   location_label TEXT,
+  age INTEGER,
+  weight NUMERIC(5,2),
   availability BOOLEAN NOT NULL DEFAULT true,
   emergency_available BOOLEAN NOT NULL DEFAULT true,
   last_donation_date DATE,
+  next_eligible_date DATE,
   first_donation_date DATE,
   total_donations INTEGER NOT NULL DEFAULT 0,
   verification_status TEXT NOT NULL DEFAULT 'pending' CHECK (verification_status IN ('unverified', 'pending', 'verified', 'rejected', 'suspended')),
@@ -57,14 +80,16 @@ CREATE TABLE IF NOT EXISTS public.donors (
   emergency_contact TEXT,
   admin_notes TEXT,
   nid_or_id_number TEXT,
-  privacy JSONB NOT NULL DEFAULT '{"showPhone": false, "showGender": false, "showAge": false, "allowDirectContact": true}'::jsonb,
+  privacy JSONB NOT NULL DEFAULT '{"showPhone": true, "showGender": true, "showAge": false, "allowDirectContact": true}'::jsonb,
   verified_by TEXT,
   verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 3. BLOOD REQUESTS TABLE
+-- ==============================================================================
+-- 4. BLOOD REQUESTS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.blood_requests (
   id TEXT PRIMARY KEY,
   request_id TEXT NOT NULL UNIQUE, -- e.g. BD-2026-000184
@@ -76,8 +101,8 @@ CREATE TABLE IF NOT EXISTS public.blood_requests (
   required_time TEXT NOT NULL,
   hospital TEXT NOT NULL,
   division TEXT NOT NULL DEFAULT 'Dhaka',
-  district TEXT NOT NULL DEFAULT 'ঢাকা',
-  upazila TEXT NOT NULL DEFAULT 'ধামরাই',
+  district TEXT NOT NULL DEFAULT 'Dhaka',
+  upazila TEXT NOT NULL DEFAULT 'Dhamrai',
   area TEXT NOT NULL DEFAULT 'ধামরাই সদর',
   contact_person TEXT NOT NULL,
   contact_number TEXT NOT NULL,
@@ -94,7 +119,9 @@ CREATE TABLE IF NOT EXISTS public.blood_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 4. DONOR REQUESTS TABLE (Direct contact matching requests)
+-- ==============================================================================
+-- 5. DONOR REQUESTS TABLE (Direct matching & Response)
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.donor_requests (
   id TEXT PRIMARY KEY,
   blood_request_id TEXT NOT NULL REFERENCES public.blood_requests(id) ON DELETE CASCADE,
@@ -112,7 +139,9 @@ CREATE TABLE IF NOT EXISTS public.donor_requests (
   responded_at TIMESTAMPTZ
 );
 
--- 5. DONATIONS TABLE (Logged Donation Histories)
+-- ==============================================================================
+-- 6. DONATIONS TABLE (Logged Blood Donation Histories)
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.donations (
   id TEXT PRIMARY KEY,
   donor_id TEXT NOT NULL REFERENCES public.donors(id) ON DELETE CASCADE,
@@ -130,7 +159,9 @@ CREATE TABLE IF NOT EXISTS public.donations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 6. HOSPITALS & BLOOD BANKS DIRECTORY
+-- ==============================================================================
+-- 7. HOSPITALS & BLOOD BANKS DIRECTORY
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.hospitals (
   id TEXT PRIMARY KEY,
   name_bn TEXT NOT NULL,
@@ -153,7 +184,9 @@ CREATE TABLE IF NOT EXISTS public.hospitals (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. BLOOD CAMPS & DRIVES TABLE
+-- ==============================================================================
+-- 8. BLOOD CAMPS & DRIVES TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.blood_camps (
   id TEXT PRIMARY KEY,
   title_bn TEXT NOT NULL,
@@ -180,7 +213,9 @@ CREATE TABLE IF NOT EXISTS public.blood_camps (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 8. CAMP REGISTRATIONS TABLE (Pre-registered Donors for Camps)
+-- ==============================================================================
+-- 9. CAMP REGISTRATIONS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.camp_registrations (
   id TEXT PRIMARY KEY,
   camp_id TEXT NOT NULL REFERENCES public.blood_camps(id) ON DELETE CASCADE,
@@ -194,7 +229,9 @@ CREATE TABLE IF NOT EXISTS public.camp_registrations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 9. FUND DONATIONS (Transparency Tracking)
+-- ==============================================================================
+-- 10. FUND DONATIONS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.fund_donations (
   id TEXT PRIMARY KEY,
   donor_name TEXT NOT NULL,
@@ -215,7 +252,9 @@ CREATE TABLE IF NOT EXISTS public.fund_donations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 10. FUND DISBURSEMENTS (Financial Transparency Logs)
+-- ==============================================================================
+-- 11. FUND DISBURSEMENTS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.fund_disbursements (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -230,7 +269,9 @@ CREATE TABLE IF NOT EXISTS public.fund_disbursements (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 11. PAYMENT METHOD CONFIGURATIONS
+-- ==============================================================================
+-- 12. PAYMENT METHOD CONFIGURATIONS
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.payment_methods (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -244,7 +285,9 @@ CREATE TABLE IF NOT EXISTS public.payment_methods (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 12. NOTIFICATIONS TABLE
+-- ==============================================================================
+-- 13. NOTIFICATIONS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.notifications (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL, -- specific userId or 'all'
@@ -256,7 +299,9 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 13. AUDIT LOGS TABLE
+-- ==============================================================================
+-- 14. AUDIT LOGS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL DEFAULT 'system',
@@ -269,7 +314,9 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 14. VERIFICATION LOGS TABLE
+-- ==============================================================================
+-- 15. VERIFICATION LOGS TABLE
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.verification_logs (
   id TEXT PRIMARY KEY,
   donor_id TEXT NOT NULL REFERENCES public.donors(id) ON DELETE CASCADE,
@@ -277,6 +324,15 @@ CREATE TABLE IF NOT EXISTS public.verification_logs (
   status TEXT NOT NULL,
   notes TEXT,
   timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- 16. SYSTEM CONFIG TABLE (Central Platform Configuration)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.system_config (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  config JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ==============================================================================
@@ -307,6 +363,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON public.audit_logs(timesta
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.donors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.blood_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.donor_requests ENABLE ROW LEVEL SECURITY;
@@ -320,11 +377,15 @@ ALTER TABLE public.payment_methods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.verification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read access to public directories & verified requests
 CREATE POLICY "Public can view users" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Public can insert own user profile" ON public.users FOR INSERT WITH CHECK (true);
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (true);
+
+CREATE POLICY "Public can view branches" ON public.branches FOR SELECT USING (true);
+CREATE POLICY "Admins can manage branches" ON public.branches FOR ALL USING (true);
 
 CREATE POLICY "Public can view donors" ON public.donors FOR SELECT USING (true);
 CREATE POLICY "Public can register as donor" ON public.donors FOR INSERT WITH CHECK (true);
@@ -374,6 +435,9 @@ CREATE POLICY "System can insert audit logs" ON public.audit_logs FOR INSERT WIT
 
 CREATE POLICY "Admins can view verification logs" ON public.verification_logs FOR SELECT USING (true);
 CREATE POLICY "Admins can insert verification logs" ON public.verification_logs FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Public can view system config" ON public.system_config FOR SELECT USING (true);
+CREATE POLICY "Admins can update system config" ON public.system_config FOR ALL USING (true);
 
 -- ==============================================================================
 -- STORAGE BUCKETS (avatars, documents, assets)
