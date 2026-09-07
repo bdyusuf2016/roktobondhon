@@ -472,17 +472,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
     AND u.status = 'active'
@@ -511,17 +500,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role IN ('super_admin', 'admin')
     AND u.status = 'active'
@@ -550,17 +528,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role = 'super_admin'
     AND u.status = 'active'
@@ -946,7 +913,11 @@ BEGIN
   WHERE (
     u.id = auth.uid()::text
     OR (auth.jwt() ->> 'email' IS NOT NULL AND lower(u.email) = lower(auth.jwt() ->> 'email'))
-    OR EXISTS (SELECT 1 FROM auth.users a WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email))
+    OR (auth.jwt() ->> 'phone' IS NOT NULL AND (
+      u.phone = auth.jwt() ->> 'phone' 
+      OR replace(u.phone, '+88', '') = replace(auth.jwt() ->> 'phone', '+88', '')
+      OR replace(u.phone, '+880', '0') = replace(auth.jwt() ->> 'phone', '+880', '0')
+    ))
   )
   AND u.status = 'active'
   ORDER BY CASE WHEN u.id = auth.uid()::text THEN 0 ELSE 1 END

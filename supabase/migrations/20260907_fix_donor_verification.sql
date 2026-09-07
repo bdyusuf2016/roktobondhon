@@ -19,33 +19,7 @@
 -- 5. Idempotency: prevents duplicate verification logs on repeated clicks.
 -- ==============================================================================
 
--- 1. Auto-confirm any staff accounts in auth.users so their logins succeed
-UPDATE auth.users
-SET email_confirmed_at = COALESCE(email_confirmed_at, clock_timestamp()),
-    phone_confirmed_at = COALESCE(phone_confirmed_at, clock_timestamp())
-WHERE lower(email) IN (
-  SELECT lower(email) FROM public.users WHERE role IN ('super_admin', 'admin', 'moderator', 'volunteer') AND email IS NOT NULL
-)
-OR phone IN (
-  SELECT phone FROM public.users WHERE role IN ('super_admin', 'admin', 'moderator', 'volunteer') AND phone IS NOT NULL
-);
-
--- 2. Synchronize existing public.users IDs with auth.users UUIDs based on verified email OR phone
-UPDATE public.users u
-SET id = a.id::text,
-    updated_at = clock_timestamp()
-FROM auth.users a
-WHERE (
-  (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-  OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-    u.phone = a.phone 
-    OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-    OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-  ))
-)
-AND u.id <> a.id::text;
-
--- 3. Canonical Authorization Functions (Fixed search_path, multi-attribute email + phone resolution)
+-- 1. Canonical Authorization Functions (Fixed search_path, pure JWT & public.users resolution, zero auth.users table dependency)
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -67,17 +41,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
     AND u.status = 'active'
@@ -106,17 +69,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role IN ('super_admin', 'admin')
     AND u.status = 'active'
@@ -145,17 +97,6 @@ BEGIN
         OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
         OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
       ))
-      OR EXISTS (
-        SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND (
-          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
-          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
-            u.phone = a.phone 
-            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
-            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
-          ))
-        )
-      )
     )
     AND u.role = 'super_admin'
     AND u.status = 'active'
@@ -193,7 +134,11 @@ BEGIN
   WHERE (
     u.id = auth.uid()::text
     OR (auth.jwt() ->> 'email' IS NOT NULL AND lower(u.email) = lower(auth.jwt() ->> 'email'))
-    OR EXISTS (SELECT 1 FROM auth.users a WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email))
+    OR (auth.jwt() ->> 'phone' IS NOT NULL AND (
+      u.phone = auth.jwt() ->> 'phone' 
+      OR replace(u.phone, '+88', '') = replace(auth.jwt() ->> 'phone', '+88', '')
+      OR replace(u.phone, '+880', '0') = replace(auth.jwt() ->> 'phone', '+880', '0')
+    ))
   )
   AND u.status = 'active'
   ORDER BY CASE WHEN u.id = auth.uid()::text THEN 0 ELSE 1 END
