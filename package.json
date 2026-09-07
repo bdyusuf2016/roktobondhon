@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "test:regression": "tsx scripts/runMasterRegressionSuite.ts",
     "test:security": "tsx scripts/testSecurityPenetration.ts",
+    "test:security:authenticated": "tsx scripts/testAuthenticatedMultiRoleSecurity.ts",
     "seed": "tsx scripts/seedSupabase.ts",
     "seed:real": "tsx scripts/seedRealDataOnly.ts"
   },
