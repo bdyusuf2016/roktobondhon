@@ -398,7 +398,34 @@ CREATE INDEX IF NOT EXISTS idx_donations_donor_id ON public.donations(donor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON public.audit_logs(timestamp DESC);
 
 -- ==============================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES (Idempotent Drop & Recreate)
+-- ROW LEVEL SECURITY (RLS) HELPER FUNCTIONS
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()::text
+      AND role IN ('super_admin', 'admin', 'moderator', 'volunteer')
+      AND status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()::text
+      AND role IN ('super_admin', 'admin')
+      AND status = 'active'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ==============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
@@ -421,122 +448,286 @@ ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view users" ON public.users;
 DROP POLICY IF EXISTS "Public can insert own user profile" ON public.users;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
-CREATE POLICY "Public can view users" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Public can insert own user profile" ON public.users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Users can read profiles" ON public.users;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
+DROP POLICY IF EXISTS "Admins can delete user profiles" ON public.users;
+
+CREATE POLICY "Users can read profiles" ON public.users
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can insert own profile" ON public.users
+  FOR INSERT WITH CHECK (auth.uid()::text = id OR public.is_admin());
+
+CREATE POLICY "Users can update own profile" ON public.users
+  FOR UPDATE USING (auth.uid()::text = id OR public.is_admin())
+  WITH CHECK (auth.uid()::text = id OR public.is_admin());
+
+CREATE POLICY "Admins can delete user profiles" ON public.users
+  FOR DELETE USING (public.is_admin());
 
 -- 2. Branches Policies
 DROP POLICY IF EXISTS "Public can view branches" ON public.branches;
 DROP POLICY IF EXISTS "Admins can manage branches" ON public.branches;
-CREATE POLICY "Public can view branches" ON public.branches FOR SELECT USING (true);
-CREATE POLICY "Admins can manage branches" ON public.branches FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public can view active branches" ON public.branches;
+DROP POLICY IF EXISTS "Admins can insert branches" ON public.branches;
+DROP POLICY IF EXISTS "Admins can update branches" ON public.branches;
+DROP POLICY IF EXISTS "Admins can delete branches" ON public.branches;
+
+CREATE POLICY "Public can view active branches" ON public.branches
+  FOR SELECT USING (is_active = true OR public.is_staff());
+
+CREATE POLICY "Admins can insert branches" ON public.branches
+  FOR INSERT WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can update branches" ON public.branches
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can delete branches" ON public.branches
+  FOR DELETE USING (public.is_admin());
 
 -- 3. Donors Policies
 DROP POLICY IF EXISTS "Public can view donors" ON public.donors;
 DROP POLICY IF EXISTS "Public can register as donor" ON public.donors;
 DROP POLICY IF EXISTS "Donors/Admins can update donor records" ON public.donors;
-CREATE POLICY "Public can view donors" ON public.donors FOR SELECT USING (true);
-CREATE POLICY "Public can register as donor" ON public.donors FOR INSERT WITH CHECK (true);
-CREATE POLICY "Donors/Admins can update donor records" ON public.donors FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Public can view verified donors" ON public.donors;
+DROP POLICY IF EXISTS "Authenticated users can create donor record" ON public.donors;
+DROP POLICY IF EXISTS "Donors can update own record" ON public.donors;
+DROP POLICY IF EXISTS "Admins can delete donor records" ON public.donors;
+
+CREATE POLICY "Public can view verified donors" ON public.donors
+  FOR SELECT USING (verification_status = 'verified' OR user_id = auth.uid()::text OR public.is_staff());
+
+CREATE POLICY "Authenticated users can create donor record" ON public.donors
+  FOR INSERT WITH CHECK (auth.uid()::text = user_id OR public.is_staff());
+
+CREATE POLICY "Donors can update own record" ON public.donors
+  FOR UPDATE USING (auth.uid()::text = user_id OR public.is_staff())
+  WITH CHECK (auth.uid()::text = user_id OR public.is_staff());
+
+CREATE POLICY "Admins can delete donor records" ON public.donors
+  FOR DELETE USING (public.is_admin());
 
 -- 4. Blood Requests Policies
 DROP POLICY IF EXISTS "Public can view blood requests" ON public.blood_requests;
 DROP POLICY IF EXISTS "Users can create blood requests" ON public.blood_requests;
 DROP POLICY IF EXISTS "Users/Admins can update blood requests" ON public.blood_requests;
-CREATE POLICY "Public can view blood requests" ON public.blood_requests FOR SELECT USING (true);
-CREATE POLICY "Users can create blood requests" ON public.blood_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users/Admins can update blood requests" ON public.blood_requests FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Public can view active blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Public can create blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Requesters and staff can update blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Admins can delete blood requests" ON public.blood_requests;
 
--- 5. Hospitals Policies
+CREATE POLICY "Public can view active blood requests" ON public.blood_requests
+  FOR SELECT USING (status IN ('active', 'verified', 'matched', 'fulfilled') OR user_id = auth.uid()::text OR public.is_staff());
+
+CREATE POLICY "Public can create blood requests" ON public.blood_requests
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Requesters and staff can update blood requests" ON public.blood_requests
+  FOR UPDATE USING (user_id = auth.uid()::text OR public.is_staff())
+  WITH CHECK (user_id = auth.uid()::text OR public.is_staff());
+
+CREATE POLICY "Admins can delete blood requests" ON public.blood_requests
+  FOR DELETE USING (public.is_admin());
+
+-- 5. Donor Requests (Matching) Policies
+DROP POLICY IF EXISTS "Users can view donor requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Users can insert donor requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Users can update donor requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Users can view relevant donor requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Users and system can create donor requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Donors can respond to their requests" ON public.donor_requests;
+
+CREATE POLICY "Users can view relevant donor requests" ON public.donor_requests
+  FOR SELECT USING (donor_user_id = auth.uid()::text OR requester_user_id = auth.uid()::text OR public.is_staff());
+
+CREATE POLICY "Users and system can create donor requests" ON public.donor_requests
+  FOR INSERT WITH CHECK (requester_user_id = auth.uid()::text OR public.is_staff());
+
+CREATE POLICY "Donors can respond to their requests" ON public.donor_requests
+  FOR UPDATE USING (donor_user_id = auth.uid()::text OR public.is_staff())
+  WITH CHECK (donor_user_id = auth.uid()::text OR public.is_staff());
+
+-- 6. Donations Policies
+DROP POLICY IF EXISTS "Public can view donations" ON public.donations;
+DROP POLICY IF EXISTS "Admins can insert donations" ON public.donations;
+DROP POLICY IF EXISTS "Public can view donation impact logs" ON public.donations;
+DROP POLICY IF EXISTS "Staff can insert verified donations" ON public.donations;
+DROP POLICY IF EXISTS "Admins can update donations" ON public.donations;
+DROP POLICY IF EXISTS "Admins can delete donations" ON public.donations;
+
+CREATE POLICY "Public can view donation impact logs" ON public.donations
+  FOR SELECT USING (true);
+
+CREATE POLICY "Staff can insert verified donations" ON public.donations
+  FOR INSERT WITH CHECK (public.is_staff());
+
+CREATE POLICY "Admins can update donations" ON public.donations
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can delete donations" ON public.donations
+  FOR DELETE USING (public.is_admin());
+
+-- 7. Hospitals Directory Policies
 DROP POLICY IF EXISTS "Public can view hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Admins/Public can insert hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Admins can update hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Admins can delete hospitals" ON public.hospitals;
-CREATE POLICY "Public can view hospitals" ON public.hospitals FOR SELECT USING (true);
-CREATE POLICY "Admins/Public can insert hospitals" ON public.hospitals FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins can update hospitals" ON public.hospitals FOR UPDATE USING (true);
-CREATE POLICY "Admins can delete hospitals" ON public.hospitals FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Public can view verified hospitals" ON public.hospitals;
+DROP POLICY IF EXISTS "Staff and community can submit hospitals" ON public.hospitals;
+DROP POLICY IF EXISTS "Staff can update hospitals" ON public.hospitals;
 
--- 6. Blood Camps Policies
+CREATE POLICY "Public can view verified hospitals" ON public.hospitals
+  FOR SELECT USING (verification_status = 'verified' OR public.is_staff());
+
+CREATE POLICY "Staff and community can submit hospitals" ON public.hospitals
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Staff can update hospitals" ON public.hospitals
+  FOR UPDATE USING (public.is_staff()) WITH CHECK (public.is_staff());
+
+CREATE POLICY "Admins can delete hospitals" ON public.hospitals
+  FOR DELETE USING (public.is_admin());
+
+-- 8. Blood Camps Policies
 DROP POLICY IF EXISTS "Public can view blood camps" ON public.blood_camps;
 DROP POLICY IF EXISTS "Admins can insert blood camps" ON public.blood_camps;
 DROP POLICY IF EXISTS "Admins can update blood camps" ON public.blood_camps;
 DROP POLICY IF EXISTS "Admins can delete blood camps" ON public.blood_camps;
-CREATE POLICY "Public can view blood camps" ON public.blood_camps FOR SELECT USING (true);
-CREATE POLICY "Admins can insert blood camps" ON public.blood_camps FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins can update blood camps" ON public.blood_camps FOR UPDATE USING (true);
-CREATE POLICY "Admins can delete blood camps" ON public.blood_camps FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Staff can create blood camps" ON public.blood_camps;
+DROP POLICY IF EXISTS "Staff can update blood camps" ON public.blood_camps;
 
--- 7. Camp Registrations Policies
+CREATE POLICY "Public can view blood camps" ON public.blood_camps
+  FOR SELECT USING (true);
+
+CREATE POLICY "Staff can create blood camps" ON public.blood_camps
+  FOR INSERT WITH CHECK (public.is_staff());
+
+CREATE POLICY "Staff can update blood camps" ON public.blood_camps
+  FOR UPDATE USING (public.is_staff()) WITH CHECK (public.is_staff());
+
+CREATE POLICY "Admins can delete blood camps" ON public.blood_camps
+  FOR DELETE USING (public.is_admin());
+
+-- 9. Camp Registrations Policies
 DROP POLICY IF EXISTS "Public can view camp registrations" ON public.camp_registrations;
 DROP POLICY IF EXISTS "Public can register for camps" ON public.camp_registrations;
 DROP POLICY IF EXISTS "Admins can update camp registrations" ON public.camp_registrations;
-CREATE POLICY "Public can view camp registrations" ON public.camp_registrations FOR SELECT USING (true);
-CREATE POLICY "Public can register for camps" ON public.camp_registrations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins can update camp registrations" ON public.camp_registrations FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Users and staff can view camp registrations" ON public.camp_registrations;
+DROP POLICY IF EXISTS "Public can register for blood camps" ON public.camp_registrations;
+DROP POLICY IF EXISTS "Staff can update camp registrations" ON public.camp_registrations;
 
--- 8. Donor Requests Policies
-DROP POLICY IF EXISTS "Users can view donor requests" ON public.donor_requests;
-DROP POLICY IF EXISTS "Users can insert donor requests" ON public.donor_requests;
-DROP POLICY IF EXISTS "Users can update donor requests" ON public.donor_requests;
-CREATE POLICY "Users can view donor requests" ON public.donor_requests FOR SELECT USING (true);
-CREATE POLICY "Users can insert donor requests" ON public.donor_requests FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update donor requests" ON public.donor_requests FOR UPDATE USING (true);
+CREATE POLICY "Users and staff can view camp registrations" ON public.camp_registrations
+  FOR SELECT USING (user_id = auth.uid()::text OR public.is_staff());
 
--- 9. Donations Policies
-DROP POLICY IF EXISTS "Public can view donations" ON public.donations;
-DROP POLICY IF EXISTS "Admins can insert donations" ON public.donations;
-CREATE POLICY "Public can view donations" ON public.donations FOR SELECT USING (true);
-CREATE POLICY "Admins can insert donations" ON public.donations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public can register for blood camps" ON public.camp_registrations
+  FOR INSERT WITH CHECK (true);
 
--- 10. Payment Methods Policies
-DROP POLICY IF EXISTS "Public can view payment methods" ON public.payment_methods;
-DROP POLICY IF EXISTS "Admins can manage payment methods" ON public.payment_methods;
-CREATE POLICY "Public can view payment methods" ON public.payment_methods FOR SELECT USING (true);
-CREATE POLICY "Admins can manage payment methods" ON public.payment_methods FOR ALL USING (true);
+CREATE POLICY "Staff can update camp registrations" ON public.camp_registrations
+  FOR UPDATE USING (public.is_staff()) WITH CHECK (public.is_staff());
 
--- 11. Fund Donations Policies
+-- 10. Fund Donations Policies
 DROP POLICY IF EXISTS "Public can view fund donations" ON public.fund_donations;
 DROP POLICY IF EXISTS "Public can submit fund donation" ON public.fund_donations;
 DROP POLICY IF EXISTS "Admins can update fund donation" ON public.fund_donations;
-CREATE POLICY "Public can view fund donations" ON public.fund_donations FOR SELECT USING (true);
-CREATE POLICY "Public can submit fund donation" ON public.fund_donations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins can update fund donation" ON public.fund_donations FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Public can view verified non-anonymous donations" ON public.fund_donations;
+DROP POLICY IF EXISTS "Public can submit fund donation proof" ON public.fund_donations;
+DROP POLICY IF EXISTS "Admins can verify/update fund donations" ON public.fund_donations;
+DROP POLICY IF EXISTS "Admins can delete fund donations" ON public.fund_donations;
 
--- 12. Fund Disbursements Policies
+CREATE POLICY "Public can view verified non-anonymous donations" ON public.fund_donations
+  FOR SELECT USING (status = 'verified' OR public.is_staff());
+
+CREATE POLICY "Public can submit fund donation proof" ON public.fund_donations
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Admins can verify/update fund donations" ON public.fund_donations
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can delete fund donations" ON public.fund_donations
+  FOR DELETE USING (public.is_admin());
+
+-- 11. Fund Disbursements Policies
 DROP POLICY IF EXISTS "Public can view fund disbursements" ON public.fund_disbursements;
 DROP POLICY IF EXISTS "Admins can manage disbursements" ON public.fund_disbursements;
-CREATE POLICY "Public can view fund disbursements" ON public.fund_disbursements FOR SELECT USING (true);
-CREATE POLICY "Admins can manage disbursements" ON public.fund_disbursements FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public can view fund disbursements for transparency" ON public.fund_disbursements;
+
+CREATE POLICY "Public can view fund disbursements for transparency" ON public.fund_disbursements
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins can manage disbursements" ON public.fund_disbursements
+  FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- 12. Payment Methods Policies
+DROP POLICY IF EXISTS "Public can view payment methods" ON public.payment_methods;
+DROP POLICY IF EXISTS "Admins can manage payment methods" ON public.payment_methods;
+DROP POLICY IF EXISTS "Public can view active payment methods" ON public.payment_methods;
+
+CREATE POLICY "Public can view active payment methods" ON public.payment_methods
+  FOR SELECT USING (is_active = true OR public.is_admin());
+
+CREATE POLICY "Admins can manage payment methods" ON public.payment_methods
+  FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
 -- 13. Notifications Policies
 DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
 DROP POLICY IF EXISTS "System can insert notifications" ON public.notifications;
 DROP POLICY IF EXISTS "Users can update notifications" ON public.notifications;
-CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (true);
-CREATE POLICY "System can insert notifications" ON public.notifications FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update notifications" ON public.notifications FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Users can view their notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Staff can send notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can mark notifications as read" ON public.notifications;
+
+CREATE POLICY "Users can view their notifications" ON public.notifications
+  FOR SELECT USING (user_id = auth.uid()::text OR user_id = 'all' OR public.is_staff());
+
+CREATE POLICY "Staff can send notifications" ON public.notifications
+  FOR INSERT WITH CHECK (public.is_staff());
+
+CREATE POLICY "Users can mark notifications as read" ON public.notifications
+  FOR UPDATE USING (user_id = auth.uid()::text OR public.is_staff())
+  WITH CHECK (user_id = auth.uid()::text OR public.is_staff());
 
 -- 14. Audit Logs Policies
 DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "System can insert audit logs" ON public.audit_logs;
-CREATE POLICY "Admins can view audit logs" ON public.audit_logs FOR SELECT USING (true);
-CREATE POLICY "System can insert audit logs" ON public.audit_logs FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Staff can view audit trail" ON public.audit_logs;
+DROP POLICY IF EXISTS "System can record audit logs" ON public.audit_logs;
+
+CREATE POLICY "Staff can view audit trail" ON public.audit_logs
+  FOR SELECT USING (public.is_staff());
+
+CREATE POLICY "System can record audit logs" ON public.audit_logs
+  FOR INSERT WITH CHECK (true);
 
 -- 15. Verification Logs Policies
 DROP POLICY IF EXISTS "Admins can view verification logs" ON public.verification_logs;
 DROP POLICY IF EXISTS "Admins can insert verification logs" ON public.verification_logs;
-CREATE POLICY "Admins can view verification logs" ON public.verification_logs FOR SELECT USING (true);
-CREATE POLICY "Admins can insert verification logs" ON public.verification_logs FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Staff can view verification logs" ON public.verification_logs;
+DROP POLICY IF EXISTS "Staff can record verification logs" ON public.verification_logs;
+
+CREATE POLICY "Staff can view verification logs" ON public.verification_logs
+  FOR SELECT USING (public.is_staff());
+
+CREATE POLICY "Staff can record verification logs" ON public.verification_logs
+  FOR INSERT WITH CHECK (public.is_staff());
 
 -- 16. System Config Policies
 DROP POLICY IF EXISTS "Public can view system config" ON public.system_config;
 DROP POLICY IF EXISTS "Admins can update system config" ON public.system_config;
-CREATE POLICY "Public can view system config" ON public.system_config FOR SELECT USING (true);
-CREATE POLICY "Admins can update system config" ON public.system_config FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public can view system configuration" ON public.system_config;
+DROP POLICY IF EXISTS "Admins can modify system config" ON public.system_config;
+DROP POLICY IF EXISTS "Admins can insert system config" ON public.system_config;
+
+CREATE POLICY "Public can view system configuration" ON public.system_config
+  FOR SELECT USING (true);
+
+CREATE POLICY "Admins can modify system config" ON public.system_config
+  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can insert system config" ON public.system_config
+  FOR INSERT WITH CHECK (public.is_admin());
 
 -- ==============================================================================
--- STORAGE BUCKETS (avatars, documents, assets)
+-- STORAGE BUCKETS & POLICIES (avatars, documents, assets)
 -- ==============================================================================
 INSERT INTO storage.buckets (id, name, public)
 VALUES 
