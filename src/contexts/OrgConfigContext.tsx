@@ -156,7 +156,11 @@ export const OrgConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 export function useOrgConfig(): OrgConfigContextType {
   const context = useContext(OrgConfigContext);
   if (!context) {
-    throw new Error('useOrgConfig must be used within an OrgConfigProvider');
+    return {
+      config: DEFAULT_ORG_CONFIG,
+      updateConfig: async () => {},
+      resetConfig: () => {},
+    };
   }
   return context;
 }

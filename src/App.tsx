@@ -84,17 +84,17 @@ function AppContent() {
 export default function App() {
   return (
     <Router basename={import.meta.env.BASE_URL}>
-      <OrgConfigProvider>
-        <AuthProvider>
-          <SystemConfigProvider>
+      <AuthProvider>
+        <SystemConfigProvider>
+          <OrgConfigProvider>
             <DataProvider>
               <DialogProvider>
                 <AppContent />
               </DialogProvider>
             </DataProvider>
-          </SystemConfigProvider>
-        </AuthProvider>
-      </OrgConfigProvider>
+          </OrgConfigProvider>
+        </SystemConfigProvider>
+      </AuthProvider>
     </Router>
   );
 }

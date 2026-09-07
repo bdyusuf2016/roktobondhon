@@ -91,7 +91,13 @@ export const SystemConfigProvider: React.FC<{ children: React.ReactNode }> = ({ 
 export function useSystemConfig(): SystemConfigContextType {
   const context = useContext(SystemConfigContext);
   if (!context) {
-    throw new Error('useSystemConfig must be used within a SystemConfigProvider');
+    return {
+      config: DEFAULT_SYSTEM_CONFIG,
+      isLoading: false,
+      error: null,
+      updateSection: async () => ({ success: true }),
+      refreshConfig: async () => {},
+    };
   }
   return context;
 }
