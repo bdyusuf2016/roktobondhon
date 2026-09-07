@@ -456,6 +456,7 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_uid TEXT := auth.uid()::text;
   v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
   IF v_uid IS NULL THEN
     RETURN FALSE;
@@ -466,9 +467,21 @@ BEGIN
     WHERE (
       u.id = v_uid
       OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR (v_jwt_phone IS NOT NULL AND (
+        u.phone = v_jwt_phone 
+        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
+        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
+      ))
       OR EXISTS (
         SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+        WHERE a.id = auth.uid() AND (
+          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
+          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
+            u.phone = a.phone 
+            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
+            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
+          ))
+        )
       )
     )
     AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
@@ -482,6 +495,7 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_uid TEXT := auth.uid()::text;
   v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
   IF v_uid IS NULL THEN
     RETURN FALSE;
@@ -492,9 +506,21 @@ BEGIN
     WHERE (
       u.id = v_uid
       OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR (v_jwt_phone IS NOT NULL AND (
+        u.phone = v_jwt_phone 
+        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
+        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
+      ))
       OR EXISTS (
         SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+        WHERE a.id = auth.uid() AND (
+          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
+          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
+            u.phone = a.phone 
+            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
+            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
+          ))
+        )
       )
     )
     AND u.role IN ('super_admin', 'admin')
@@ -508,6 +534,7 @@ RETURNS BOOLEAN AS $$
 DECLARE
   v_uid TEXT := auth.uid()::text;
   v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
+  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
   IF v_uid IS NULL THEN
     RETURN FALSE;
@@ -518,9 +545,21 @@ BEGIN
     WHERE (
       u.id = v_uid
       OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
+      OR (v_jwt_phone IS NOT NULL AND (
+        u.phone = v_jwt_phone 
+        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
+        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
+      ))
       OR EXISTS (
         SELECT 1 FROM auth.users a 
-        WHERE a.id = auth.uid() AND lower(u.email) = lower(a.email)
+        WHERE a.id = auth.uid() AND (
+          (u.email IS NOT NULL AND a.email IS NOT NULL AND lower(u.email) = lower(a.email))
+          OR (u.phone IS NOT NULL AND a.phone IS NOT NULL AND (
+            u.phone = a.phone 
+            OR replace(u.phone, '+88', '') = replace(a.phone, '+88', '')
+            OR replace(u.phone, '+880', '0') = replace(a.phone, '+880', '0')
+          ))
+        )
       )
     )
     AND u.role = 'super_admin'

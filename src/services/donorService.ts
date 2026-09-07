@@ -298,6 +298,12 @@ export async function verifyDonorStatus(
     };
   }
 
+  // Verify authenticated session exists to prevent sending anonymous requests that fail with Unauthorized
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    throw new Error('অননুমোদিত: আপনার সুপাবেজ অথেন্টিকেশন সেশন নিষ্ক্রিয় বা পাওয়া যায়নি। দয়া করে লগআউট করে আপনার অ্যাডমিন অ্যাকাউন্টে পুনরায় লগইন করুন। (Unauthorized: No active Supabase Auth session. Please log in again.)');
+  }
+
   // 1. Primary Path: Execute atomic PostgreSQL RPC function (single ACID transaction)
   try {
     const { data: rpcData, error: rpcError } = await supabase.rpc('verify_donor', {

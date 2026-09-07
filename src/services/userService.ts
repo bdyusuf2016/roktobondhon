@@ -25,7 +25,7 @@ function mapUserRow(row: any): User {
 /**
  * Fetch user profile from Supabase: users table
  */
-export async function getUserProfile(uid: string, email?: string | null): Promise<User | null> {
+export async function getUserProfile(uid: string, email?: string | null, phone?: string | null): Promise<User | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
     // 1. Primary lookup by id
@@ -45,6 +45,20 @@ export async function getUserProfile(uid: string, email?: string | null): Promis
 
       if (emailQuery.data) {
         data = emailQuery.data;
+      }
+    }
+
+    // 3. Fallback lookup by phone if id and email didn't match (e.g., Phone OTP login)
+    if (!data && phone) {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const phoneQuery = await supabase
+        .from('users')
+        .select('*')
+        .ilike('phone', `%${cleanPhone.slice(-10)}%`)
+        .maybeSingle();
+
+      if (phoneQuery.data) {
+        data = phoneQuery.data;
       }
     }
 

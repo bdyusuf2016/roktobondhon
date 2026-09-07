@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSupabaseUser(sbUser);
       if (sbUser) {
         try {
-          const profile = await getUserProfile(sbUser.id, sbUser.email);
+          const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone);
           if (profile) {
             setCurrentUser(profile);
           } else {
@@ -111,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSupabaseUser(sbUser);
 
       // Load or create user profile
-      const profile = await getUserProfile(sbUser.id, sbUser.email);
+      const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone || phone);
       if (profile) {
         setCurrentUser(profile);
       } else {
@@ -141,7 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const sbUser = await signInEmail(cleanEmail, pass);
           if (sbUser) {
             setSupabaseUser(sbUser);
-            const profile = await getUserProfile(sbUser.id, sbUser.email);
+            const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone);
             if (profile) {
               setCurrentUser(profile);
               return;
