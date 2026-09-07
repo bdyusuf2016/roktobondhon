@@ -33,16 +33,16 @@ function setLinkTag(rel: string, href: string) {
  * Generates valid Schema.org Organization and Emergency Service JSON-LD
  */
 export function generateStructuredData(config: SeoSettingsConfig, orgConfig?: any) {
-  const orgName = orgConfig?.organizationName || 'রক্তবন্ধন (RoktoBondon)';
-  const orgPhone = orgConfig?.phone || '+8801712-345678';
-  const orgEmail = orgConfig?.email || 'help@roktobondon.org';
+  const orgName = orgConfig?.organizationName || 'রক্ত দান পরিবার কালামপুর';
+  const orgPhone = orgConfig?.phone || '+8801700000000';
+  const orgEmail = orgConfig?.email || 'info@roktobondhon.org';
   const orgWebsite = config.canonicalUrl || 'https://bdyusuf2016.github.io/roktobondhon/';
 
   return {
     '@context': 'https://schema.org',
     '@type': ['Organization', 'EmergencyService', 'MedicalOrganization'],
     name: orgName,
-    alternateName: 'রক্তবন্ধন রক্তদান সংগঠন',
+    alternateName: 'রক্ত দান পরিবার কালামপুর রক্তদান সংগঠন',
     url: orgWebsite,
     logo: orgConfig?.branding?.logoUrl || `${orgWebsite}logo.png`,
     description: config.metaDescriptionBn || config.metaDescription,
