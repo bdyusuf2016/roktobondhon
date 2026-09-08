@@ -12,6 +12,8 @@ import { useSystemConfig } from '../../contexts/SystemConfigContext';
 import { generateCrisisShareText, generateSocialShareUrl } from '../../services/seoService';
 import type { BloodRequest } from '../../types';
 
+import { copyToClipboard } from '../../utils/clipboard';
+
 interface SocialShareBarProps {
   request?: BloodRequest;
   customTitle?: string;
@@ -51,14 +53,10 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
     : `${seoConfig?.siteTitleBn || 'রক্ত দান পরিবার কালামপুর রক্তদান প্ল্যাটফর্ম'}\n${shareUrl}`;
 
   const handleCopyLink = async () => {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-      }
-    } catch (err) {
-      console.error('Failed to copy link:', err);
+    const ok = await copyToClipboard(shareUrl);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
   };
 

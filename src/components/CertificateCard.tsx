@@ -28,6 +28,7 @@ import {
   printCertificateInStandaloneWindow,
   PRIMARY_DOMAIN,
 } from '../services/certificatePrintService';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface CertificateCardProps {
   donor: Donor;
@@ -108,33 +109,40 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
 
   const handleShare = async () => {
     setIsSharing(true);
-    const shareText = `মানবতার সেবায় নিবেদিতপ্রাণ রক্তদাতা ${donor.fullName}-এর রক্তদান স্বীকৃতি সনদপত্র ও ডিজিটাল ডোনার কার্ড। অনলাইন ভেরিফিকেশন লিঙ্ক:`;
+    const shareText = `মানবতার সেবায় নিবেদিতপ্রাণ রক্তদাতা ${donor.fullName}-এর রক্তদান স্বীকৃতি সনদপত্র ও ডিজিটাল ডোনার কার্ড। অনলাইন ভেরিফিকেশন লিঙ্ক: ${verifyUrl}`;
 
-    if (navigator.share) {
+    // Mobile / Web Share API if supported
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ url: verifyUrl })) {
       try {
         await navigator.share({
           title: `${donor.fullName} - রক্তদান স্বীকৃতি সনদপত্র`,
-          text: `${shareText} ${verifyUrl}`,
+          text: `মানবতার সেবায় নিবেদিতপ্রাণ রক্তদাতা ${donor.fullName}-এর রক্তদান স্বীকৃতি সনদপত্র।`,
           url: verifyUrl,
         });
-      } catch {
-        // User canceled share
+        setIsSharing(false);
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          setIsSharing(false);
+          return;
+        }
       }
+    }
+
+    // Universal copy to clipboard
+    const success = await copyToClipboard(verifyUrl);
+    if (success) {
+      dialog.alert({
+        title: 'ভেরিফিকেশন লিঙ্ক কপি হয়েছে!',
+        message: 'সনদপত্রের অনলাইন ভেরিফিকেশন লিঙ্ক ক্লিপবোর্ডে কপি করা হয়েছে। এখন যেকোনো সামাজিক যোগাযোগ মাধ্যম বা মেসেঞ্জারে পেস্ট করে শেয়ার করতে পারেন।',
+        theme: 'success',
+      });
     } else {
-      try {
-        await navigator.clipboard.writeText(`${shareText}\n${verifyUrl}`);
-        dialog.alert({
-          title: 'ভেরিফিকেশন লিঙ্ক কপি হয়েছে!',
-          message: 'সনদপত্রের অনলাইন ভেরিফিকেশন লিঙ্ক ক্লিপবোর্ডে কপি করা হয়েছে। যে কাউকে শেয়ার করতে পারেন।',
-          theme: 'success',
-        });
-      } catch {
-        dialog.alert({
-          title: 'কপি করা যায়নি',
-          message: 'দয়া করে ব্রাউজারের অ্যাড্রেস বার থেকে লিঙ্কটি কপি করুন।',
-          theme: 'danger',
-        });
-      }
+      dialog.alert({
+        title: 'সনদপত্র ভেরিফিকেশন লিঙ্ক',
+        message: `ভেরিফিকেশন লিঙ্ক:\n${verifyUrl}`,
+        theme: 'info',
+      });
     }
     setIsSharing(false);
   };
