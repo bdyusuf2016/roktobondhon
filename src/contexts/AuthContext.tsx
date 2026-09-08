@@ -133,12 +133,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const isPhoneInput = /^[0-9+-\s()]+$/.test(emailOrPhone.trim());
       const cleanPhone = isPhoneInput ? emailOrPhone.replace(/[^0-9]/g, '') : '';
-      const cleanEmail = emailOrPhone.trim().toLowerCase();
+      let targetEmail = emailOrPhone.trim().toLowerCase();
 
-      // 1. Try Supabase Auth
-      if (isSupabaseConfigured && supabase && !isPhoneInput) {
+      // If user typed a phone number, resolve their registered email first
+      if (isPhoneInput && isSupabaseConfigured && supabase) {
         try {
-          const sbUser = await signInEmail(cleanEmail, pass);
+          const { data: userRows } = await supabase
+            .from('users')
+            .select('email')
+            .ilike('phone', `%${cleanPhone.slice(-10)}%`)
+            .limit(1);
+          if (userRows && userRows.length > 0 && userRows[0].email) {
+            targetEmail = userRows[0].email.toLowerCase();
+          }
+        } catch (lookupErr) {
+          console.warn('Phone-to-email lookup error:', lookupErr);
+        }
+      }
+
+      // 1. Authenticate with Supabase Auth
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const sbUser = await signInEmail(targetEmail, pass);
           if (sbUser) {
             setSupabaseUser(sbUser);
             const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone);
@@ -153,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!isDemoMode) {
             const errDetail = authErr.message || '';
             if (errDetail.toLowerCase().includes('email not confirmed')) {
-              throw new Error('আপনার ইমেইলটি Supabase Auth-এ এখনও কনফার্ম করা হয়নি। অনুগ্রহ করে Supabase Dashboard > Authentication > Users থেকে ব্যবহারকারীকে কনফার্ম করুন অথবা SQL স্ক্রিপ্ট রান করুন।');
+              throw new Error('আপনার ইমেইলটি Supabase Auth-এ এখনও কনফার্ম করা হয়নি। অনুগ্রহ করে Supabase Dashboard থেকে কনফার্ম করুন।');
             } else if (errDetail.toLowerCase().includes('invalid login credentials')) {
               throw new Error('ভুল ইমেইল বা পাসওয়ার্ড প্রদান করেছেন। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।');
             }
@@ -162,14 +178,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 2. Direct database query in users table
-      if (isSupabaseConfigured && supabase) {
+      // 2. Direct database query in users table (only if demo mode or fallback)
+      if (isSupabaseConfigured && supabase && isDemoMode) {
         try {
           let query = supabase.from('users').select('*');
           if (isPhoneInput) {
             query = query.ilike('phone', `%${cleanPhone.slice(-10)}%`);
           } else {
-            query = query.eq('email', cleanEmail);
+            query = query.eq('email', targetEmail);
           }
           const { data: userRows, error: userErr } = await query.limit(1);
           if (!userErr && userRows && userRows.length > 0) {
@@ -225,7 +241,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       if (isSupabaseConfigured && supabase && email && pass) {
-        const sbUser = await registerEmail(email, pass);
+        const sbUser = await registerEmail(email, pass, { fullName, phone });
         setSupabaseUser(sbUser);
         const profile = await createUserProfile(sbUser.id, {
           fullName,
@@ -235,6 +251,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         setCurrentUser(profile);
         return profile;
+      }
+
+      if (!isDemoMode && isSupabaseConfigured) {
+        throw new Error('নিবন্ধনের জন্য ইমেইল ও পাসওয়ার্ড প্রদান করা আবশ্যক।');
       }
 
       const newUser: User = {

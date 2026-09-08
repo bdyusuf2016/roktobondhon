@@ -40,7 +40,7 @@ import {
 import { HOSPITALS_DATA } from '../data/hospitalsData';
 import { INITIAL_LOCATIONS, INITIAL_BRANCHES } from '../services/locationService';
 import { generateBloodRequestId, generateDonorId, getLocationCode } from '../services/idGenerator';
-import { supabase, isSupabaseConfigured, isDemoMode } from '../supabase/config';
+import { supabase, isSupabaseConfigured, isDemoMode, createIsolatedSupabaseClient } from '../supabase/config';
 import {
   createDonorRecord,
   updateDonorRecord,
@@ -121,7 +121,7 @@ interface DataContextType {
   addDonationCause: (cause: Omit<DonationCauseConfig, 'id'>) => Promise<DonationCauseConfig>;
   updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
   updateUser: (userId: string, data: Partial<User>) => Promise<void>;
-  addUser: (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>) => Promise<User>;
+  addUser: (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>, password?: string) => Promise<User>;
   deleteUser: (userId: string) => Promise<void>;
   exportBackupData: () => string;
   importBackupData: (jsonStr: string) => { success: boolean; message: string };
@@ -1615,36 +1615,72 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addUser = async (
-    userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>
+    userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>,
+    password?: string
   ): Promise<User> => {
+    let newUserId = `user-${Date.now()}`;
+    const cleanEmail = userData.email?.trim().toLowerCase();
+    const cleanPhone = userData.phone.trim();
+
+    if (isSupabaseConfigured && supabase) {
+      if (!cleanEmail || !password) {
+        if (!isDemoMode) {
+          throw new Error('ব্যবহারকারী অ্যাকাউন্ট তৈরির জন্য ইমেইল ও পাসওয়ার্ড প্রদান আবশ্যক।');
+        }
+      }
+
+      // 1. Authoritative: Secure server-side Edge Function (auth.admin.createUser with email_confirm: true)
+      const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          fullName: userData.fullName.trim(),
+          email: cleanEmail,
+          phone: cleanPhone,
+          password: password,
+          role: userData.role,
+          branchId: userData.branchId,
+          organizationId: userData.organizationId || 'org-roktobondon',
+        },
+      });
+
+      if (edgeErr || !edgeData?.success || !edgeData?.user) {
+        let errorMsg = edgeData?.error || edgeErr?.message || 'ব্যবহারকারী অ্যাকাউন্ট তৈরি করা যায়নি।';
+        if (
+          errorMsg.includes('Failed to send a request') ||
+          errorMsg.includes('404') ||
+          errorMsg.includes('NOT_FOUND') ||
+          errorMsg.includes('Requested function was not found')
+        ) {
+          errorMsg = 'সার্ভার ফাংশন (admin-create-user) প্রোডাকশনে এখনও ডেপ্লয় করা হয়নি। অনুগ্রহ করে Supabase CLI বা ড্যাশবোর্ড থেকে `admin-create-user` এজ ফাংশনটি ডেপ্লয় করুন।';
+        }
+        console.error('[DataContext] admin-create-user Edge Function error:', edgeErr || edgeData);
+        throw new Error(errorMsg);
+      }
+
+      const userFromEdge: User = {
+        id: edgeData.user.id,
+        fullName: edgeData.user.fullName || userData.fullName,
+        phone: edgeData.user.phone || cleanPhone,
+        email: edgeData.user.email || cleanEmail,
+        role: edgeData.user.role || userData.role,
+        organizationId: edgeData.user.organizationId || userData.organizationId || 'org-roktobondon',
+        branchId: edgeData.user.branchId || userData.branchId,
+        status: edgeData.user.status || 'active',
+        createdAt: edgeData.user.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setUsers((prev) => [userFromEdge, ...prev.filter((u) => u.id !== userFromEdge.id)]);
+      addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${userFromEdge.fullName} (${userFromEdge.role})`, 'USER', userFromEdge.id);
+      return userFromEdge;
+    }
+
+    // Fallback for demo mode
     const newUser: User = {
       ...userData,
-      id: `user-${Date.now()}`,
+      id: newUserId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     setUsers((prev) => [newUser, ...prev]);
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase.from('users').insert({
-          id: newUser.id,
-          full_name: newUser.fullName,
-          phone: newUser.phone,
-          email: newUser.email || null,
-          role: newUser.role,
-          organization_id: newUser.organizationId,
-          branch_id: newUser.branchId || null,
-          photo_url: newUser.photoUrl || null,
-          status: newUser.status,
-          phone_verified: newUser.phoneVerified,
-          created_at: newUser.createdAt,
-          updated_at: newUser.updatedAt,
-        });
-        if (error) console.error('[DataContext] Error inserting user in Supabase:', error);
-      } catch (err) {
-        console.error('[DataContext] Exception inserting user:', err);
-      }
-    }
     addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${newUser.fullName} (${newUser.role})`, 'USER', newUser.id);
     return newUser;
   };

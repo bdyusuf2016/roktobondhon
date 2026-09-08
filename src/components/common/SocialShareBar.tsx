@@ -39,8 +39,22 @@ export const SocialShareBar: React.FC<SocialShareBarProps> = ({
     copyLink: true,
   };
 
-  const shareUrl =
-    customUrl || (typeof window !== 'undefined' ? window.location.href : seoConfig?.canonicalUrl || '');
+  const rawUrl =
+    customUrl || (typeof window !== 'undefined' ? window.location.href : seoConfig?.canonicalUrl || 'https://roktodanporibar.com/');
+
+  // Canonicalize share URL so hosting origins like github.io or localhost never leak to social shares
+  let shareUrl = rawUrl;
+  try {
+    const canonicalBase = (seoConfig?.canonicalUrl || 'https://roktodanporibar.com').replace(/\/$/, '');
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname.includes('github.io') || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      const cleanPath = parsed.pathname.replace(/^\/roktobondhon/, '') || '/';
+      shareUrl = `${canonicalBase}${cleanPath}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    const canonicalBase = (seoConfig?.canonicalUrl || 'https://roktodanporibar.com').replace(/\/$/, '');
+    shareUrl = `${canonicalBase}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+  }
 
   const shareText = request
     ? generateCrisisShareText(

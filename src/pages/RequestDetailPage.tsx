@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Zap,
+  Heart,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,6 +25,7 @@ import { RequestDonorModal } from '../components/RequestDonorModal';
 import { EmergencyBroadcastModal } from '../components/EmergencyBroadcastModal';
 import { SocialShareBar } from '../components/common/SocialShareBar';
 import { useSEO } from '../hooks/useSEO';
+import { volunteerForBloodRequest } from '../services/donorRequestService';
 import type { Donor } from '../types';
 
 export const RequestDetailPage: React.FC = () => {
@@ -34,6 +36,8 @@ export const RequestDetailPage: React.FC = () => {
   const dialog = useDialog();
 
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [hasVolunteered, setHasVolunteered] = useState(false);
+  const [isVolunteering, setIsVolunteering] = useState(false);
 
   const [selectedDonorForModal, setSelectedDonorForModal] = useState<{
     donor: Donor;
@@ -41,6 +45,7 @@ export const RequestDetailPage: React.FC = () => {
   } | null>(null);
 
   const request = bloodRequests.find((r) => r.id === id || r.requestId === id);
+  const myDonor = donors.find((d) => d.userId === currentUser?.id || d.phone === currentUser?.phone);
 
   useSEO({
     title: request ? `${request.bloodGroup} রক্তের জরুরি প্রয়োজন - ${request.patientName || request.hospital}` : 'রক্তের আবেদন বিবরণ',
@@ -96,6 +101,30 @@ export const RequestDetailPage: React.FC = () => {
         message: 'রক্তের আবেদন কপি হয়েছে! সামাজিক যোগাযোগ মাধ্যমে শেয়ার করতে পারেন।',
         type: 'success',
       });
+    }
+  };
+
+  const handleVolunteer = async () => {
+    if (!myDonor || !request) return;
+    setIsVolunteering(true);
+    try {
+      const res = await volunteerForBloodRequest(request, myDonor);
+      setHasVolunteered(true);
+      dialog.alert({
+        title: res.isDuplicate ? 'ইতিমধ্যে লিপিবদ্ধ রয়েছে' : 'ধন্যবাদ!',
+        message: res.isDuplicate
+          ? 'আপনি ইতিমধ্যে এই অনুরোধে রক্ত দিতে সম্মতি জানিয়েছেন।'
+          : 'আপনার রক্তদানের আগ্রহ সফলভাবে গ্রহণ করা হয়েছে। রোগীর স্বজন বা সংগঠন থেকে আপনার সাথে দ্রুত যোগাযোগ করা হতে পারে।',
+        type: 'success',
+      });
+    } catch (err: any) {
+      dialog.alert({
+        title: 'সমস্যা হয়েছে',
+        message: err?.message || 'রক্তদানের সাড়া গ্রহণ করতে ব্যর্থ হয়েছে।',
+        type: 'error',
+      });
+    } finally {
+      setIsVolunteering(false);
     }
   };
 
@@ -207,10 +236,34 @@ export const RequestDetailPage: React.FC = () => {
 
           {/* Action box */}
           <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
+            {myDonor ? (
+              <button
+                type="button"
+                disabled={hasVolunteered || isVolunteering}
+                onClick={handleVolunteer}
+                className={`px-5 py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer ${
+                  hasVolunteered
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                    : 'bg-red-600 hover:bg-red-700 text-white border border-red-700/60'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${hasVolunteered ? 'text-emerald-600 fill-emerald-600' : 'fill-white'}`} />
+                {hasVolunteered ? '✅ আপনি সাড়া দিয়েছেন' : isVolunteering ? 'সংরক্ষণ হচ্ছে...' : '❤️ আমি রক্ত দিতে চাই'}
+              </button>
+            ) : (
+              <Link
+                to={currentUser ? "/become-donor" : "/login"}
+                className="px-5 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-red-700/60 transition-colors"
+              >
+                <Heart className="w-4 h-4 fill-white" />
+                ❤️ আমি রক্ত দিতে চাই
+              </Link>
+            )}
+
             {request.contactNumber ? (
               <a
                 href={`tel:${request.contactNumber}`}
-                className="px-5 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-700/60 transition-colors"
+                className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-700/60 transition-colors"
               >
                 <Phone className="w-4 h-4" />
                 কল করুন ({request.contactNumber})

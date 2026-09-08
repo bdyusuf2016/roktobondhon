@@ -165,7 +165,7 @@ export const SeoSettings: React.FC = () => {
         {previewMode === 'google' ? (
           <div className="p-4 rounded-xl bg-slate-50/50 border border-slate-200/60 font-sans space-y-1">
             <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="font-medium text-slate-800">{form.canonicalUrl || 'https://roktobondon.org'}</span>
+              <span className="font-medium text-slate-800">{form.canonicalUrl || 'https://roktodanporibar.com'}</span>
               <span className="text-slate-400">›</span>
               <span className="text-slate-500">home</span>
             </div>
@@ -194,7 +194,7 @@ export const SeoSettings: React.FC = () => {
             )}
             <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-1">
               <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                {form.canonicalUrl.replace(/https?:\/\//, '').split('/')[0] || 'roktodanporibar.org'}
+                {form.canonicalUrl.replace(/https?:\/\//, '').split('/')[0] || 'roktodanporibar.com'}
               </p>
               <p className="text-xs font-bold text-slate-900 line-clamp-1">
                 {form.ogTitle || form.siteTitleBn || 'রক্ত দান পরিবার কালামপুর রক্তদান প্ল্যাটফর্ম'}
@@ -269,7 +269,7 @@ export const SeoSettings: React.FC = () => {
             type="url"
             value={form.canonicalUrl}
             onChange={(e) => handleChange('canonicalUrl', e.target.value)}
-            placeholder="https://bdyusuf2016.github.io/roktobondhon/"
+            placeholder="https://roktodanporibar.com/"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden transition-all"
           />
         </div>
@@ -293,7 +293,7 @@ export const SeoSettings: React.FC = () => {
             type="url"
             value={form.ogImageUrl}
             onChange={(e) => handleChange('ogImageUrl', e.target.value)}
-            placeholder="https://example.com/assets/og-preview.png"
+            placeholder="https://roktodanporibar.com/logo.png"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden transition-all"
           />
         </div>
@@ -305,7 +305,7 @@ export const SeoSettings: React.FC = () => {
             type="text"
             value={form.twitterHandle}
             onChange={(e) => handleChange('twitterHandle', e.target.value)}
-            placeholder="@roktobondon"
+            placeholder="@roktodanporibar"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-hidden transition-all"
           />
         </div>

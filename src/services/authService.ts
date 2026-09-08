@@ -81,7 +81,11 @@ export async function signInEmail(email: string, pass: string): Promise<Supabase
 /**
  * Register user with Email and Password
  */
-export async function registerEmail(email: string, pass: string): Promise<SupabaseUser> {
+export async function registerEmail(
+  email: string,
+  pass: string,
+  metadata?: { fullName?: string; phone?: string }
+): Promise<SupabaseUser> {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase Authentication কনফিগার করা নেই।');
   }
@@ -89,6 +93,14 @@ export async function registerEmail(email: string, pass: string): Promise<Supaba
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password: pass,
+    options: metadata
+      ? {
+          data: {
+            full_name: metadata.fullName,
+            phone: metadata.phone,
+          },
+        }
+      : undefined,
   });
 
   if (error || !data.user) {

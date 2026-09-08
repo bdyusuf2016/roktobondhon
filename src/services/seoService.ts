@@ -83,8 +83,24 @@ export function applySeoTags(
     : config.siteTitleBn || config.siteTitle;
 
   const pageDescription = dynamic?.description || config.metaDescriptionBn || config.metaDescription;
-  const canonical = dynamic?.canonicalUrl || config.canonicalUrl;
-  const ogImage = dynamic?.ogImage || config.ogImageUrl;
+  const canonicalBase = (config.canonicalUrl || 'https://roktodanporibar.com').replace(/\/$/, '');
+  let canonical = dynamic?.canonicalUrl || config.canonicalUrl || 'https://roktodanporibar.com/';
+  if (canonical && !canonical.startsWith('http://') && !canonical.startsWith('https://')) {
+    canonical = `${canonicalBase}${canonical.startsWith('/') ? '' : '/'}${canonical}`;
+  } else if (canonical && (canonical.includes('github.io') || canonical.includes('localhost'))) {
+    try {
+      const parsed = new URL(canonical);
+      const cleanPath = parsed.pathname.replace(/^\/roktobondhon/, '') || '/';
+      canonical = `${canonicalBase}${cleanPath}${parsed.search}${parsed.hash}`;
+    } catch {
+      canonical = `${canonicalBase}/`;
+    }
+  }
+
+  let ogImage = dynamic?.ogImage || config.ogImageUrl || `${canonicalBase}/logo.png`;
+  if (ogImage && !ogImage.startsWith('http://') && !ogImage.startsWith('https://')) {
+    ogImage = `${canonicalBase}${ogImage.startsWith('/') ? '' : '/'}${ogImage}`;
+  }
   const ogTitle = dynamic?.title ? `${dynamic.title} — রক্ত দান পরিবার কালামপুর` : config.ogTitle || pageTitle;
 
   // Title

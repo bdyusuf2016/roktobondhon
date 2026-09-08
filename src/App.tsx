@@ -30,6 +30,7 @@ import { ContactPage } from './pages/ContactPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { ModalShowcasePage } from './pages/ModalShowcasePage';
 import { HospitalDirectoryPage } from './pages/HospitalDirectoryPage';
 import { DonatePage } from './pages/DonatePage';
@@ -73,6 +74,7 @@ function AppContent() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/modals" element={<ModalShowcasePage />} />
           <Route path="/hospitals" element={<HospitalDirectoryPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

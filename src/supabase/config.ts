@@ -38,4 +38,19 @@ if (isSupabaseConfigured) {
   );
 }
 
-export { supabase };
+export { supabaseUrl, supabaseAnonKey, supabase };
+
+/**
+ * Creates an isolated Supabase client with non-persisting auth.
+ * Crucial for administrative operations so caller's active session is never replaced.
+ */
+export function createIsolatedSupabaseClient(): SupabaseClient | null {
+  if (!isSupabaseConfigured) return null;
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}

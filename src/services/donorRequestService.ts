@@ -130,3 +130,73 @@ export async function respondToDonorRequest(
     console.error('Error responding to donor request in Supabase:', error);
   }
 }
+
+/**
+ * Donor volunteers to donate blood for a blood request ("আমি রক্ত দিতে চাই")
+ */
+export async function volunteerForBloodRequest(
+  bloodRequest: BloodRequest,
+  donor: Donor
+): Promise<{ success: boolean; isDuplicate: boolean; donorRequest: DonorRequest }> {
+  // Check duplicate in Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('donor_requests')
+        .select('*')
+        .eq('blood_request_id', bloodRequest.id)
+        .eq('donor_id', donor.id)
+        .maybeSingle();
+
+      if (existing) {
+        return { success: true, isDuplicate: true, donorRequest: mapDonorRequestRow(existing) };
+      }
+    } catch (checkErr) {
+      console.warn('Duplicate check error in Supabase:', checkErr);
+    }
+  }
+
+  const id = `dreq-${Date.now()}`;
+  const newRequest: DonorRequest = {
+    id,
+    bloodRequestId: bloodRequest.id,
+    donorId: donor.id,
+    donorUserId: donor.userId,
+    requesterUserId: bloodRequest.userId,
+    status: 'accepted',
+    matchScore: 95,
+    patientName: bloodRequest.patientName,
+    hospital: bloodRequest.hospital,
+    bloodGroup: bloodRequest.bloodGroup,
+    emergencyLevel: bloodRequest.emergencyLevel,
+    respondedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('donor_requests').insert({
+        id: newRequest.id,
+        blood_request_id: newRequest.bloodRequestId,
+        donor_id: newRequest.donorId,
+        donor_user_id: newRequest.donorUserId,
+        requester_user_id: newRequest.requesterUserId,
+        status: newRequest.status,
+        match_score: newRequest.matchScore,
+        patient_name: newRequest.patientName,
+        hospital: newRequest.hospital,
+        blood_group: newRequest.bloodGroup,
+        emergency_level: newRequest.emergencyLevel,
+        responded_at: newRequest.respondedAt,
+        created_at: newRequest.createdAt,
+      });
+      if (error) {
+        console.error('Error inserting volunteer donor request in Supabase:', error);
+      }
+    } catch (err) {
+      console.error('Exception inserting volunteer donor request:', err);
+    }
+  }
+
+  return { success: true, isDuplicate: false, donorRequest: newRequest };
+}

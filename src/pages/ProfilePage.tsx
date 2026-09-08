@@ -41,6 +41,7 @@ import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { INITIAL_LOCATIONS } from '../services/locationService';
 import { printCertificateInStandaloneWindow } from '../services/certificatePrintService';
+import { volunteerForBloodRequest } from '../services/donorRequestService';
 import type { BloodGroup, Gender } from '../types';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -58,6 +59,8 @@ export const ProfilePage: React.FC = () => {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showDonorCardModal, setShowDonorCardModal] = useState(false);
+  const [volunteeredIds, setVolunteeredIds] = useState<Record<string, boolean>>({});
+  const [volunteeringId, setVolunteeringId] = useState<string | null>(null);
 
   // Edit Profile Form State
   const [editFullName, setEditFullName] = useState('');
@@ -163,6 +166,49 @@ export const ProfilePage: React.FC = () => {
       nextDate: nextDate.toISOString().split('T')[0],
     };
   }, [myDonor?.lastDonationDate]);
+
+  // Verification status with exact Bangla indicators
+  const verificationBadge = useMemo(() => {
+    const status = myDonor?.verificationStatus || 'pending';
+    if (status === 'verified') {
+      return {
+        label: 'যাচাইকৃত',
+        dot: '🟢',
+        fullLabel: '🟢 যাচাইকৃত',
+        color: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+        icon: ShieldCheck,
+      };
+    }
+    if (status === 'rejected') {
+      return {
+        label: 'যাচাই বাতিল',
+        dot: '🔴',
+        fullLabel: '🔴 যাচাই বাতিল',
+        color: 'bg-red-50 text-red-800 border-red-300',
+        icon: ShieldAlert,
+      };
+    }
+    return {
+      label: 'যাচাই করা বাকি',
+      dot: '🟡',
+      fullLabel: '🟡 যাচাই করা বাকি',
+      color: 'bg-amber-50 text-amber-800 border-amber-300',
+      icon: Clock,
+    };
+  }, [myDonor?.verificationStatus]);
+
+  // Profile completion percentage calculation
+  const profileCompleteness = useMemo(() => {
+    let score = 0;
+    if (currentUser.fullName) score += 15;
+    if (currentUser.phone) score += 15;
+    if (currentUser.email) score += 15;
+    if (myDonor?.photoUrl || currentUser.photoUrl) score += 10;
+    if (myDonor?.bloodGroup) score += 15;
+    if (myDonor?.district && myDonor?.upazila) score += 15;
+    if (myDonor?.dateOfBirth) score += 15;
+    return Math.min(score, 100);
+  }, [currentUser, myDonor]);
 
   const handleCopyDonorId = () => {
     if (myDonor?.donorId) {
@@ -318,6 +364,32 @@ export const ProfilePage: React.FC = () => {
     await updateDonor(myDonor.id, { emergencyAvailable: !myDonor.emergencyAvailable });
   };
 
+  const handleVolunteerForRequest = async (req: any) => {
+    if (!myDonor) {
+      setToastMessage({ type: 'error', text: 'রক্ত দিতে প্রথমে আপনার রক্তদাতা প্রোফাইল সম্পন্ন করুন।' });
+      return;
+    }
+    setVolunteeringId(req.id);
+    try {
+      const res = await volunteerForBloodRequest(req, myDonor);
+      setVolunteeredIds((prev) => ({ ...prev, [req.id]: true }));
+      setToastMessage({
+        type: 'success',
+        text: res.isDuplicate
+          ? 'আপনি ইতিমধ্যে এই অনুরোধে রক্ত দিতে সম্মতি জানিয়েছেন।'
+          : 'ধন্যবাদ! আপনার রক্তদানের আগ্রহ সফলভাবে গ্রহণ করা হয়েছে।',
+      });
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      setToastMessage({
+        type: 'error',
+        text: err?.message || 'সাড়া গ্রহণ করতে সমস্যা হয়েছে।',
+      });
+    } finally {
+      setVolunteeringId(null);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Toast Feedback */}
@@ -348,58 +420,37 @@ export const ProfilePage: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* PROFESSIONAL HERO IDENTITY CARD */}
+      {/* 4. COMPREHENSIVE DONOR DASHBOARD: WELCOME & METRICS */}
       {/* ========================================================================= */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-        <div className="h-24 bg-gradient-to-r from-red-600 via-rose-600 to-red-800 relative">
-          <div className="absolute right-4 top-4 flex items-center gap-2">
-            <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[11px] font-bold rounded-full border border-white/30">
-              {config.nameBn || config.name} মেম্বারশিপ
-            </span>
-          </div>
-        </div>
-
-        <div className="px-6 pb-6 pt-0 relative flex flex-col md:flex-row md:items-end justify-between gap-4 -mt-10">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-2xl bg-white p-1 shadow-md border border-slate-200">
-                <div className="w-full h-full rounded-xl bg-gradient-to-br from-red-500 to-red-700 text-white font-black text-2xl flex items-center justify-center shadow-inner">
-                  {myDonor?.bloodGroup ? (
-                    <span className="font-mono text-xl">{myDonor.bloodGroup}</span>
-                  ) : (
-                    currentUser.fullName.slice(0, 1)
-                  )}
-                </div>
-              </div>
-              {myDonor && (
-                <span className="absolute -bottom-1 -right-1 p-1 bg-emerald-600 text-white rounded-full border-2 border-white shadow-xs" title="ভেরিফাইড রক্তদাতা">
-                  <Check className="w-3 h-3 stroke-[3]" />
+        {/* Top Header Banner */}
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-800 text-white p-6 sm:p-8 relative">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[11px] font-bold border border-white/30 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  রক্তদাতা ড্যাশবোর্ড
                 </span>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-                  {currentUser.fullName}
-                </h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1 ${donorTier.color}`}>
-                  <span>{donorTier.icon}</span>
-                  <span>{donorTier.name}</span>
+                <span className={`px-3 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 bg-white shadow-2xs ${verificationBadge.color}`}>
+                  <span>{verificationBadge.dot}</span>
+                  <span>{verificationBadge.label}</span>
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase bg-white/20 text-white border border-white/30">
                   {currentUser.role}
                 </span>
               </div>
-
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                <span className="flex items-center gap-1 font-mono font-medium text-slate-700">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                স্বাগতম, {currentUser.fullName}
+              </h1>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-red-100">
+                <span className="flex items-center gap-1 font-mono">
+                  <Phone className="w-3.5 h-3.5 text-red-200" />
                   {currentUser.phone}
                 </span>
                 {currentUser.email && (
-                  <span className="flex items-center gap-1 text-slate-600">
-                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-red-200" />
                     {currentUser.email}
                   </span>
                 )}
@@ -407,132 +458,199 @@ export const ProfilePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCopyDonorId}
-                    className="flex items-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 font-mono text-[11px] cursor-pointer"
+                    className="flex items-center gap-1 bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded border border-white/20 font-mono text-[11px] cursor-pointer transition-colors"
                   >
                     <span>ID: {myDonor.donorId}</span>
-                    {copiedId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                    {copiedId ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3 text-red-200" />}
                   </button>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenEditProfile}
+                className="px-4 py-2 bg-white text-red-700 hover:bg-red-50 text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 border border-white"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                প্রোফাইল সম্পাদন
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  navigate('/');
+                }}
+                className="p-2 bg-white/15 hover:bg-white/25 text-white rounded-xl border border-white/20 transition-colors cursor-pointer shadow-xs"
+                title="লগআউট"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 6 Core Dashboard Indicators Grid */}
+        <div className="p-4 sm:p-6 bg-slate-50/70 border-b border-slate-200/80">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* 1. Blood Group */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>রক্তের গ্রুপ</span>
+                <Droplets className="w-3.5 h-3.5 text-red-600" />
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black font-mono text-red-600">
+                  {myDonor?.bloodGroup || 'A+'}
+                </span>
+                <span className="text-[10px] text-slate-400 uppercase">গ্রুপ</span>
+              </div>
+            </div>
+
+            {/* 2. Verification Status */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>ভেরিফিকেশন স্ট্যাটাস</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+              <div className="pt-0.5">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${verificationBadge.color}`}>
+                  <span>{verificationBadge.dot}</span>
+                  <span className="truncate">{verificationBadge.label}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Last Donation */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>সর্বশেষ রক্তদান</span>
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+              <p className="text-xs font-bold font-mono text-slate-800 pt-1">
+                {myDonor?.lastDonationDate || 'প্রযোজ্য নয়'}
+              </p>
+            </div>
+
+            {/* 4. Donation Count */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>মোট রক্তদান</span>
+                <Award className="w-3.5 h-3.5 text-amber-600" />
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black font-mono text-slate-900">{totalDonations}</span>
+                <span className="text-[10px] text-slate-500 font-bold font-sans">বার</span>
+              </div>
+            </div>
+
+            {/* 5. Availability */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>রক্তদানে প্রস্তুত?</span>
+                <button
+                  type="button"
+                  onClick={handleToggleAvailability}
+                  className={`w-7 h-4 rounded-full transition-colors cursor-pointer relative ${
+                    myDonor?.availability ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`}
+                  title="প্রস্তুতি পরিবর্তন করুন"
+                >
+                  <span
+                    className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                      myDonor?.availability ? 'left-3.5' : 'left-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="text-xs font-bold pt-1">
+                {myDonor?.availability ? (
+                  <span className="text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> প্রস্তুত
+                  </span>
+                ) : (
+                  <span className="text-slate-500">বিরত</span>
+                )}
+              </p>
+            </div>
+
+            {/* 6. Profile Completion */}
+            <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-medium">
+                <span>প্রোফাইল সম্পূর্ণতা</span>
+                <span className="font-mono font-bold text-slate-900">{profileCompleteness}%</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${profileCompleteness}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions Toolbar */}
+        <div className="px-4 py-3 sm:px-6 bg-white flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-red-600" />
+            কুইক একশন:
+          </span>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Link
+              to="/find-blood"
+              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 rounded-xl font-bold flex items-center gap-1.5 border border-red-200 transition-colors"
+            >
+              <span>🩸</span>
+              <span>রক্তের অনুরোধ</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('requests')}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              <span>❤️</span>
+              <span>আমি রক্ত দিতে চাই</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('donations')}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
+            >
+              <span>📋</span>
+              <span>আমার রক্তদান ইতিহাস</span>
+            </button>
+
             <button
               type="button"
               onClick={handleOpenEditProfile}
-              className="px-3.5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl border border-red-700/80 flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
             >
-              <Edit3 className="w-3.5 h-3.5" />
-              প্রোফাইল এডিট
+              <span>👤</span>
+              <span>আমার Profile</span>
             </button>
 
-            {myDonor && (
-              <>
-                <Link
-                  to={`/certificate?donorId=${myDonor.donorId}`}
-                  className="px-3.5 py-2 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl border border-amber-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                >
-                  <Award className="w-3.5 h-3.5 text-amber-600" />
-                  সনদপত্র ও মেডেল
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={() => setShowDonorCardModal(true)}
-                  className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                >
-                  <CreditCard className="w-3.5 h-3.5 text-red-600" />
-                  রক্তদাতা কার্ড
-                </button>
-              </>
-            )}
+            <Link
+              to="/notifications"
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200 transition-colors"
+            >
+              <span>🔔</span>
+              <span>Notifications</span>
+            </Link>
 
             <button
               type="button"
-              onClick={() => {
-                setNewPassword('');
-                setConfirmPassword('');
-                setShowChangePasswordModal(true);
-              }}
-              className="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              onClick={() => setActiveTab('security')}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200 transition-colors cursor-pointer"
             >
-              <KeyRound className="w-3.5 h-3.5 text-slate-600" />
-              পাসওয়ার্ড
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                logout();
-                navigate('/');
-              }}
-              className="p-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl border border-red-200 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              title="লগআউট"
-            >
-              <LogOut className="w-4 h-4" />
+              <span>⚙️</span>
+              <span>Account Settings</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* VITAL STATS SUMMARY CARDS */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>মোট রক্তদান</span>
-            <Droplets className="w-4 h-4 text-red-600" />
-          </div>
-          <p className="text-2xl font-black text-slate-900 font-mono">
-            {totalDonations} <span className="text-xs font-bold text-slate-500 font-sans">বার</span>
-          </p>
-          <p className="text-[10px] text-emerald-600 font-medium">
-            ≈ {totalDonations * 3} জনের জীবন বাঁচিয়েছেন
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>রক্তদানের প্রস্তুতি</span>
-            <Activity className="w-4 h-4 text-emerald-600" />
-          </div>
-          <p className="text-sm font-bold text-slate-900">
-            {eligibility.eligible ? (
-              <span className="text-emerald-700 flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> প্রস্তুত
-              </span>
-            ) : (
-              <span className="text-amber-700 font-mono text-xs">{eligibility.daysLeft} দিন বাকি</span>
-            )}
-          </p>
-          <p className="text-[10px] text-slate-400">
-            পরবর্তী তারিখ: {eligibility.nextDate}
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>রক্তের আবেদন</span>
-            <Heart className="w-4 h-4 text-rose-600" />
-          </div>
-          <p className="text-2xl font-black text-slate-900 font-mono">
-            {myRequests.length} <span className="text-xs font-bold text-slate-500 font-sans">টি</span>
-          </p>
-          <p className="text-[10px] text-slate-400">ব্যক্তিগত অনুরোধ</p>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>সম্মাননা ব্যাজ</span>
-            <Award className="w-4 h-4 text-purple-600" />
-          </div>
-          <p className="text-sm font-black text-slate-900 truncate">
-            {donorTier.name}
-          </p>
-          <p className="text-[10px] text-slate-400">ভেরিফায়েড সদস্য</p>
         </div>
       </div>
 
@@ -895,59 +1013,168 @@ export const ProfilePage: React.FC = () => {
       {/* TAB 4: BLOOD REQUESTS */}
       {/* ========================================================================= */}
       {activeTab === 'requests' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h2 className="text-base font-black text-slate-900 tracking-tight">
-                আমার রক্তের আবেদনসমূহ
-              </h2>
-              <p className="text-xs text-slate-500">আপনার তৈরি করা জরুরি রক্তের রিকোয়েস্ট ট্র্যাকিং</p>
+        <div className="space-y-6 animate-in fade-in duration-150">
+          {/* Section A: Volunteer to Donate Blood (Open Requests) */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-red-100 text-red-600 flex items-center justify-center text-xs">🩸</span>
+                  জরুরি রক্তের আবেদনসমূহ (সাড়া দিন)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  হাসপাতালে মুমূর্ষু রোগীর প্রয়োজনে রক্তদানে এগিয়ে আসুন
+                </p>
+              </div>
+              <Link
+                to="/find-blood"
+                className="text-xs text-red-600 font-bold hover:underline self-start sm:self-auto"
+              >
+                সকল আবেদন দেখুন →
+              </Link>
             </div>
-            <Link
-              to="/request-blood"
-              className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1"
-            >
-              <Heart className="w-3.5 h-3.5" />
-              নতুন আবেদন করুন
-            </Link>
+
+            {bloodRequests.filter((r) => r.status === 'active' || r.status === 'verified').length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {bloodRequests
+                  .filter((r) => r.status === 'active' || r.status === 'verified')
+                  .slice(0, 6)
+                  .map((req) => {
+                    const isVolunteered = Boolean(volunteeredIds[req.id]);
+                    const isCurrentProcessing = volunteeringId === req.id;
+                    const isMatch = myDonor?.bloodGroup && req.bloodGroup === myDonor.bloodGroup;
+
+                    return (
+                      <div
+                        key={req.id}
+                        className={`p-4 rounded-xl border transition-all space-y-3 ${
+                          isMatch
+                            ? 'bg-red-50/40 border-red-200'
+                            : 'bg-slate-50/60 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono font-black text-white text-sm bg-red-600 px-2.5 py-1 rounded-lg shadow-2xs">
+                              {req.bloodGroup}
+                            </span>
+                            <div>
+                              <h3 className="font-bold text-slate-900 text-xs sm:text-sm">
+                                {req.patientName || 'রোগীর রক্ত প্রয়োজন'}
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                {req.hospital}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-500">
+                            {req.requiredUnits} ব্যাগ
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-slate-500 border-t border-slate-200/60">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400" />
+                            {req.upazila}, {req.district}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-700">
+                            তারিখ: {req.requiredDate}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Link
+                            to={`/request/${req.id}`}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors"
+                          >
+                            বিস্তারিত
+                          </Link>
+                          <button
+                            type="button"
+                            disabled={isVolunteered || isCurrentProcessing}
+                            onClick={() => handleVolunteerForRequest(req)}
+                            className={`px-3.5 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                              isVolunteered
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                : 'bg-red-600 hover:bg-red-700 text-white border border-red-700/60'
+                            }`}
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${isVolunteered ? 'text-emerald-600 fill-emerald-600' : 'fill-white'}`} />
+                            {isVolunteered
+                              ? '✅ আপনি সাড়া দিয়েছেন'
+                              : isCurrentProcessing
+                              ? 'সংরক্ষণ হচ্ছে...'
+                              : '❤️ আমি রক্ত দিতে চাই'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="py-8 text-center space-y-2 text-slate-400">
+                <Heart className="w-8 h-8 mx-auto text-slate-300" />
+                <p className="text-xs font-medium">এই মুহূর্তে কোনো সক্রিয় রক্তের আবেদন নেই।</p>
+              </div>
+            )}
           </div>
 
-          {myRequests.length > 0 ? (
-            <div className="space-y-3 pt-2">
-              {myRequests.map((req) => (
-                <div
-                  key={req.id}
-                  className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-red-700 text-sm bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                        {req.bloodGroup}
-                      </span>
-                      <span className="font-bold text-slate-900 text-sm">{req.patientName}</span>
-                      <span className="font-mono text-slate-400 text-[11px]">({req.requestId})</span>
-                    </div>
-                    <p className="text-slate-500">
-                      হাসপাতাল: {req.hospital} • প্রয়োজনীয় তারিখ: {req.requiredDate} ({req.requiredUnits} ব্যাগ)
-                    </p>
-                  </div>
+          {/* Section B: My Personal Blood Requests */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-black text-slate-900 tracking-tight">
+                  আমার তৈরি করা রক্তের আবেদনসমূহ
+                </h2>
+                <p className="text-xs text-slate-500">আপনার তৈরি করা জরুরি রক্তের রিকোয়েস্ট ট্র্যাকিং</p>
+              </div>
+              <Link
+                to="/request-blood"
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1"
+              >
+                <Heart className="w-3.5 h-3.5" />
+                নতুন আবেদন করুন
+              </Link>
+            </div>
 
-                  <Link
-                    to={`/request/${req.id}`}
-                    className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-red-700 border border-slate-300 rounded-lg font-bold flex items-center gap-1 transition-colors self-start sm:self-center"
+            {myRequests.length > 0 ? (
+              <div className="space-y-3 pt-2">
+                {myRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                   >
-                    <span>ম্যাচিং ডোনার দেখুন</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center space-y-2 text-slate-400">
-              <Heart className="w-10 h-10 mx-auto text-slate-300" />
-              <p className="text-xs font-medium">আপনার কোনো সক্রিয় রক্তের আবেদন নেই।</p>
-            </div>
-          )}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-red-700 text-sm bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                          {req.bloodGroup}
+                        </span>
+                        <span className="font-bold text-slate-900 text-sm">{req.patientName}</span>
+                        <span className="font-mono text-slate-400 text-[11px]">({req.requestId})</span>
+                      </div>
+                      <p className="text-slate-500">
+                        হাসপাতাল: {req.hospital} • প্রয়োজনীয় তারিখ: {req.requiredDate} ({req.requiredUnits} ব্যাগ)
+                      </p>
+                    </div>
+
+                    <Link
+                      to={`/request/${req.id}`}
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-red-700 border border-slate-300 rounded-lg font-bold flex items-center gap-1 transition-colors self-start sm:self-center"
+                    >
+                      <span>ম্যাচিং ডোনার দেখুন</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center space-y-2 text-slate-400">
+                <Heart className="w-8 h-8 mx-auto text-slate-300" />
+                <p className="text-xs font-medium">আপনার তৈরি করা কোনো সক্রিয় রক্তের আবেদন নেই।</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1517,8 +1744,8 @@ export const ProfilePage: React.FC = () => {
                 onClick={() =>
                   printCertificateInStandaloneWindow({
                     donor: myDonor,
-                    orgName: orgConfig.name,
-                    logoUrl: orgConfig.logoUrl,
+                    orgName: config.name,
+                    logoUrl: config.logoUrl,
                   })
                 }
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Heart,
   Droplets,
@@ -7,6 +7,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  UserCheck,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +21,7 @@ const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 
 export const BecomeDonorPage: React.FC = () => {
   const navigate = useNavigate();
   const { registerDonor } = useData();
-  const { currentUser, updateCurrentUser } = useAuth();
+  const { currentUser, register, updateCurrentUser } = useAuth();
 
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
@@ -25,6 +29,9 @@ export const BecomeDonorPage: React.FC = () => {
   const [dateOfBirth, setDateOfBirth] = useState('2000-01-01');
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [email, setEmail] = useState(currentUser?.email || '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [district, setDistrict] = useState('Dhaka');
   const [upazila, setUpazila] = useState('Dhamrai');
   const [area, setArea] = useState('');
@@ -54,7 +61,23 @@ export const BecomeDonorPage: React.FC = () => {
       return;
     }
 
-    // Age validation (18 - 60 years)
+    // Password & Email validation for guest registration
+    if (!currentUser) {
+      if (!email.trim() || !email.includes('@')) {
+        setErrorMessage('লগইন ও অ্যাকাউন্টের জন্য একটি বৈধ ইমেইল এড্রেস প্রদান করুন।');
+        return;
+      }
+      if (!password || password.length < 6) {
+        setErrorMessage('অ্যাকাউন্টের সুরক্ষায় পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('পাসওয়ার্ড ও কনফার্ম পাসওয়ার্ড মিলছে না।');
+        return;
+      }
+    }
+
+    // Age validation (18 - 65 years)
     const birthYear = new Date(dateOfBirth).getFullYear();
     const currentYear = new Date().getFullYear();
     const age = currentYear - birthYear;
@@ -70,10 +93,25 @@ export const BecomeDonorPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      let activeUserId = currentUser?.id;
+
+      // 1. If not logged in, create real Supabase Auth account & public.users record
+      if (!activeUserId) {
+        const authProfile = await register(
+          fullName.trim(),
+          email.trim().toLowerCase(),
+          phone.trim(),
+          'donor',
+          password
+        );
+        activeUserId = authProfile.id;
+      }
+
       const branchId = district === 'Manikganj' ? 'br-mnk' : (upazila === 'Dhamrai' ? 'br-dhm' : 'br-svr');
 
+      // 2. Create public.donors record strictly synchronized with auth user ID
       const donor = await registerDonor({
-        userId: currentUser?.id || `user-${Date.now()}`,
+        userId: activeUserId,
         fullName: fullName.trim(),
         bloodGroup,
         gender,
@@ -133,29 +171,30 @@ export const BecomeDonorPage: React.FC = () => {
           </div>
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <span className="text-xs text-slate-500 font-medium">ভেরিফিকেশন স্ট্যাটাস</span>
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-              যাচাইকরণ প্রক্রিয়া চলমান (Pending)
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 flex items-center gap-1">
+              <span>🟡</span>
+              <span>যাচাই করা বাকি (Pending)</span>
             </span>
           </div>
           <div className="text-xs text-slate-500">
-            সংগঠনের স্বেচ্ছাসেবক টিম শীঘ্রই আপনার সাথে যোগাযোগ করে পরিচয় নিশ্চিত করবে।
+            সংগঠনের দায়িত্বশীল টিম শীঘ্রই আপনার তথ্য ও রক্তের গ্রুপ যাচাই সম্পন্ন করবে। আপনি এখন থেকে রক্তদানের অনুরোধে সাড়া দিতে পারবেন।
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
-            onClick={() => navigate(`/donor/${successDonor.id}`)}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-xs border border-red-700/60 transition-colors"
+            onClick={() => navigate('/profile')}
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-xs border border-red-700/60 transition-colors cursor-pointer"
           >
-            প্রোফাইল দেখুন
+            আমার রক্তদাতা ড্যাশবোর্ডে যান
           </button>
           <button
             type="button"
-            onClick={() => navigate('/find-blood')}
-            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors"
+            onClick={() => navigate(`/donor/${successDonor.id}`)}
+            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
           >
-            হোমপেজে যান
+            পাবলিক প্রোফাইল দেখুন
           </button>
         </div>
       </div>
@@ -279,10 +318,11 @@ export const BecomeDonorPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                ইমেইল (ঐচ্ছিক)
+                ইমেইল এড্রেস (লগইন এর জন্য) *
               </label>
               <input
                 type="email"
+                required={!currentUser}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@example.com"
@@ -350,7 +390,73 @@ export const BecomeDonorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 3: Availability & History */}
+        {/* Section 3: Account Credentials */}
+        {!currentUser ? (
+          <div className="space-y-4 pt-2 border-t border-slate-100 bg-red-50/50 p-4 rounded-xl border border-red-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-red-600" />
+                <h2 className="text-xs font-bold text-slate-800">
+                  ৩. অ্যাকাউন্ট লগইন ও পাসওয়ার্ড সেট করুন
+                </h2>
+              </div>
+              <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">
+                বাধ্যতামূলক
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              নিবন্ধনের পর এই ইমেইল ও পাসওয়ার্ড দিয়ে আপনি সরাসরি নিজের রক্তদাতা অ্যাকাউন্টে লগইন করতে পারবেন।
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  পাসওয়ার্ড সেট করুন (ন্যূনতম ৬ অক্ষর) *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required={!currentUser}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pr-10 pl-3 py-2 rounded-lg text-xs border border-slate-300 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  পাসওয়ার্ড নিশ্চিত করুন *
+                </label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required={!currentUser}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2.5 text-xs text-emerald-800">
+            <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              আপনি <strong>{currentUser.fullName}</strong> ({currentUser.email || currentUser.phone}) হিসেবে লগইন রয়েছেন। এই অ্যাকাউন্টের সাথে রক্তদাতা প্রোফাইল তৈরি হবে।
+            </span>
+          </div>
+        )}
+
+        {/* Section 4: Availability & History */}
         <div className="space-y-4 pt-2 border-t border-slate-100">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
             ৩. রক্তদানের প্রস্তুতি ও ইতিহাস
@@ -465,12 +571,19 @@ export const BecomeDonorPage: React.FC = () => {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full py-3 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xs border border-red-700/60 flex items-center justify-center gap-2 transition-transform active:scale-98 disabled:opacity-50"
+          className="w-full py-3 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xs border border-red-700/60 flex items-center justify-center gap-2 transition-transform active:scale-98 disabled:opacity-50 cursor-pointer"
         >
           <Droplets className="w-4 h-4 fill-white" />
           {isSubmitting ? 'নিবন্ধন সম্পন্ন হচ্ছে...' : 'রক্তদাতা হিসেবে নিবন্ধন সম্পন্ন করুন'}
         </button>
       </form>
+
+      <div className="text-center text-xs text-slate-500 pb-8">
+        ইতিমধ্যে অ্যাকাউন্ট আছে?{' '}
+        <Link to="/login" className="text-red-600 font-bold hover:underline">
+          লগইন পাতায় যান
+        </Link>
+      </div>
     </div>
   );
 };

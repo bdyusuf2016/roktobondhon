@@ -595,7 +595,7 @@ export const AdminUsersTab: React.FC = () => {
           setSelectedUserForEdit(null);
         }}
         userToEdit={selectedUserForEdit}
-        onSave={async (data) => {
+        onSave={async (data, password) => {
           const currentRoleTarget = selectedUserForEdit ? selectedUserForEdit.role : 'volunteer';
           const validation = validateRoleAssignment(
             currentUser?.role,
@@ -620,10 +620,10 @@ export const AdminUsersTab: React.FC = () => {
               theme: 'success',
             });
           } else {
-            await addUser(data);
+            await addUser(data, password);
             dialog.alert({
               title: 'নতুন টিম মেম্বার যুক্ত',
-              message: `"${data.fullName}" সফলভাবে প্ল্যাটফর্মে যুক্ত করা হয়েছে।`,
+              message: `"${data.fullName}" (${data.email}) সফলভাবে প্ল্যাটফর্মে যুক্ত করা হয়েছে। নির্ধারিত পাসওয়ার্ড দিয়ে ব্যবহারকারী লগইন করতে পারবেন।`,
               theme: 'success',
             });
           }
