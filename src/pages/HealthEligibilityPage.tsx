@@ -35,16 +35,16 @@ interface HealthFormState {
 }
 
 const INITIAL_HEALTH_FORM: HealthFormState = {
-  age: 24,
-  weight: 58,
+  age: 0,
+  weight: 0,
   gender: 'male',
-  lastDonationMonths: 4,
+  lastDonationMonths: 0,
   hasFeverOrCold: false,
   takingAntibiotics: false,
   recentTattooOrSurgery: false,
   hasChronicIllness: false,
   isPregnantOrLactating: false,
-  feelingHealthyToday: true,
+  feelingHealthyToday: false,
 };
 
 export const HealthEligibilityPage: React.FC = () => {
@@ -91,7 +91,10 @@ export const HealthEligibilityPage: React.FC = () => {
   const reasons: string[] = [];
   let isEligible = true;
 
-  if (form.age < 18) {
+  if (form.age <= 0) {
+    isEligible = false;
+    reasons.push('অনুগ্রহ করে আপনার সঠিক বয়স উল্লেখ করুন (সর্বনিম্ন ১৮ বছর)।');
+  } else if (form.age < 18) {
     isEligible = false;
     reasons.push('রক্তদানের জন্য সর্বনিম্ন বয়স ১৮ বছর হতে হবে।');
   } else if (form.age > 65) {
@@ -99,7 +102,10 @@ export const HealthEligibilityPage: React.FC = () => {
     reasons.push('সাধারণত ৬৫ বছরের বেশি বয়সে নিয়মিত রক্তদান নিরুৎসাহিত করা হয়।');
   }
 
-  if (form.weight < 45) {
+  if (form.weight <= 0) {
+    isEligible = false;
+    reasons.push('অনুগ্রহ করে আপনার শরীরের সঠিক ওজন উল্লেখ করুন (সর্বনিম্ন ৪৫ কেজি)।');
+  } else if (form.weight < 45) {
     isEligible = false;
     reasons.push('রক্তদানের জন্য ন্যূনতম ওজন ৪৫ কেজি (পুরুষদের ক্ষেত্রে ৫০ কেজি আদর্শ) হতে হবে।');
   }
@@ -334,10 +340,11 @@ Behavior Instructions:
                 <label className="text-xs font-bold text-slate-700 block mb-1">বয়স (বছর) *</label>
                 <input
                   type="number"
-                  min={10}
-                  max={90}
-                  value={form.age}
-                  onChange={(e) => setForm({ ...form, age: Number(e.target.value) })}
+                  min={0}
+                  max={120}
+                  value={form.age === 0 ? '' : form.age}
+                  onChange={(e) => setForm({ ...form, age: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="0"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-red-500 font-bold text-slate-800"
                 />
               </div>
@@ -346,10 +353,11 @@ Behavior Instructions:
                 <label className="text-xs font-bold text-slate-700 block mb-1">ওজন (কেজি) *</label>
                 <input
                   type="number"
-                  min={30}
-                  max={150}
-                  value={form.weight}
-                  onChange={(e) => setForm({ ...form, weight: Number(e.target.value) })}
+                  min={0}
+                  max={200}
+                  value={form.weight === 0 ? '' : form.weight}
+                  onChange={(e) => setForm({ ...form, weight: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="0"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-red-500 font-bold text-slate-800"
                 />
               </div>
@@ -375,9 +383,9 @@ Behavior Instructions:
                   type="number"
                   min={0}
                   max={60}
-                  value={form.lastDonationMonths}
-                  onChange={(e) => setForm({ ...form, lastDonationMonths: Number(e.target.value) })}
-                  placeholder="প্রথমবার হলে ০ দিন"
+                  value={form.lastDonationMonths === 0 ? '' : form.lastDonationMonths}
+                  onChange={(e) => setForm({ ...form, lastDonationMonths: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="0 (প্রথমবার হলে ০)"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-red-500"
                 />
               </div>
