@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
+import { useDialog } from '../contexts/DialogContext';
+
 interface HealthFormState {
   age: number;
   weight: number;
@@ -32,22 +34,34 @@ interface HealthFormState {
   feelingHealthyToday: boolean;
 }
 
-export const HealthEligibilityPage: React.FC = () => {
-  const [form, setForm] = useState<HealthFormState>({
-    age: 24,
-    weight: 58,
-    gender: 'male',
-    lastDonationMonths: 4,
-    hasFeverOrCold: false,
-    takingAntibiotics: false,
-    recentTattooOrSurgery: false,
-    hasChronicIllness: false,
-    isPregnantOrLactating: false,
-    feelingHealthyToday: true,
-  });
+const INITIAL_HEALTH_FORM: HealthFormState = {
+  age: 24,
+  weight: 58,
+  gender: 'male',
+  lastDonationMonths: 4,
+  hasFeverOrCold: false,
+  takingAntibiotics: false,
+  recentTattooOrSurgery: false,
+  hasChronicIllness: false,
+  isPregnantOrLactating: false,
+  feelingHealthyToday: true,
+};
 
+export const HealthEligibilityPage: React.FC = () => {
+  const dialog = useDialog();
+  const [form, setForm] = useState<HealthFormState>({ ...INITIAL_HEALTH_FORM });
   const [step, setStep] = useState<number>(1);
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
+
+  const handleResetForm = () => {
+    setForm({ ...INITIAL_HEALTH_FORM });
+    setIsCalculated(false);
+    dialog.alert({
+      title: 'ফর্ম রিসেট সম্পন্ন',
+      message: 'স্বাস্থ্য স্ক্রিনিং ফর্মের সকল তথ্য সফলভাবে রিসেট করা হয়েছে।',
+      theme: 'success',
+    });
+  };
 
   // Gemini AI Conversational Chat State
   interface ChatMessage {
@@ -303,24 +317,13 @@ Behavior Instructions:
               প্রাথমিক স্বাস্থ্য স্ক্রিনিং
             </h2>
             <button
-              onClick={() => {
-                setIsCalculated(false);
-                setForm({
-                  age: 24,
-                  weight: 58,
-                  gender: 'male',
-                  lastDonationMonths: 4,
-                  hasFeverOrCold: false,
-                  takingAntibiotics: false,
-                  recentTattooOrSurgery: false,
-                  hasChronicIllness: false,
-                  isPregnantOrLactating: false,
-                  feelingHealthyToday: true,
-                });
-              }}
-              className="text-xs text-slate-500 hover:text-red-600 font-semibold flex items-center gap-1 cursor-pointer"
+              type="button"
+              onClick={handleResetForm}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200/80 active:scale-95 shadow-2xs"
+              title="ফর্মের সকল তথ্য রিসেট করুন"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> রিসেট
+              <RotateCcw className="w-3.5 h-3.5 text-red-500" />
+              রিসেট
             </button>
           </div>
 
@@ -457,14 +460,25 @@ Behavior Instructions:
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsCalculated(true)}
-              className="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-2xl shadow-lg transition transform active:scale-98 cursor-pointer text-sm flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              যোগ্যতা ফলাফল দেখুন
-            </button>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsCalculated(true)}
+                className="flex-1 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-2xl shadow-lg transition transform active:scale-98 cursor-pointer text-sm flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                যোগ্যতা ফলাফল দেখুন
+              </button>
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="px-4 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl border border-slate-200 transition active:scale-98 cursor-pointer text-sm flex items-center justify-center gap-1.5"
+                title="ফর্ম রিসেট করুন"
+              >
+                <RotateCcw className="w-4 h-4 text-slate-500" />
+                রিসেট
+              </button>
+            </div>
           </div>
         </div>
 
@@ -490,8 +504,17 @@ Behavior Instructions:
               </div>
             ) : isEligible ? (
               <div className="space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-xs font-extrabold uppercase tracking-wider text-emerald-100">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-200" /> চমৎকার!
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-xs font-extrabold uppercase tracking-wider text-emerald-100">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200" /> চমৎকার!
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="text-xs text-emerald-100 hover:text-white flex items-center gap-1 font-bold underline cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> পুনরায় পরীক্ষা
+                  </button>
                 </div>
                 <h3 className="text-2xl font-black text-white leading-tight">
                   অভিনন্দন! আপনি আজ রক্তদানের জন্য পুরোপুরি যোগ্য।
@@ -500,19 +523,35 @@ Behavior Instructions:
                   আপনার বয়স, ওজন এবং শারীরিক অবস্থা রক্তদানের উপযুক্ত নির্দেশ করে। আপনার রক্তদান একজন মুমূর্ষু রোগীর প্রাণ ফিরিয়ে দিতে পারে।
                 </p>
 
-                <div className="pt-2">
+                <div className="pt-2 flex flex-wrap items-center gap-2">
                   <a
                     href="/find-blood"
                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-emerald-800 font-bold rounded-xl text-xs shadow hover:bg-emerald-50 transition"
                   >
                     জরুরি রক্তের আবেদনগুলো দেখুন <ArrowRight className="w-3.5 h-3.5" />
                   </a>
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> রিসেট
+                  </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-xs font-extrabold uppercase tracking-wider text-rose-100">
-                  <XCircle className="w-4 h-4 text-rose-200" /> সাময়িক স্থগিত
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-xs font-extrabold uppercase tracking-wider text-rose-100">
+                    <XCircle className="w-4 h-4 text-rose-200" /> সাময়িক স্থগিত
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="text-xs text-rose-100 hover:text-white flex items-center gap-1 font-bold underline cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> পুনরায় পরীক্ষা
+                  </button>
                 </div>
                 <h3 className="text-xl font-black text-white leading-tight">
                   আপনি এই মুহূর্তে রক্তদানের জন্য উপযুক্ত নন
@@ -524,6 +563,16 @@ Behavior Instructions:
                       <span>{r}</span>
                     </div>
                   ))}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> নতুন করে যাচাই করুন (রিসেট)
+                  </button>
                 </div>
               </div>
             )}
