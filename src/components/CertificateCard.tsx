@@ -201,7 +201,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
         <div className="flex items-center justify-center w-full py-2">
           <div
             id="official-certificate-sheet"
-            className="certificate-sheet relative w-full max-w-[289mm] bg-radial from-white via-amber-50/20 to-orange-50/40 text-slate-900 border-8 border-amber-700 outline outline-3 outline-amber-400 -outline-offset-8 rounded-2xl p-6 sm:p-9 md:p-10 shadow-2xl overflow-hidden font-sans transition-all mx-auto"
+            className="certificate-sheet relative w-full max-w-[289mm] bg-radial from-white via-amber-50/20 to-orange-50/40 text-slate-900 border-8 border-amber-700 outline outline-3 outline-amber-400 -outline-offset-8 rounded-2xl p-6 sm:p-9 md:p-10 pb-9 sm:pb-12 md:pb-14 shadow-2xl overflow-hidden font-sans transition-all mx-auto"
           >
             {/* Subtle Watermark BG */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.035] pointer-events-none select-none">
@@ -261,15 +261,15 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                 </div>
               </div>
 
-              {/* 2. Main Body (Prominent & Large) */}
-              <div className="py-2 text-center space-y-3.5">
-                <p className="text-sm sm:text-base text-slate-700 font-semibold italic">
+              {/* 2. Main Body (Prominent & Large with comfortable Line Spacing) */}
+              <div className="py-2 text-center space-y-4">
+                <p className="text-sm sm:text-base text-slate-700 font-semibold italic tracking-wide">
                   অত্যন্ত গৌরব ও গভীর কৃতজ্ঞতার সহিত এই সম্মাননা প্রশংসাপত্র প্রদান করা হচ্ছে —
                 </p>
 
                 {/* Honoree / Donor Name */}
                 <div className="inline-block px-8 py-1.5 border-b-2 border-red-600 bg-gradient-to-r from-transparent via-red-50/70 to-transparent">
-                  <h3 className="text-3xl sm:text-5xl md:text-6xl font-black text-red-700 tracking-tight">
+                  <h3 className="text-3xl sm:text-5xl md:text-6xl font-black text-red-700 tracking-tight leading-snug">
                     {donor.fullName}
                   </h3>
                 </div>
@@ -292,8 +292,8 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                   </span>
                 </div>
 
-                {/* Commendation Paragraph */}
-                <p className="max-w-3xl mx-auto text-sm sm:text-base md:text-lg text-slate-900 leading-relaxed font-medium pt-1">
+                {/* Commendation Paragraph with enhanced line-height */}
+                <p className="max-w-3xl mx-auto text-sm sm:text-base md:text-lg text-slate-900 leading-[1.85] font-medium pt-1.5 pb-1">
                   জরুরি মুহূর্তে মুমূর্ষু রোগীর জীবন রক্ষার্থে নিঃস্বার্থভাবে <strong>{donor.totalDonations} বার রক্তদান</strong> করে মানবতার এক উজ্জ্বল ও অনুপ্রেরণাদায়ী দৃষ্টান্ত স্থাপন করেছেন।
                   সমাজ, দেশ ও মানবজাতির কল্যাণে আপনার এই মহান আত্মত্যাগের স্বীকৃতিস্বরূপ ‘<strong>{orgNameBn}</strong>’-এর পক্ষ থেকে
                   আপনাকে জানাই আন্তরিক মোবারকবাদ, অসীম শ্রদ্ধা ও রক্তিম শুভেচ্ছা।
@@ -329,8 +329,8 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                 )}
               </div>
 
-              {/* 3. Footer / Signature & QR Row with Domain */}
-              <div className="pt-3 border-t-2 border-amber-200/90 grid grid-cols-3 items-end gap-2 text-center text-xs">
+              {/* 3. Footer / Signature & QR Row (Elevated safely above bottom frame) */}
+              <div className="pt-4 pb-2 mb-1 border-t-2 border-amber-200/90 grid grid-cols-3 items-end gap-2 text-center text-xs">
                 {/* Left: Dynamic Scannable Live QR Code */}
                 <div className="space-y-0.5 text-left">
                   <div className="flex items-center gap-3">
@@ -359,8 +359,8 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
 
                 {/* Center: Official Golden Seal */}
                 <div className="flex flex-col items-center justify-center">
-                  <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full border-2 border-dashed border-amber-600 flex flex-col items-center justify-center bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-white shadow-lg rotate-[-4deg]">
-                    <ShieldCheck className="w-8 h-8 sm:w-9 sm:h-9" />
+                  <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full border-2 border-dashed border-amber-600 flex flex-col items-center justify-center bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-white shadow-lg rotate-[-4deg]">
+                    <ShieldCheck className="w-7 h-7 sm:w-8 sm:h-8" />
                     <span className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-tighter text-center leading-tight mt-0.5">
                       ভেরিফাইড সিল<br />কালামপুর ঢাকা
                     </span>

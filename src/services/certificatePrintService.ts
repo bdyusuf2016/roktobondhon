@@ -119,7 +119,7 @@ export const generateCertificateHtml = ({
       outline: 3px solid #f59e0b;
       outline-offset: -11px;
       border-radius: 6px;
-      padding: 6mm 10mm 5mm 10mm;
+      padding: 6mm 10mm 11mm 10mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -232,8 +232,8 @@ export const generateCertificateHtml = ({
       gap: 15px;
     }
     .brand-logo {
-      width: 58px;
-      height: 58px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
       object-fit: cover;
       border: 2.5px solid #d97706;
@@ -266,7 +266,7 @@ export const generateCertificateHtml = ({
       color: #ffffff;
       padding: 4px 30px;
       border-radius: 30px;
-      font-size: 16px;
+      font-size: 15.5px;
       font-weight: 800;
       letter-spacing: 1.5px;
       text-transform: uppercase;
@@ -283,13 +283,14 @@ export const generateCertificateHtml = ({
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 5px;
+      gap: 6px;
     }
     .intro-text {
-      font-size: 16px;
+      font-size: 15.5px;
       color: #334155;
       font-weight: 600;
       font-style: italic;
+      letter-spacing: 0.2px;
     }
     .donor-name-wrap {
       display: inline-block;
@@ -302,8 +303,8 @@ export const generateCertificateHtml = ({
       font-size: 38px;
       font-weight: 900;
       color: #991b1b;
-      letter-spacing: -0.4px;
-      line-height: 1.15;
+      letter-spacing: -0.3px;
+      line-height: 1.22;
     }
 
     /* Credentials Pill Row */
@@ -345,14 +346,15 @@ export const generateCertificateHtml = ({
       border: 1.5px solid #6ee7b7;
     }
 
-    /* Commendation Statement */
+    /* Commendation Statement (Increased Line-Height & Readability) */
     .commendation {
-      font-size: 16.5px;
+      font-size: 16px;
       color: #0f172a;
-      line-height: 1.6;
+      line-height: 1.85;
       max-width: 255mm;
-      margin: 2px auto;
+      margin: 3px auto;
       font-weight: 500;
+      letter-spacing: 0.15px;
     }
     .commendation strong {
       color: #991b1b;
@@ -369,33 +371,35 @@ export const generateCertificateHtml = ({
       gap: 12px;
       background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fed7aa 100%);
       border: 2px solid #f59e0b;
-      padding: 5px 24px;
+      padding: 4px 22px;
       border-radius: 18px;
       box-shadow: 0 3px 8px rgba(245, 158, 11, 0.25);
     }
     .badge-icon-box {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       background: #d97706;
       color: #ffffff;
       border-radius: 7px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 15px;
+      font-size: 14px;
     }
     .badge-pill-text {
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: 800;
       color: #78350f;
     }
 
     /* ======================================================== */
-    /* 3. FOOTER SECTION (Prominent QR, Seal & Signatures)     */
+    /* 3. FOOTER SECTION (Elevated safely above bottom frame)   */
     /* ======================================================== */
     .footer {
       border-top: 2px solid #fde68a;
       padding-top: 6px;
+      padding-bottom: 3px;
+      margin-bottom: 2px;
       display: grid;
       grid-template-columns: 1.35fr 0.75fr 1fr;
       align-items: flex-end;
@@ -410,30 +414,30 @@ export const generateCertificateHtml = ({
       gap: 12px;
     }
     .qr-img {
-      width: 70px;
-      height: 70px;
+      width: 64px;
+      height: 64px;
       border: 2px solid #94a3b8;
       border-radius: 8px;
       background: #ffffff;
-      padding: 2.5px;
+      padding: 2px;
       image-rendering: crisp-edges;
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
     .qr-meta {
-      font-size: 12px;
+      font-size: 11.5px;
       color: #334155;
-      line-height: 1.38;
+      line-height: 1.35;
       font-weight: 600;
     }
     .qr-meta strong {
       color: #0f172a;
       font-family: 'Outfit', monospace;
-      font-size: 13px;
+      font-size: 12.5px;
       letter-spacing: 0.3px;
       font-weight: 800;
     }
     .qr-domain {
-      font-size: 11.5px;
+      font-size: 11px;
       color: #0284c7;
       font-family: 'Outfit', monospace;
       font-weight: 700;
@@ -441,11 +445,11 @@ export const generateCertificateHtml = ({
       margin-top: 1px;
     }
     .qr-scan-label {
-      font-size: 11px;
+      font-size: 10.5px;
       color: #047857;
       font-weight: 800;
       display: block;
-      margin-top: 2px;
+      margin-top: 1.5px;
       letter-spacing: 0.2px;
     }
 
@@ -457,8 +461,8 @@ export const generateCertificateHtml = ({
       justify-content: center;
     }
     .seal-badge {
-      width: 68px;
-      height: 68px;
+      width: 62px;
+      height: 62px;
       border-radius: 50%;
       background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b 45%, #b45309 85%, #78350f 100%);
       border: 2.5px dashed #ffffff;
@@ -473,17 +477,17 @@ export const generateCertificateHtml = ({
       transform: rotate(-3deg);
     }
     .seal-icon {
-      font-size: 17px;
+      font-size: 16px;
       line-height: 1;
       text-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
     .seal-text {
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: -0.2px;
       line-height: 1.15;
-      margin-top: 2px;
+      margin-top: 1.5px;
       text-shadow: 0 1px 2px rgba(0,0,0,0.4);
       text-align: center;
     }
@@ -495,20 +499,20 @@ export const generateCertificateHtml = ({
     .sig-line {
       display: inline-block;
       border-bottom: 2.5px solid #0f172a;
-      padding: 0 24px 3px 24px;
-      font-size: 18px;
+      padding: 0 22px 2px 22px;
+      font-size: 17px;
       font-weight: 900;
       font-style: italic;
       color: #0f172a;
     }
     .sig-title {
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 800;
       color: #1e293b;
-      margin-top: 3px;
+      margin-top: 2px;
     }
     .sig-org {
-      font-size: 11px;
+      font-size: 10.5px;
       color: #64748b;
       font-weight: 700;
     }
