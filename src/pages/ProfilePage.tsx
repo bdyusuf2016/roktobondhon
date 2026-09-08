@@ -40,6 +40,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { INITIAL_LOCATIONS } from '../services/locationService';
+import { printCertificateInStandaloneWindow } from '../services/certificatePrintService';
 import type { BloodGroup, Gender } from '../types';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -428,14 +429,24 @@ export const ProfilePage: React.FC = () => {
             </button>
 
             {myDonor && (
-              <button
-                type="button"
-                onClick={() => setShowDonorCardModal(true)}
-                className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              >
-                <CreditCard className="w-3.5 h-3.5 text-red-600" />
-                রক্তদাতা কার্ড
-              </button>
+              <>
+                <Link
+                  to={`/certificate?donorId=${myDonor.donorId}`}
+                  className="px-3.5 py-2 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl border border-amber-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-600" />
+                  সনদপত্র ও মেডেল
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDonorCardModal(true)}
+                  className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-red-600" />
+                  রক্তদাতা কার্ড
+                </button>
+              </>
             )}
 
             <button
@@ -1494,13 +1505,26 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
+              <Link
+                to={`/certificate?donorId=${myDonor.donorId}`}
+                className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-950 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <Award className="w-3.5 h-3.5 text-amber-700" />
+                পূর্ণাঙ্গ সনদপত্র
+              </Link>
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() =>
+                  printCertificateInStandaloneWindow({
+                    donor: myDonor,
+                    orgName: orgConfig.name,
+                    logoUrl: orgConfig.logoUrl,
+                  })
+                }
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Download className="w-3.5 h-3.5" />
-                প্রিন্ট / সেভ করুন
+                প্রিন্ট / সেভ
               </button>
             </div>
           </div>

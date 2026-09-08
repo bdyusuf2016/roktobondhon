@@ -114,11 +114,19 @@ export const DonorProfilePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-red-700/60 transition-colors"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-red-700/60 transition-colors cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
               রক্তের অনুরোধ পাঠান
             </button>
+
+            <Link
+              to={`/certificate?donorId=${donor.donorId}`}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-300 transition-colors shadow-2xs"
+            >
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              সনদপত্র ও মেডেল
+            </Link>
 
             {canSeePhone && (
               <a

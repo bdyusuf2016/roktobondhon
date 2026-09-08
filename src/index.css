@@ -42,3 +42,97 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ========================================================================= */
+/* HIGH-FIDELITY A4 LANDSCAPE PRINT STYLES */
+/* ========================================================================= */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+
+  /* Force background colors, gradients & graphics in print */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Hide all UI elements except printable sheet */
+  header,
+  nav,
+  footer,
+  aside,
+  .print-hidden,
+  [data-no-print="true"],
+  .bottom-nav,
+  .emergency-alert-banner,
+  .emergency-banner,
+  .scroll-to-top-button {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Reset body and html to exact single A4 Landscape sheet */
+  html, body {
+    width: 297mm !important;
+    height: 210mm !important;
+    max-height: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: hidden !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Full-Page Majestic A4 Landscape Certificate Sheet */
+  .certificate-sheet {
+    width: 289mm !important;
+    height: 202mm !important;
+    min-height: 202mm !important;
+    max-height: 202mm !important;
+    max-width: 289mm !important;
+    box-sizing: border-box !important;
+    margin: 4mm auto !important;
+    padding: 7mm 11mm 6mm 11mm !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-before: avoid !important;
+    break-before: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: 8px solid #b45309 !important;
+    outline: 3px solid #f59e0b !important;
+    outline-offset: -11px !important;
+    position: relative !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+  }
+
+  .id-card-sheet {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    margin: 15mm auto !important;
+  }
+}
+
+

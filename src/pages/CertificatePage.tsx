@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CertificateCard } from '../components/CertificateCard';
@@ -8,14 +9,35 @@ import { Award, Search, Droplet, CheckCircle2, ShieldCheck, Heart, Sparkles, Use
 export const CertificatePage: React.FC = () => {
   const { donors } = useData();
   const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
+
+  const queryDonorId = searchParams.get('donorId') || searchParams.get('id');
 
   const [searchQuery, setSearchQuery] = useState('');
-  // Default to current user's donor record or first verified donor with donations
-  const initialDonor = donors.find((d) => d.userId === currentUser?.id) ||
+  
+  // Default to query parameter, then current user's donor record, then first verified donor with donations
+  const matchedFromParam = queryDonorId
+    ? donors.find(
+        (d) =>
+          d.id.toLowerCase() === queryDonorId.toLowerCase() ||
+          d.donorId.toLowerCase() === queryDonorId.toLowerCase()
+      )
+    : null;
+
+  const initialDonor =
+    matchedFromParam ||
+    donors.find((d) => d.userId === currentUser?.id) ||
     donors.find((d) => d.totalDonations > 0) ||
     donors[0];
 
   const [selectedDonorId, setSelectedDonorId] = useState<string>(initialDonor?.id || '');
+
+  // Update selection if query param changes
+  useEffect(() => {
+    if (matchedFromParam) {
+      setSelectedDonorId(matchedFromParam.id);
+    }
+  }, [matchedFromParam]);
 
   const filteredDonors = donors.filter((d) => {
     if (!searchQuery.trim()) return false;

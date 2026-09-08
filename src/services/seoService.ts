@@ -35,8 +35,8 @@ function setLinkTag(rel: string, href: string) {
 export function generateStructuredData(config: SeoSettingsConfig, orgConfig?: any) {
   const orgName = orgConfig?.organizationName || 'রক্ত দান পরিবার কালামপুর';
   const orgPhone = orgConfig?.phone || '+8801700000000';
-  const orgEmail = orgConfig?.email || 'info@roktobondhon.org';
-  const orgWebsite = config.canonicalUrl || 'https://bdyusuf2016.github.io/roktobondhon/';
+  const orgEmail = orgConfig?.email || 'help@roktodanporibar.com';
+  const orgWebsite = config.canonicalUrl || 'https://roktodanporibar.com/';
 
   return {
     '@context': 'https://schema.org',

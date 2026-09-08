@@ -42,13 +42,15 @@ function AppContent() {
   useSEO();
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-600 selection:text-white">
-      <ScrollToTop />
-      <EmergencyAlertBanner />
-      <EmergencyBanner />
-      <Navbar />
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-red-600 selection:text-white print:bg-white print:p-0">
+      <div className="print:hidden">
+        <ScrollToTop />
+        <EmergencyAlertBanner />
+        <EmergencyBanner />
+        <Navbar />
+      </div>
 
-      <main className="flex-1 pb-16 md:pb-0">
+      <main className="flex-1 pb-16 md:pb-0 print:pb-0 print:m-0">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/find-blood" element={<FindBloodPage />} />
@@ -77,8 +79,10 @@ function AppContent() {
         </Routes>
       </main>
 
-      <Footer />
-      <BottomNav />
+      <div className="print:hidden">
+        <Footer />
+        <BottomNav />
+      </div>
     </div>
   );
 }
