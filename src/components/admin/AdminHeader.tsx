@@ -29,7 +29,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-red-600/90 text-white border border-red-500/40 shadow-xs">
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <img
+                src={`${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}logo.png`}
+                alt="Logo"
+                className="w-4 h-4 rounded-full object-cover shrink-0"
+              />
               <span>রক্ত দান পরিবার কালামপুর কন্ট্রোল সেন্টার</span>
             </span>
 

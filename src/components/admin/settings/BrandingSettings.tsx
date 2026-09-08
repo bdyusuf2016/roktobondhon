@@ -80,15 +80,24 @@ export const BrandingSettings: React.FC = () => {
           <label className="block font-bold text-slate-800 mb-1">
             লোগো ইমেজ URL (ঐচ্ছিক)
           </label>
-          <div className="relative">
-            <Image className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="url"
-              value={formData.logoUrl}
-              onChange={(e) => handleChange('logoUrl', e.target.value)}
-              placeholder="https://.../logo.png"
-              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white font-mono"
-            />
+          <div className="flex items-center gap-2">
+            {formData.logoUrl && (
+              <img
+                src={formData.logoUrl}
+                alt="Logo Preview"
+                className="w-9 h-9 rounded-full object-cover border border-slate-300 shrink-0 shadow-2xs"
+              />
+            )}
+            <div className="relative flex-1">
+              <Image className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={formData.logoUrl}
+                onChange={(e) => handleChange('logoUrl', e.target.value)}
+                placeholder="/roktobondhon/logo.png"
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white font-mono text-xs"
+              />
+            </div>
           </div>
         </div>
 
@@ -96,15 +105,24 @@ export const BrandingSettings: React.FC = () => {
           <label className="block font-bold text-slate-800 mb-1">
             ফেভিকন URL (ঐচ্ছিক)
           </label>
-          <div className="relative">
-            <Image className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="url"
-              value={formData.faviconUrl}
-              onChange={(e) => handleChange('faviconUrl', e.target.value)}
-              placeholder="https://.../favicon.ico"
-              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white font-mono"
-            />
+          <div className="flex items-center gap-2">
+            {formData.faviconUrl && (
+              <img
+                src={formData.faviconUrl}
+                alt="Favicon Preview"
+                className="w-9 h-9 rounded-lg object-cover border border-slate-300 shrink-0 shadow-2xs"
+              />
+            )}
+            <div className="relative flex-1">
+              <Image className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={formData.faviconUrl}
+                onChange={(e) => handleChange('faviconUrl', e.target.value)}
+                placeholder="/roktobondhon/favicon.png"
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none bg-white font-mono text-xs"
+              />
+            </div>
           </div>
         </div>
       </div>

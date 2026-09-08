@@ -92,8 +92,18 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
 
         {/* Certificate Header */}
         <div className="relative z-10 text-center space-y-3 pb-6 border-b border-amber-200/80">
-          <div className="inline-flex items-center justify-center p-3 bg-red-600 text-white rounded-2xl shadow-lg shadow-red-200">
-            <Droplet className="w-8 h-8 fill-current" />
+          <div className="inline-flex items-center justify-center">
+            {config?.branding?.logoUrl ? (
+              <img
+                src={config.branding.logoUrl}
+                alt="Logo"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover shadow-lg ring-2 ring-amber-300"
+              />
+            ) : (
+              <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg shadow-red-200">
+                <Droplet className="w-8 h-8 fill-current" />
+              </div>
+            )}
           </div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-red-700 via-rose-800 to-amber-700 bg-clip-text text-transparent">
             {config?.organization?.organizationNameBn || config?.organization?.organizationName || 'রক্ত দান পরিবার কালামপুর'}
@@ -194,9 +204,17 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor, onClose
           {/* Card Top */}
           <div className="flex items-center justify-between border-b border-rose-500/20 pb-4 mb-4">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-red-600 rounded-lg">
-                <Droplet className="w-5 h-5 fill-current" />
-              </div>
+              {config?.branding?.logoUrl ? (
+                <img
+                  src={config.branding.logoUrl}
+                  alt="Logo"
+                  className="w-7 h-7 rounded-full object-cover border border-rose-400/50 shrink-0"
+                />
+              ) : (
+                <div className="p-1.5 bg-red-600 rounded-lg">
+                  <Droplet className="w-5 h-5 fill-current" />
+                </div>
+              )}
               <div>
                 <h4 className="font-black text-sm tracking-wide">রক্ত দান পরিবার কালামপুর</h4>
                 <p className="text-[10px] text-rose-300">DONOR DIGITAL CARD</p>

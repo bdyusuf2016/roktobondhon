@@ -337,9 +337,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Sidebar Header & Counter */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center shadow-xs">
-            <Sliders className="w-3.5 h-3.5" />
-          </div>
+          <img
+            src={`${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}logo.png`}
+            alt="Logo"
+            className="w-7 h-7 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
+          />
           <div>
             <h3 className="text-xs font-black text-slate-800 tracking-tight">কন্ট্রোল মডিউল</h3>
             <p className="text-[10px] text-slate-400 font-medium">সিস্টেম নেভিগেশন</p>

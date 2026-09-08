@@ -40,8 +40,8 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     facebookUrl: 'https://facebook.com/roktodanporibarkalampur',
   },
   branding: {
-    logoUrl: '',
-    faviconUrl: '',
+    logoUrl: `${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}logo.png`,
+    faviconUrl: `${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}favicon.png`,
     primaryColor: '#dc2626',
     headerTitle: 'রক্ত দান পরিবার কালামপুর',
     headerSubtitle: 'কালামপুর • ধামরাই • সাভার',

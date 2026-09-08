@@ -114,9 +114,17 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center justify-between h-16 sm:h-17 gap-2 sm:gap-4">
           {/* Logo & Brand Identity */}
           <Link to="/" onClick={() => scrollToTop(true)} className="flex items-center gap-2 sm:gap-2.5 shrink-0 group">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center text-white shadow-xs transition-transform group-hover:scale-105 shrink-0">
-              <Droplets className="w-5 h-5 sm:w-5.5 sm:h-5.5 fill-white" />
-            </div>
+            {config.logoUrl ? (
+              <img
+                src={config.logoUrl}
+                alt={config.name}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shrink-0 shadow-xs ring-1 ring-red-100 transition-transform group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center text-white shadow-xs transition-transform group-hover:scale-105 shrink-0">
+                <Droplets className="w-5 h-5 sm:w-5.5 sm:h-5.5 fill-white" />
+              </div>
+            )}
             <div className="min-w-0">
               <span className="font-black text-base sm:text-lg text-slate-900 tracking-tight block leading-tight truncate">
                 {config.name}

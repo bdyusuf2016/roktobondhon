@@ -3,6 +3,7 @@ import { BaseModal } from './BaseModal';
 import { Heart, CheckCircle2, Copy, Download, Share2, ShieldCheck, Droplets } from 'lucide-react';
 import type { FundDonation } from '../../types';
 import { useDialog } from '../../contexts/DialogContext';
+import { useOrgConfig } from '../../contexts/OrgConfigContext';
 
 interface DonationReceiptModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const DonationReceiptModal: React.FC<DonationReceiptModalProps> = ({
   donation,
 }) => {
   const dialog = useDialog();
+  const { config } = useOrgConfig();
 
   if (!donation) return null;
 
@@ -63,12 +65,20 @@ export const DonationReceiptModal: React.FC<DonationReceiptModalProps> = ({
         <div className="p-5 bg-gradient-to-b from-red-50/70 to-slate-50 border-2 border-dashed border-red-200 rounded-2xl space-y-4 relative overflow-hidden">
           <div className="flex items-center justify-between border-b border-red-100 pb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white">
-                <Droplets className="w-4 h-4 fill-white" />
-              </div>
+              {config.logoUrl ? (
+                <img
+                  src={config.logoUrl}
+                  alt={config.name}
+                  className="w-8 h-8 rounded-full object-cover border border-red-200 shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white shrink-0">
+                  <Droplets className="w-4 h-4 fill-white" />
+                </div>
+              )}
               <div>
                 <span className="font-bold text-xs text-slate-900 block leading-tight">
-                  রক্ত দান পরিবার কালামপুর
+                  {config.name}
                 </span>
                 <span className="text-[10px] text-red-600 font-semibold">
                   স্বীকৃতি ও অনুদান রসিদ

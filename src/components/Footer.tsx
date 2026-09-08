@@ -13,9 +13,17 @@ export const Footer: React.FC = () => {
           {/* Column 1: Brand & Mission */}
           <div className="space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-red-600 border border-red-500/40 flex items-center justify-center text-white shadow-xs">
-                <Droplets className="w-5 h-5 fill-white" />
-              </div>
+              {config.logoUrl ? (
+                <img
+                  src={config.logoUrl}
+                  alt={config.name}
+                  className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-red-600 border border-red-500/40 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <Droplets className="w-5 h-5 fill-white" />
+                </div>
+              )}
               <span className="font-bold text-lg text-white tracking-tight">{config.name}</span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
