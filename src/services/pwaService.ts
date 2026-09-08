@@ -201,8 +201,10 @@ export async function registerAppServiceWorker(): Promise<ServiceWorkerRegistrat
   }
 
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
+    const basePath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/';
+    const swUrl = `${basePath}sw.js`;
+    const registration = await navigator.serviceWorker.register(swUrl, {
+      scope: basePath,
     });
     return registration;
   } catch (err) {
