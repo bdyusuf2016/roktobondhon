@@ -86,8 +86,21 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
 সনদপত্র নং: ${certNumber}
 প্রতিষ্ঠান: ${orgNameBn}
 
-অনলাইনে সনদপত্রটি যাচাই ও সংরক্ষণ করতে ভিজিট করুন:
+অনলাইনে সনদপত্রটি যাচাই ও PDF ডাউনলোড করতে ভিজিট করুন:
 ${verifyUrl}`;
+
+  const whatsappShareText = `🩸 *রক্তদান স্বীকৃতি সনদপত্র (Official Recognition Certificate)* 🩸
+
+👤 *সম্মানিত রক্তদাতা:* ${donor.fullName}
+🩸 *রক্তের গ্রুপ:* ${donor.bloodGroup}
+🎖️ *মোট রক্তদান:* ${donor.totalDonations} বার
+📜 *সনদপত্র আইডি:* ${certNumber}
+🏛️ *প্রদানকারী সংস্থা:* ${orgNameBn}
+
+📄 *অফিশিয়াল A4 PDF সনদপত্র ডাউনলোড ও অনলাইন ভেরিফিকেশন লিঙ্ক:*
+👉 ${verifyUrl}
+
+_(লিঙ্কে প্রবেশ করে 'PDF সংরক্ষণ / প্রিন্ট' বাটনে চাপ দিয়ে সরাসরি হাই-কোয়ালিটি A4 ল্যান্ডস্কেপ PDF সংরক্ষণ ও ভেরিফাই করা যাবে)_`;
 
   // Generate live QR code on mount or donor change
   useEffect(() => {
@@ -141,9 +154,9 @@ ${verifyUrl}`;
     }
   };
 
-  // WhatsApp Share
+  // WhatsApp Share with rich PDF download and verification message
   const handleShareWhatsApp = () => {
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullShareText)}`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappShareText)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
