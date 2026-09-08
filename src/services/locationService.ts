@@ -21,7 +21,7 @@ export const INITIAL_LOCATIONS: LocationItem[] = [
       'Rowail',
       'Sanora',
       'Sombhag',
-      'Sutiakhag',
+      'Sutipara',
     ],
     isActive: true,
   },
