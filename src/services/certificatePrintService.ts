@@ -119,7 +119,7 @@ export const generateCertificateHtml = ({
       outline: 3px solid #f59e0b;
       outline-offset: -11px;
       border-radius: 6px;
-      padding: 6mm 10mm 11mm 10mm;
+      padding: 8mm 18mm 16mm 18mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -232,8 +232,8 @@ export const generateCertificateHtml = ({
       gap: 15px;
     }
     .brand-logo {
-      width: 56px;
-      height: 56px;
+      width: 54px;
+      height: 54px;
       border-radius: 50%;
       object-fit: cover;
       border: 2.5px solid #d97706;
@@ -283,10 +283,10 @@ export const generateCertificateHtml = ({
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 6px;
+      gap: 5px;
     }
     .intro-text {
-      font-size: 15.5px;
+      font-size: 15px;
       color: #334155;
       font-weight: 600;
       font-style: italic;
@@ -294,17 +294,17 @@ export const generateCertificateHtml = ({
     }
     .donor-name-wrap {
       display: inline-block;
-      margin: 1px auto 3px auto;
+      margin: 1px auto 2px auto;
       border-bottom: 3.5px double #dc2626;
-      padding: 0 40px 4px 40px;
+      padding: 0 40px 3px 40px;
       background: linear-gradient(to right, transparent, #fff1f2 20%, #fff1f2 80%, transparent);
     }
     .donor-name {
-      font-size: 38px;
+      font-size: 36px;
       font-weight: 900;
       color: #991b1b;
       letter-spacing: -0.3px;
-      line-height: 1.22;
+      line-height: 1.2;
     }
 
     /* Credentials Pill Row */
@@ -313,12 +313,12 @@ export const generateCertificateHtml = ({
       align-items: center;
       justify-content: center;
       gap: 12px;
-      margin: 3px 0 5px 0;
+      margin: 2px 0 4px 0;
     }
     .tag {
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 800;
-      padding: 4px 16px;
+      padding: 3.5px 15px;
       border-radius: 20px;
       display: inline-flex;
       align-items: center;
@@ -348,11 +348,11 @@ export const generateCertificateHtml = ({
 
     /* Commendation Statement (Increased Line-Height & Readability) */
     .commendation {
-      font-size: 16px;
+      font-size: 15.5px;
       color: #0f172a;
-      line-height: 1.85;
-      max-width: 255mm;
-      margin: 3px auto;
+      line-height: 1.82;
+      max-width: 248mm;
+      margin: 2px auto;
       font-weight: 500;
       letter-spacing: 0.15px;
     }
@@ -363,7 +363,7 @@ export const generateCertificateHtml = ({
 
     /* Milestone Achievement Banner */
     .badge-showcase {
-      margin-top: 2px;
+      margin-top: 1px;
     }
     .badge-pill {
       display: inline-flex;
@@ -387,7 +387,7 @@ export const generateCertificateHtml = ({
       font-size: 14px;
     }
     .badge-pill-text {
-      font-size: 14.5px;
+      font-size: 14px;
       font-weight: 800;
       color: #78350f;
     }
@@ -398,7 +398,7 @@ export const generateCertificateHtml = ({
     .footer {
       border-top: 2px solid #fde68a;
       padding-top: 6px;
-      padding-bottom: 3px;
+      padding-bottom: 2px;
       margin-bottom: 2px;
       display: grid;
       grid-template-columns: 1.35fr 0.75fr 1fr;
@@ -406,22 +406,25 @@ export const generateCertificateHtml = ({
       text-align: center;
     }
 
-    /* Left: High-Contrast QR Code Box */
+    /* Left: High-Contrast QR Code Box with Safe Margin from Corner */
     .qr-col {
       text-align: left;
       display: flex;
       align-items: center;
       gap: 12px;
+      padding-left: 6px;
+      padding-bottom: 3px;
     }
     .qr-img {
-      width: 64px;
-      height: 64px;
+      width: 58px;
+      height: 58px;
       border: 2px solid #94a3b8;
       border-radius: 8px;
       background: #ffffff;
       padding: 2px;
       image-rendering: crisp-edges;
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      flex-shrink: 0;
     }
     .qr-meta {
       font-size: 11.5px;
@@ -459,10 +462,11 @@ export const generateCertificateHtml = ({
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      padding-bottom: 3px;
     }
     .seal-badge {
-      width: 62px;
-      height: 62px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b 45%, #b45309 85%, #78350f 100%);
       border: 2.5px dashed #ffffff;
@@ -477,7 +481,7 @@ export const generateCertificateHtml = ({
       transform: rotate(-3deg);
     }
     .seal-icon {
-      font-size: 16px;
+      font-size: 15px;
       line-height: 1;
       text-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
@@ -487,26 +491,28 @@ export const generateCertificateHtml = ({
       text-transform: uppercase;
       letter-spacing: -0.2px;
       line-height: 1.15;
-      margin-top: 1.5px;
+      margin-top: 1px;
       text-shadow: 0 1px 2px rgba(0,0,0,0.4);
       text-align: center;
     }
 
-    /* Right: Authority Signature */
+    /* Right: Authority Signature with Safe Margin from Corner */
     .sig-col {
       text-align: right;
+      padding-right: 6px;
+      padding-bottom: 3px;
     }
     .sig-line {
       display: inline-block;
       border-bottom: 2.5px solid #0f172a;
-      padding: 0 22px 2px 22px;
-      font-size: 17px;
+      padding: 0 20px 2px 20px;
+      font-size: 16.5px;
       font-weight: 900;
       font-style: italic;
       color: #0f172a;
     }
     .sig-title {
-      font-size: 12.5px;
+      font-size: 12px;
       font-weight: 800;
       color: #1e293b;
       margin-top: 2px;

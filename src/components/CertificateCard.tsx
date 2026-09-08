@@ -201,7 +201,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
         <div className="flex items-center justify-center w-full py-2">
           <div
             id="official-certificate-sheet"
-            className="certificate-sheet relative w-full max-w-[289mm] bg-radial from-white via-amber-50/20 to-orange-50/40 text-slate-900 border-8 border-amber-700 outline outline-3 outline-amber-400 -outline-offset-8 rounded-2xl p-6 sm:p-9 md:p-10 pb-9 sm:pb-12 md:pb-14 shadow-2xl overflow-hidden font-sans transition-all mx-auto"
+            className="certificate-sheet relative w-full max-w-[289mm] bg-radial from-white via-amber-50/20 to-orange-50/40 text-slate-900 border-8 border-amber-700 outline outline-3 outline-amber-400 -outline-offset-8 rounded-2xl px-8 sm:px-12 md:px-14 pt-6 sm:pt-8 md:pt-9 pb-12 sm:pb-16 md:pb-18 shadow-2xl overflow-hidden font-sans transition-all mx-auto"
           >
             {/* Subtle Watermark BG */}
             <div className="absolute inset-0 flex items-center justify-center opacity-[0.035] pointer-events-none select-none">
@@ -262,7 +262,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
               </div>
 
               {/* 2. Main Body (Prominent & Large with comfortable Line Spacing) */}
-              <div className="py-2 text-center space-y-4">
+              <div className="py-2 text-center space-y-3.5">
                 <p className="text-sm sm:text-base text-slate-700 font-semibold italic tracking-wide">
                   অত্যন্ত গৌরব ও গভীর কৃতজ্ঞতার সহিত এই সম্মাননা প্রশংসাপত্র প্রদান করা হচ্ছে —
                 </p>
@@ -293,7 +293,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                 </div>
 
                 {/* Commendation Paragraph with enhanced line-height */}
-                <p className="max-w-3xl mx-auto text-sm sm:text-base md:text-lg text-slate-900 leading-[1.85] font-medium pt-1.5 pb-1">
+                <p className="max-w-3xl mx-auto text-sm sm:text-base md:text-lg text-slate-900 leading-[1.82] font-medium pt-1.5 pb-1">
                   জরুরি মুহূর্তে মুমূর্ষু রোগীর জীবন রক্ষার্থে নিঃস্বার্থভাবে <strong>{donor.totalDonations} বার রক্তদান</strong> করে মানবতার এক উজ্জ্বল ও অনুপ্রেরণাদায়ী দৃষ্টান্ত স্থাপন করেছেন।
                   সমাজ, দেশ ও মানবজাতির কল্যাণে আপনার এই মহান আত্মত্যাগের স্বীকৃতিস্বরূপ ‘<strong>{orgNameBn}</strong>’-এর পক্ষ থেকে
                   আপনাকে জানাই আন্তরিক মোবারকবাদ, অসীম শ্রদ্ধা ও রক্তিম শুভেচ্ছা।
@@ -332,16 +332,16 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
               {/* 3. Footer / Signature & QR Row (Elevated safely above bottom frame) */}
               <div className="pt-4 pb-2 mb-1 border-t-2 border-amber-200/90 grid grid-cols-3 items-end gap-2 text-center text-xs">
                 {/* Left: Dynamic Scannable Live QR Code */}
-                <div className="space-y-0.5 text-left">
+                <div className="space-y-0.5 text-left pl-2 sm:pl-3 pb-1">
                   <div className="flex items-center gap-3">
                     {qrCodeDataUrl ? (
                       <img
                         src={qrCodeDataUrl}
                         alt="Verify QR Code"
-                        className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl border-2 border-slate-300 bg-white p-1 shadow-xs shrink-0"
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl border-2 border-slate-300 bg-white p-1 shadow-xs shrink-0"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-xl bg-slate-900 text-white p-2 flex items-center justify-center shrink-0 border border-slate-700">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-slate-900 text-white p-2 flex items-center justify-center shrink-0 border border-slate-700">
                         <QrIcon className="w-full h-full" />
                       </div>
                     )}
@@ -358,8 +358,8 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                 </div>
 
                 {/* Center: Official Golden Seal */}
-                <div className="flex flex-col items-center justify-center">
-                  <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full border-2 border-dashed border-amber-600 flex flex-col items-center justify-center bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-white shadow-lg rotate-[-4deg]">
+                <div className="flex flex-col items-center justify-center pb-1">
+                  <div className="w-15 h-15 sm:w-17 sm:h-17 rounded-full border-2 border-dashed border-amber-600 flex flex-col items-center justify-center bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 text-white shadow-lg rotate-[-4deg]">
                     <ShieldCheck className="w-7 h-7 sm:w-8 sm:h-8" />
                     <span className="text-[8.5px] sm:text-[9px] font-black uppercase tracking-tighter text-center leading-tight mt-0.5">
                       ভেরিফাইড সিল<br />কালামপুর ঢাকা
@@ -368,7 +368,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
                 </div>
 
                 {/* Right: Authorized Signatory */}
-                <div className="space-y-0.5 text-right">
+                <div className="space-y-0.5 text-right pr-2 sm:pr-3 pb-1">
                   <div className="inline-block border-b-2 border-slate-800 pb-0.5 px-4">
                     <span className="font-serif italic font-black text-slate-900 text-sm sm:text-lg">
                       {signatoryName}
