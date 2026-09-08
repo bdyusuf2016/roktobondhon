@@ -16,6 +16,11 @@ import {
   Printer,
   ExternalLink,
   Globe,
+  Copy,
+  Check,
+  Send,
+  MessageCircle,
+  Facebook,
 } from 'lucide-react';
 import type { Donor } from '../types';
 import { DONOR_BADGES_LIST } from '../data/seedData';
@@ -43,6 +48,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
   const [activeView, setActiveView] = useState<'certificate' | 'idcard'>('certificate');
   const [isSharing, setIsSharing] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
   // Gamification & Signatory configurations
@@ -75,6 +81,14 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
     day: 'numeric',
   });
 
+  const fullShareText = `🩸 রক্তদান স্বীকৃতি সনদপত্র - ${donor.fullName}
+রক্তের গ্রুপ: ${donor.bloodGroup} | মোট রক্তদান: ${donor.totalDonations} বার
+সনদপত্র নং: ${certNumber}
+প্রতিষ্ঠান: ${orgNameBn}
+
+অনলাইনে সনদপত্রটি যাচাই ও সংরক্ষণ করতে ভিজিট করুন:
+${verifyUrl}`;
+
   // Generate live QR code on mount or donor change
   useEffect(() => {
     let isMounted = true;
@@ -88,7 +102,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
     };
   }, [donor.donorId]);
 
-  // High-fidelity Standalone HTML Print Handler
+  // High-fidelity Standalone HTML Print Handler / PDF Save
   const handleStandalonePrint = async () => {
     setIsPrinting(true);
     try {
@@ -107,31 +121,12 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
     }
   };
 
-  const handleShare = async () => {
-    setIsSharing(true);
-    const shareText = `মানবতার সেবায় নিবেদিতপ্রাণ রক্তদাতা ${donor.fullName}-এর রক্তদান স্বীকৃতি সনদপত্র ও ডিজিটাল ডোনার কার্ড। অনলাইন ভেরিফিকেশন লিঙ্ক: ${verifyUrl}`;
-
-    // Mobile / Web Share API if supported
-    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ url: verifyUrl })) {
-      try {
-        await navigator.share({
-          title: `${donor.fullName} - রক্তদান স্বীকৃতি সনদপত্র`,
-          text: `মানবতার সেবায় নিবেদিতপ্রাণ রক্তদাতা ${donor.fullName}-এর রক্তদান স্বীকৃতি সনদপত্র।`,
-          url: verifyUrl,
-        });
-        setIsSharing(false);
-        return;
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
-          setIsSharing(false);
-          return;
-        }
-      }
-    }
-
-    // Universal copy to clipboard
+  // Copy Verification Link
+  const handleCopyLink = async () => {
     const success = await copyToClipboard(verifyUrl);
     if (success) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
       dialog.alert({
         title: 'ভেরিফিকেশন লিঙ্ক কপি হয়েছে!',
         message: 'সনদপত্রের অনলাইন ভেরিফিকেশন লিঙ্ক ক্লিপবোর্ডে কপি করা হয়েছে। এখন যেকোনো সামাজিক যোগাযোগ মাধ্যম বা মেসেঞ্জারে পেস্ট করে শেয়ার করতে পারেন।',
@@ -144,6 +139,46 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
         theme: 'info',
       });
     }
+  };
+
+  // WhatsApp Share
+  const handleShareWhatsApp = () => {
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullShareText)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Facebook Share
+  const handleShareFacebook = () => {
+    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(verifyUrl)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Telegram Share
+  const handleShareTelegram = () => {
+    const url = `https://t.me/share/url?url=${encodeURIComponent(verifyUrl)}&text=${encodeURIComponent(fullShareText)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Native / General Share
+  const handleShare = async () => {
+    setIsSharing(true);
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare({ url: verifyUrl })) {
+      try {
+        await navigator.share({
+          title: `${donor.fullName} - রক্তদান স্বীকৃতি সনদপত্র`,
+          text: fullShareText,
+          url: verifyUrl,
+        });
+        setIsSharing(false);
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          setIsSharing(false);
+          return;
+        }
+      }
+    }
+    await handleCopyLink();
     setIsSharing(false);
   };
 
@@ -179,25 +214,76 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
           </button>
         </div>
 
-        {/* Actions: Share & Print */}
-        <div className="flex items-center gap-2">
+        {/* Action Buttons: PDF Download, Copy Link, WhatsApp, Share */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Copy Link Button */}
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+              copiedLink
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+            }`}
+            title="সনদপত্রের অনলাইন ভেরিফিকেশন লিঙ্ক কপি করুন"
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                লিঙ্ক কপি হয়েছে!
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                লিঙ্ক কপি
+              </>
+            )}
+          </button>
+
+          {/* WhatsApp Share Button */}
+          <button
+            type="button"
+            onClick={handleShareWhatsApp}
+            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="হোয়াটসঅ্যাপে সনদপত্র শেয়ার করুন"
+          >
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+            WhatsApp
+          </button>
+
+          {/* Facebook Share Button */}
+          <button
+            type="button"
+            onClick={handleShareFacebook}
+            className="px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-800 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="ফেসবুকে সনদপত্র শেয়ার করুন"
+          >
+            <Facebook className="w-3.5 h-3.5 text-sky-600" />
+            Facebook
+          </button>
+
+          {/* Universal Share Button */}
           <button
             type="button"
             onClick={handleShare}
             disabled={isSharing}
-            className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="অন্যান্য সামাজিক মাধ্যমে শেয়ার করুন"
           >
             <Share2 className="w-3.5 h-3.5 text-slate-500" />
-            শেয়ার করুন
+            শেয়ার
           </button>
+
+          {/* High-Fidelity PDF Print / Save Button */}
           <button
             type="button"
             onClick={handleStandalonePrint}
             disabled={isPrinting}
             className="px-5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            title="প্রিন্ট করুন বা PDF হিসেবে সংরক্ষণ করুন"
           >
             <Printer className="w-3.5 h-3.5" />
-            {isPrinting ? 'প্রস্তুত হচ্ছে...' : 'এইচটিএমএল প্রিন্ট / PDF সংরক্ষণ'}
+            {isPrinting ? 'প্রস্তুত হচ্ছে...' : 'PDF সংরক্ষণ / প্রিন্ট'}
           </button>
         </div>
       </div>
@@ -474,6 +560,117 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({ donor }) => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 3. SHARE & VERIFICATION HUB (Direct Link, WhatsApp, FB, Telegram, PDF) */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-5 print:hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center font-bold border border-red-200/80 shadow-2xs shrink-0">
+              <Share2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base sm:text-lg leading-tight">
+                সনদপত্র শেয়ার ও অনলাইন ভেরিফিকেশন লিঙ্ক
+              </h3>
+              <p className="text-xs text-slate-500">
+                এই লিঙ্কটি শেয়ার করলে যে কেউ সরাসরি এই রক্তদাতার অফিশিয়াল সনদপত্র যাচাই ও দেখতে পারবে।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStandalonePrint}
+              disabled={isPrinting}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0"
+            >
+              <Printer className="w-4 h-4" />
+              {isPrinting ? 'প্রস্তুত হচ্ছে...' : 'PDF সংরক্ষণ / প্রিন্ট'}
+            </button>
+          </div>
+        </div>
+
+        {/* Copy Link Input Bar */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-sky-600" />
+            সরাসরি ভেরিফিকেশন লিঙ্ক (Verification URL):
+          </label>
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+            <input
+              type="text"
+              readOnly
+              value={verifyUrl}
+              className="flex-1 bg-transparent px-3 py-2 text-xs sm:text-sm font-mono text-slate-800 font-bold outline-none select-all"
+            />
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-xs ${
+                copiedLink
+                  ? 'bg-emerald-600 text-white shadow-emerald-200'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white'
+              }`}
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-200" />
+                  কপি সম্পন্ন!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  লিঙ্ক কপি করুন
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* 1-Click Social Share Buttons */}
+        <div className="pt-2 flex flex-wrap items-center gap-2.5">
+          <span className="text-xs font-bold text-slate-600">এক ক্লিকে সোশ্যাল শেয়ার:</span>
+          
+          <button
+            type="button"
+            onClick={handleShareWhatsApp}
+            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+          >
+            <MessageCircle className="w-4 h-4" />
+            WhatsApp-এ পাঠান
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShareFacebook}
+            className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+          >
+            <Facebook className="w-4 h-4" />
+            Facebook-এ পোস্ট
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShareTelegram}
+            className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+          >
+            <Send className="w-4 h-4" />
+            Telegram
+          </button>
+
+          <button
+            type="button"
+            onClick={handleShare}
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-2 border border-slate-200 transition cursor-pointer"
+          >
+            <Share2 className="w-4 h-4 text-slate-600" />
+            অন্যান্য শেয়ার
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
