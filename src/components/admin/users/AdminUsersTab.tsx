@@ -1,16 +1,32 @@
 import React, { useState } from 'react';
-import { Users, Key, Plus, RotateCcw, Search, Edit2, Trash2, ShieldCheck, Lock, UserX, UserCheck, AlertTriangle } from 'lucide-react';
+import {
+  Users,
+  Key,
+  Plus,
+  RotateCcw,
+  Search,
+  Edit2,
+  Trash2,
+  ShieldCheck,
+  Lock,
+  UserX,
+  UserCheck,
+  AlertTriangle,
+  Heart,
+  ExternalLink,
+} from 'lucide-react';
 import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useDialog } from '../../../contexts/DialogContext';
 import { UserFormModal } from '../../modals';
 import { PERMISSION_DEFINITIONS } from '../../../data/seedData';
 import { validateRoleAssignment, canManageRole, ROLE_LABELS } from '../../../services/permissionService';
-import type { User, UserRole } from '../../../types';
+import type { User, UserRole, Donor } from '../../../types';
 
 export const AdminUsersTab: React.FC = () => {
   const {
     users,
+    donors,
     updateUserRole,
     updateUser,
     addUser,
@@ -26,10 +42,16 @@ export const AdminUsersTab: React.FC = () => {
   const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
+  const [selectedDonorForPreview, setSelectedDonorForPreview] = useState<Donor | null>(null);
   const [userTabMode, setUserTabMode] = useState<'users' | 'matrix'>('users');
   const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<'all' | 'blood' | 'directory' | 'funds' | 'system'>('all');
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
+
+  // Strictly filter to portal/staff application users (excludes standalone donors/recipients)
+  const staffUsers = users.filter((u) =>
+    ['super_admin', 'admin', 'moderator', 'volunteer'].includes(u.role)
+  );
 
   const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
     const validation = validateRoleAssignment(currentUser?.role, targetUser.role, newRole);
@@ -120,31 +142,31 @@ export const AdminUsersTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* User Metrics */}
+      {/* User Metrics (Administrative accounts only) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <span className="text-xs text-slate-400 font-medium">মোট ইউজার</span>
-          <span className="text-2xl font-black text-slate-900 block mt-1 tracking-tight">{users.length}</span>
-          <span className="text-[10px] text-slate-500">নিবন্ধিত অ্যাকাউন্ট</span>
+          <span className="text-xs text-slate-400 font-medium">মোট টিম মেম্বার</span>
+          <span className="text-2xl font-black text-slate-900 block mt-1 tracking-tight font-mono">{staffUsers.length}</span>
+          <span className="text-[10px] text-slate-500">অনুমোদিত পোর্টাল ইউজার</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">সুপার এডমিন</span>
-          <span className="text-2xl font-black text-purple-700 block mt-1 tracking-tight">
-            {users.filter((u) => u.role === 'super_admin').length}
+          <span className="text-2xl font-black text-purple-700 block mt-1 tracking-tight font-mono">
+            {staffUsers.filter((u) => u.role === 'super_admin').length}
           </span>
           <span className="text-[10px] text-purple-600 font-semibold">পূর্ণ নিয়ন্ত্রণ ক্ষমতা</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">এডমিন ও মডারেটর</span>
-          <span className="text-2xl font-black text-blue-600 block mt-1 tracking-tight">
-            {users.filter((u) => u.role === 'admin' || u.role === 'moderator').length}
+          <span className="text-2xl font-black text-blue-600 block mt-1 tracking-tight font-mono">
+            {staffUsers.filter((u) => u.role === 'admin' || u.role === 'moderator').length}
           </span>
           <span className="text-[10px] text-blue-600 font-semibold">ধামরাই ও সাভার চ্যাপ্টার</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
-          <span className="text-xs text-slate-400 font-medium">স্বেচ্ছাসেবক ও ডোনার</span>
-          <span className="text-2xl font-black text-emerald-600 block mt-1 tracking-tight">
-            {users.filter((u) => u.role === 'volunteer' || u.role === 'donor').length}
+          <span className="text-xs text-slate-400 font-medium">স্বেচ্ছাসেবক টিম</span>
+          <span className="text-2xl font-black text-emerald-600 block mt-1 tracking-tight font-mono">
+            {staffUsers.filter((u) => u.role === 'volunteer').length}
           </span>
           <span className="text-[10px] text-slate-500 font-semibold">ফিল্ড সাপোর্ট সদস্য</span>
         </div>
@@ -163,7 +185,7 @@ export const AdminUsersTab: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>নিবন্ধিত সদস্য তালিকা ({users.length})</span>
+            <span>টিম ও ইউজার অ্যাকাউন্টস ({staffUsers.length})</span>
           </button>
           <button
             type="button"
@@ -186,7 +208,7 @@ export const AdminUsersTab: React.FC = () => {
               setSelectedUserForEdit(null);
               setShowUserModal(true);
             }}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>নতুন সদস্য যুক্ত করুন</span>
@@ -210,7 +232,7 @@ export const AdminUsersTab: React.FC = () => {
                 });
               }
             }}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 shrink-0 transition-colors"
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 shrink-0 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>ডিফল্ট পারমিশন রিস্টোর</span>
@@ -225,7 +247,7 @@ export const AdminUsersTab: React.FC = () => {
             <div>
               <h3 className="font-bold text-slate-900 text-base">ব্যবহারকারী ও ডায়নামিক রোল ব্যবস্থাপনা</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                সদস্যদের রোল পরিবর্তন, মডারেটর অনুমোদন এবং তাৎক্ষণিক পদবী নির্ধারণ
+                এডমিন প্যানেলের অনুমোদিত কর্মী, স্বেচ্ছাসেবক ও কর্মকর্তাদের রোল এবং একাউন্ট নিয়ন্ত্রণ
               </p>
             </div>
           </div>
@@ -247,13 +269,11 @@ export const AdminUsersTab: React.FC = () => {
               onChange={(e) => setUserRoleFilter(e.target.value)}
               className="w-full sm:w-48 px-3 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50 font-medium"
             >
-              <option value="all">সকল রোল ({users.length})</option>
+              <option value="all">সকল এডমিন রোল ({staffUsers.length})</option>
               <option value="super_admin">সুপার এডমিন</option>
               <option value="admin">এডমিন</option>
               <option value="moderator">মডারেটর</option>
               <option value="volunteer">স্বেচ্ছাসেবক</option>
-              <option value="donor">রক্তদাতা</option>
-              <option value="recipient">রক্ত গ্রহীতা</option>
             </select>
           </div>
 
@@ -263,7 +283,8 @@ export const AdminUsersTab: React.FC = () => {
               <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
                 <tr>
                   <th className="py-2.5 px-3 font-semibold">সদস্যের নাম</th>
-                  <th className="py-2.5 px-3 font-semibold">বর্তমান রোল (ডায়নামিক পরিবর্তন)</th>
+                  <th className="py-2.5 px-3 font-semibold">অ্যাডমিন রোল (ডায়নামিক পরিবর্তন)</th>
+                  <th className="py-2.5 px-3 font-semibold">রক্তদাতা প্রোফাইল লিংক</th>
                   <th className="py-2.5 px-3 font-semibold">মোবাইল</th>
                   <th className="py-2.5 px-3 font-semibold">ইমেইল</th>
                   <th className="py-2.5 px-3 font-semibold">শাখা</th>
@@ -271,7 +292,7 @@ export const AdminUsersTab: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users
+                {staffUsers
                   .filter((u) => {
                     if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false;
                     if (userSearch.trim()) {
@@ -284,274 +305,250 @@ export const AdminUsersTab: React.FC = () => {
                     }
                     return true;
                   })
-                  .map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-3">
-                        <div className="font-bold text-slate-900">{u.fullName}</div>
-                        <span className="text-[10px] text-slate-400 font-mono">{u.id}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={u.role}
-                            disabled={!canManageRole(currentUser?.role, u.role)}
-                            onChange={(e) => handleRoleChange(u, e.target.value as UserRole)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                              u.role === 'super_admin'
-                                ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                : u.role === 'admin'
-                                ? 'bg-red-50 text-red-800 border-red-200'
-                                : u.role === 'moderator'
-                                ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                : u.role === 'volunteer'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {/* Only show roles that the actor is allowed to assign */}
-                            {isSuperAdmin && <option value="super_admin">সুপার এডমিন</option>}
-                            {isSuperAdmin && <option value="admin">এডমিন</option>}
-                            {(isSuperAdmin || currentUser?.role === 'admin') && (
-                              <>
-                                <option value="moderator">মডারেটর</option>
-                                <option value="volunteer">স্বেচ্ছাসেবক</option>
-                                <option value="donor">রক্তদাতা</option>
-                                <option value="recipient">রক্ত গ্রহীতা</option>
-                              </>
-                            )}
-                            {!isSuperAdmin && currentUser?.role !== 'admin' && (
-                              <option value={u.role}>{ROLE_LABELS[u.role]?.bn || u.role}</option>
-                            )}
-                          </select>
+                  .map((u) => {
+                    // Check if this staff member also has a linked donor profile
+                    const matchingDonor = donors.find(
+                      (d) => d.userId === u.id || (d.phone && d.phone === u.phone) || (d.email && u.email && d.email.toLowerCase() === u.email.toLowerCase())
+                    );
 
-                          {u.status === 'suspended' ? (
-                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold text-[10px]">
-                              স্থগিত
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold text-[10px]">
-                              সক্রিয়
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-slate-700">{u.phone}</td>
-                      <td className="py-3 px-3 text-slate-500 font-mono">{u.email || '—'}</td>
-                      <td className="py-3 px-3 text-slate-600">
-                        {u.branchId === 'br-dhm'
-                          ? 'ধামরাই শাখা'
-                          : u.branchId === 'br-svr'
-                          ? 'সাভার শাখা'
-                          : 'মানিকগঞ্জ শাখা'}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Suspension toggle */}
-                          <button
-                            type="button"
-                            disabled={!canManageRole(currentUser?.role, u.role)}
-                            onClick={() => handleToggleSuspension(u)}
-                            className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-                              u.status === 'suspended'
-                                ? 'text-emerald-600 hover:bg-emerald-50'
-                                : 'text-amber-600 hover:bg-amber-50'
-                            }`}
-                            title={
-                              !canManageRole(currentUser?.role, u.role)
-                                ? 'অননুমোদিত'
-                                : u.status === 'suspended'
-                                ? 'পুনরায় সক্রিয় করুন'
-                                : 'সাময়িক স্থগিত করুন'
-                            }
-                          >
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900">{u.fullName}</div>
+                          <span className="text-[10px] text-slate-400 font-mono">{u.id}</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={u.role}
+                              disabled={!canManageRole(currentUser?.role, u.role)}
+                              onChange={(e) => handleRoleChange(u, e.target.value as UserRole)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+                                u.role === 'super_admin'
+                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                  : u.role === 'admin'
+                                  ? 'bg-red-50 text-red-800 border-red-200'
+                                  : u.role === 'moderator'
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              }`}
+                            >
+                              {/* Only show roles that the actor is allowed to assign */}
+                              {isSuperAdmin && <option value="super_admin">সুপার এডমিন</option>}
+                              {isSuperAdmin && <option value="admin">এডমিন</option>}
+                              {(isSuperAdmin || currentUser?.role === 'admin') && (
+                                <>
+                                  <option value="moderator">মডারেটর</option>
+                                  <option value="volunteer">স্বেচ্ছাসেবক</option>
+                                </>
+                              )}
+                              {!isSuperAdmin && currentUser?.role !== 'admin' && (
+                                <option value={u.role}>{ROLE_LABELS[u.role]?.bn || u.role}</option>
+                              )}
+                            </select>
+
                             {u.status === 'suspended' ? (
-                              <UserCheck className="w-3.5 h-3.5" />
+                              <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold text-[10px]">
+                                স্থগিত
+                              </span>
                             ) : (
-                              <UserX className="w-3.5 h-3.5" />
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold text-[10px]">
+                                সক্রিয়
+                              </span>
                             )}
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={!canManageRole(currentUser?.role, u.role)}
-                            onClick={() => {
-                              if (!canManageRole(currentUser?.role, u.role)) {
-                                dialog.alert({
-                                  title: 'অননুমোদিত অ্যাকশন',
-                                  message: 'আপনার এই ইউজার সম্পাদনা করার অনুমতি নেই।',
-                                  theme: 'error',
-                                });
-                                return;
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          {matchingDonor ? (
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                                🌱 ডোনার প্রোফাইল বিদ্যমান
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                ID: {matchingDonor.donorId} ({matchingDonor.bloodGroup})
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">প্রোফাইল নেই</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-700">{u.phone}</td>
+                        <td className="py-3 px-3 text-slate-500 font-mono">{u.email || '—'}</td>
+                        <td className="py-3 px-3 text-slate-600">
+                          {u.branchId === 'br-dhm'
+                            ? 'ধামরাই শাখা'
+                            : u.branchId === 'br-svr'
+                            ? 'সাভার শাখা'
+                            : 'মানিকগঞ্জ শাখা'}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Suspension toggle */}
+                            <button
+                              type="button"
+                              disabled={!canManageRole(currentUser?.role, u.role)}
+                              onClick={() => handleToggleSuspension(u)}
+                              className={`p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                                u.status === 'suspended'
+                                  ? 'text-emerald-600 hover:bg-emerald-50'
+                                  : 'text-amber-600 hover:bg-amber-50'
+                              }`}
+                              title={
+                                !canManageRole(currentUser?.role, u.role)
+                                  ? 'অননুমোদিত'
+                                  : u.status === 'suspended'
+                                  ? 'পুনরায় সক্রিয় করুন'
+                                  : 'সাময়িক স্থগিত করুন'
                               }
-                              setSelectedUserForEdit(u);
-                              setShowUserModal(true);
-                            }}
-                            className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={!canManageRole(currentUser?.role, u.role) ? 'অননুমোদিত' : 'ইউজার এডিট'}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!canManageRole(currentUser?.role, u.role)}
-                            onClick={() => handleDeleteUser(u)}
-                            className="p-1.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={!canManageRole(currentUser?.role, u.role) ? 'অননুমোদিত' : 'ইউজার ডিলিট'}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            >
+                              {u.status === 'suspended' ? (
+                                <UserCheck className="w-3.5 h-3.5" />
+                              ) : (
+                                <UserX className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={!canManageRole(currentUser?.role, u.role)}
+                              onClick={() => {
+                                if (!canManageRole(currentUser?.role, u.role)) {
+                                  dialog.alert({
+                                    title: 'অননুমোদিত অ্যাকশন',
+                                    message: 'আপনার এই ইউজারের তথ্য সম্পাদনা করার অনুমতি নেই।',
+                                    theme: 'error',
+                                  });
+                                  return;
+                                }
+                                setSelectedUserForEdit(u);
+                                setShowUserModal(true);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="তথ্য সম্পাদনা"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {isSuperAdmin && (
+                              <button
+                                type="button"
+                                disabled={u.id === currentUser?.id}
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="ইউজার মুছে ফেলুন"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* VIEW 2: DYNAMIC ROLE & PERMISSION MATRIX */}
+      {/* VIEW 2: PERMISSION MATRIX */}
       {userTabMode === 'matrix' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-red-600" />
-                ডায়নামিক রোল ও পারমিশন ম্যাট্রিক্স (Role Permission Matrix)
-              </h3>
+              <h3 className="font-bold text-slate-900 text-base">ডায়নামিক রোল ও পারমিশন ম্যাট্রিক্স (RBAC Matrix)</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                প্রতিটি ইউজার রোলের বিপরীতে ফিচার ব্যবহারের স্বাধীনতা ও অনুমোদন স্তর নিয়ন্ত্রণ করুন
+                প্রতিটি রোলের জন্য বিভিন্ন মডিউলের অ্যাক্সেস পারমিশন নিয়ন্ত্রণ ও কনফিগারেশন
               </p>
             </div>
 
-            {/* Category filters */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[
-                { id: 'all', label: 'সকল পারমিশন' },
-                { id: 'blood', label: '🩸 রক্তদান' },
-                { id: 'directory', label: '🏥 ডিরেক্টরি' },
-                { id: 'funds', label: '💳 তহবিল' },
-                { id: 'system', label: '⚙️ সিস্টেম' },
-              ].map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setMatrixCategoryFilter(cat.id as any)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                    matrixCategoryFilter === cat.id
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('all')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  matrixCategoryFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                সকল
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('blood')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  matrixCategoryFilter === 'blood' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                রক্ত ও সেবা
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('funds')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  matrixCategoryFilter === 'funds' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                অর্থায়ন
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('system')}
+                className={`px-3 py-1 rounded-lg transition-all ${
+                  matrixCategoryFilter === 'system' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                সিস্টেম
+              </button>
             </div>
           </div>
 
-          {/* Matrix Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-y border-slate-200 text-slate-700">
                 <tr>
-                  <th className="py-3 px-3 font-bold min-w-[240px]">ফিচার ও পারমিশন বিবরণী</th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 font-black">
-                      সুপার এডমিন
-                    </span>
-                  </th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-red-100 text-red-900 font-bold">
-                      এডমিন
-                    </span>
-                  </th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 font-bold">
-                      মডারেটর
-                    </span>
-                  </th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 font-bold">
-                      স্বেচ্ছাসেবক
-                    </span>
-                  </th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-medium">
-                      রক্তদাতা
-                    </span>
-                  </th>
-                  <th className="py-3 px-2 font-bold text-center">
-                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-medium">
-                      রক্ত গ্রহীতা
-                    </span>
-                  </th>
+                  <th className="py-2.5 px-3 font-semibold w-1/3">মডিউল পারমিশন</th>
+                  <th className="py-2.5 px-3 font-semibold text-center text-purple-700">সুপার এডমিন</th>
+                  <th className="py-2.5 px-3 font-semibold text-center text-red-700">এডমিন</th>
+                  <th className="py-2.5 px-3 font-semibold text-center text-blue-700">মডারেটর</th>
+                  <th className="py-2.5 px-3 font-semibold text-center text-emerald-700">স্বেচ্ছাসেবক</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {PERMISSION_DEFINITIONS
                   .filter((p) => matrixCategoryFilter === 'all' || p.category === matrixCategoryFilter)
-                  .map((perm) => {
-                    const otherRoles: UserRole[] = ['admin', 'moderator', 'volunteer', 'donor', 'recipient'];
+                  .map((p) => {
+                    const roles: UserRole[] = ['super_admin', 'admin', 'moderator', 'volunteer'];
                     return (
-                      <tr key={perm.key} className="hover:bg-slate-50/70 transition-colors">
+                      <tr key={p.key} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full ${
-                              perm.category === 'blood'
-                                ? 'bg-red-500'
-                                : perm.category === 'directory'
-                                ? 'bg-blue-500'
-                                : perm.category === 'funds'
-                                ? 'bg-emerald-500'
-                                : 'bg-purple-500'
-                            }`} />
-                            {perm.labelBn}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                            {perm.descriptionBn}
-                          </div>
+                          <div className="font-bold text-slate-900">{p.labelBn}</div>
+                          <div className="text-[11px] text-slate-500">{p.descriptionBn}</div>
                         </td>
-
-                        {/* super_admin: locked full access */}
-                        <td className="py-3 px-2 text-center">
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 text-purple-700 font-bold text-[10px] border border-purple-200">
-                            <Lock className="w-3 h-3 text-purple-600" />
-                            পূর্ণ কর্তৃত্ব
-                          </span>
-                        </td>
-
-                        {/* other roles: interactive toggle */}
-                        {otherRoles.map((r) => {
-                          const allowed = Boolean(permissionMatrix[r]?.[perm.key]);
+                        {roles.map((role) => {
+                          const isAllowed = permissionMatrix[role]?.[p.key] ?? false;
+                          const isSuperAdminLocked = role === 'super_admin';
                           return (
-                            <td key={r} className="py-3 px-2 text-center">
+                            <td key={role} className="py-3 px-3 text-center">
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  if (!isSuperAdmin) {
-                                    dialog.alert({
-                                      title: 'অননুমোদিত পারমিশন এডিট',
-                                      message: 'শুধুমাত্র সুপার এডমিন সেন্ট্রাল রোল ও পারমিশন ম্যাট্রিক্স পরিবর্তন করতে পারেন।',
-                                      theme: 'error',
-                                    });
-                                    return;
-                                  }
-
-                                  await updateRolePermission(r, perm.key, !allowed);
-                                  dialog.alert({
-                                    title: 'পারমিশন আপডেট সম্পন্ন',
-                                    message: `"${r}" রোলে "${perm.labelBn}" পারমিশন ${!allowed ? 'অনুমোদন (সক্রিয়)' : 'প্রত্যাহার (নিষ্ক্রিয়)'} করা হয়েছে।`,
-                                    theme: !allowed ? 'success' : 'warning',
-                                  });
-                                }}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${
-                                  allowed
-                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-2xs'
-                                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:text-slate-600'
-                                }`}
-                                title={`ক্লিক করে ${r} রোলের জন্য এই পারমিশন পরিবর্তন করুন`}
+                                disabled={!isSuperAdmin || isSuperAdminLocked}
+                                onClick={() => updateRolePermission(role, p.key, !isAllowed)}
+                                className={`w-6 h-6 rounded-md inline-flex items-center justify-center transition-all ${
+                                  isAllowed
+                                    ? 'bg-emerald-500 text-white shadow-2xs'
+                                    : 'bg-slate-200 text-slate-400'
+                                } ${isSuperAdmin && !isSuperAdminLocked ? 'cursor-pointer hover:scale-105' : 'cursor-not-allowed opacity-80'}`}
+                                title={
+                                  isSuperAdminLocked
+                                    ? 'সুপার এডমিনের সকল পারমিশন অপরিবর্তনীয়'
+                                    : !isSuperAdmin
+                                    ? 'শুধুমাত্র সুপার এডমিন পরিবর্তন করতে পারেন'
+                                    : isAllowed
+                                    ? 'ক্লিক করে পারমিশন প্রত্যাহার করুন'
+                                    : 'ক্লিক করে পারমিশন প্রদান করুন'
+                                }
                               >
-                                {allowed ? '✓ সক্রিয়' : '✕ নিষ্ক্রিয়'}
+                                {isAllowed ? '✓' : '✕'}
                               </button>
                             </td>
                           );
@@ -562,73 +559,17 @@ export const AdminUsersTab: React.FC = () => {
               </tbody>
             </table>
           </div>
-
-          {/* Role Scope Guideline Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-            <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 space-y-1">
-              <span className="font-bold text-purple-900 text-xs block">সুপার এডমিন (Root SuperAdmin):</span>
-              <p className="text-[11px] text-purple-700 leading-relaxed">
-                সিস্টেমের সকল ডেটা, রোল পারমিশন ম্যাট্রিক্স, আর্থিক তহবিল, ডাটাবেজ ব্যাকআপ ও প্ল্যাটফর্ম সেটিংস পরিবর্তনের সর্বোচ্চ একক ক্ষমতা।
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 space-y-1">
-              <span className="font-bold text-blue-900 text-xs block">এডমিন ও চ্যাপ্টার মডারেটর:</span>
-              <p className="text-[11px] text-blue-700 leading-relaxed">
-                ধামরাই, সাভার ও মানিকগঞ্জ চ্যাপ্টারের রক্তদাতা ভেরিফিকেশন, আবেদন অনুমোদন, হাসপাতাল ডিরেক্টরি এবং অনুদান ট্র্যাকিং।
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 space-y-1">
-              <span className="font-bold text-emerald-900 text-xs block">স্বেচ্ছাসেবক ও সাধারণ সদস্য:</span>
-              <p className="text-[11px] text-emerald-700 leading-relaxed">
-                জরুরি রক্তের আবেদন প্রচার, ডোনারদের সাথে যোগাযোগ, রক্তদান রেকর্ড সম্পন্নকরণ এবং রোগীদের তাৎক্ষণিক সহযোগিতা প্রদান।
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
       {/* User Form Modal */}
-      <UserFormModal
-        isOpen={showUserModal}
-        onClose={() => {
-          setShowUserModal(false);
-          setSelectedUserForEdit(null);
-        }}
-        userToEdit={selectedUserForEdit}
-        onSave={async (data, password) => {
-          const currentRoleTarget = selectedUserForEdit ? selectedUserForEdit.role : 'volunteer';
-          const validation = validateRoleAssignment(
-            currentUser?.role,
-            currentRoleTarget,
-            data.role
-          );
-
-          if (!validation.allowed) {
-            dialog.alert({
-              title: 'অননুমোদিত রোল নির্ধারণ',
-              message: validation.reason || 'আপনার এই ইউজার বা রোল অ্যাসাইন করার অনুমতি নেই।',
-              theme: 'error',
-            });
-            return;
-          }
-
-          if (selectedUserForEdit) {
-            await updateUser(selectedUserForEdit.id, data);
-            dialog.alert({
-              title: 'ব্যবহারকারী আপডেট',
-              message: `"${data.fullName}" এর তথ্য সফলভাবে হালনাগাদ করা হয়েছে।`,
-              theme: 'success',
-            });
-          } else {
-            await addUser(data, password);
-            dialog.alert({
-              title: 'নতুন টিম মেম্বার যুক্ত',
-              message: `"${data.fullName}" (${data.email}) সফলভাবে প্ল্যাটফর্মে যুক্ত করা হয়েছে। নির্ধারিত পাসওয়ার্ড দিয়ে ব্যবহারকারী লগইন করতে পারবেন।`,
-              theme: 'success',
-            });
-          }
-        }}
-      />
+      {showUserModal && (
+        <UserFormModal
+          isOpen={showUserModal}
+          onClose={() => setShowUserModal(false)}
+          user={selectedUserForEdit}
+        />
+      )}
     </div>
   );
 };

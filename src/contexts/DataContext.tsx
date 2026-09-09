@@ -4,6 +4,8 @@ import type {
   BloodRequest,
   Branch,
   Donation,
+  DonationSubmission,
+  DonationSubmissionStatus,
   Donor,
   DonorPublic,
   DonorPrivate,
@@ -58,7 +60,22 @@ import {
   sendDonorContactRequest,
   respondToDonorRequest,
 } from '../services/donorRequestService';
-import { recordDonationInFirestore, deleteDonationInFirestore } from '../services/donationService';
+import {
+  recordDonationInFirestore,
+  updateDonationInSupabase,
+  deleteDonationInFirestore,
+} from '../services/donationService';
+import {
+  mapDonationSubmissionRow,
+  getAllDonationSubmissionsFromSupabase,
+  submitDonationReportInSupabase,
+  updateDonationSubmissionInSupabase,
+  cancelDonationSubmissionInSupabase,
+  approveDonationSubmissionInSupabase,
+  rejectDonationSubmissionInSupabase,
+  requestDonationSubmissionInfoInSupabase,
+  checkDuplicateDonation,
+} from '../services/donationSubmissionService';
 import { sendNotificationToSupabase } from '../services/notificationService';
 import { recordAuditLog } from '../services/auditService';
 import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
@@ -69,6 +86,7 @@ interface DataContextType {
   bloodRequests: BloodRequest[];
   donorRequests: DonorRequest[];
   donations: Donation[];
+  donationSubmissions: DonationSubmission[];
   locations: LocationItem[];
   branches: Branch[];
   notifications: NotificationItem[];
@@ -98,7 +116,22 @@ interface DataContextType {
   sendDonorRequest: (bloodRequestId: string, donor: Donor, requesterUserId: string, matchScore: number) => Promise<DonorRequest>;
   respondDonorRequest: (requestId: string, status: 'accepted' | 'maybe' | 'declined', declineReason?: string) => Promise<void>;
   recordDonation: (donation: Omit<Donation, 'id'>) => Promise<Donation>;
+  updateDonation: (id: string, data: Partial<Donation>) => Promise<void>;
   deleteDonation: (donationId: string) => Promise<void>;
+  submitDonationReport: (
+    data: Omit<
+      DonationSubmission,
+      'id' | 'status' | 'submittedAt' | 'createdAt' | 'updatedAt' | 'reviewedAt' | 'reviewedBy' | 'reviewNotes' | 'approvedDonationId'
+    >
+  ) => Promise<DonationSubmission>;
+  updateDonationSubmission: (
+    id: string,
+    updates: Partial<Pick<DonationSubmission, 'donationDate' | 'hospital' | 'location' | 'campId' | 'bloodRequestId' | 'units' | 'donationType' | 'notes'>>
+  ) => Promise<void>;
+  cancelDonationSubmission: (id: string) => Promise<void>;
+  approveDonationSubmission: (id: string, reviewNotes?: string) => Promise<{ success: boolean; donationId?: string }>;
+  rejectDonationSubmission: (id: string, reason: string) => Promise<void>;
+  requestDonationSubmissionInfo: (id: string, message: string) => Promise<void>;
   addBloodCamp: (camp: Omit<BloodCamp, 'id' | 'createdAt' | 'registeredCount'>) => Promise<BloodCamp>;
   updateBloodCamp: (id: string, data: Partial<BloodCamp>) => Promise<void>;
   deleteBloodCamp: (id: string) => Promise<void>;
@@ -151,6 +184,7 @@ const STORAGE_KEYS = {
   REQUESTS: 'roktobondon_requests_v1',
   DONOR_REQUESTS: 'roktobondon_donor_requests_v1',
   DONATIONS: 'roktobondon_donations_v1',
+  DONATION_SUBMISSIONS: 'roktobondon_donation_submissions_v1',
   LOCATIONS: 'roktobondon_locations_v1',
   BRANCHES: 'roktobondon_branches_v1',
   NOTIFICATIONS: 'roktobondon_notifications_v1',
@@ -212,6 +246,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return [];
+  });
+
+  const [donationSubmissions, setDonationSubmissions] = useState<DonationSubmission[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.DONATION_SUBMISSIONS);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {
         console.error(e);
       }
@@ -611,6 +658,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }))
           );
         }
+
+        // 11. Fetch donation submissions
+        const { data: subData } = await supabase
+          .from('donation_submissions')
+          .select('*')
+          .order('submitted_at', { ascending: false });
+        if (subData && subData.length > 0 && isMounted) {
+          setDonationSubmissions(subData.map(mapDonationSubmissionRow));
+        }
       } catch (err) {
         console.warn('Supabase initial synchronization notice:', err);
       } finally {
@@ -680,6 +736,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
   }, [donations]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.DONATION_SUBMISSIONS, JSON.stringify(donationSubmissions));
+  }, [donationSubmissions]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
@@ -1184,42 +1244,86 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setDonations((prev) => [newDonation, ...prev]);
 
-    // Also update donor's totalDonations & lastDonationDate (only update date if non-null)
+    // Update donor's totalDonations and lastDonationDate
     setDonors((prev) =>
-      prev.map((d) =>
-        d.donorId === donationData.donorId || d.userId === donationData.donorUserId || d.id === donationData.donorId
-          ? {
-              ...d,
-              totalDonations: (d.totalDonations || 0) + 1,
-              lastDonationDate: donationData.donationDate || d.lastDonationDate,
-              availability: false,
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (
+          d.donorId === donationData.donorId ||
+          (donationData.donorUserId && d.userId === donationData.donorUserId) ||
+          d.id === donationData.donorId
+        ) {
+          const currentLast = d.lastDonationDate;
+          const newDate = donationData.donationDate;
+          let latestDate = currentLast;
+          if (newDate) {
+            latestDate = currentLast && currentLast > newDate ? currentLast : newDate;
+          }
+
+          return {
+            ...d,
+            totalDonations: (d.totalDonations || 0) + 1,
+            lastDonationDate: latestDate,
+            availability: false,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return d;
+      })
     );
 
+    // Send notification to donor if user_id is present (not NULL)
+    if (donationData.donorUserId) {
+      const donorNotif: NotificationItem = {
+        id: `notif-don-${Date.now()}`,
+        userId: donationData.donorUserId,
+        title: 'রক্তদানের তথ্য সংরক্ষণ করা হয়েছে',
+        message: `আপনার রক্তদানের তথ্য (${donationData.bloodGroup}, তারিখ: ${donationData.donationDate || 'উল্লেখ নেই'}) রক্ত দান পরিবার কালামপুর সিস্টেমে সংরক্ষিত হয়েছে। আপনাকে অসংখ্য ধন্যবাদ!`,
+        type: 'donation',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [donorNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(donorNotif).catch((e) => console.warn('Could not send donation notif', e));
+      }
+    }
+
     // If associated blood request exists, fulfill it
-    if (donationData.requestId) {
+    if (donationData.requestId || donationData.bloodRequestId) {
+      const reqId = donationData.bloodRequestId || donationData.requestId;
       setBloodRequests((prev) =>
         prev.map((r) =>
-          r.requestId === donationData.requestId || r.id === donationData.requestId
+          r.requestId === reqId || r.id === reqId
             ? { ...r, status: 'fulfilled' }
             : r
         )
       );
-      if (isSupabaseConfigured) {
-        updateBloodRequestStatusInFirestore(donationData.requestId, 'fulfilled').catch(() => {});
+      if (isSupabaseConfigured && reqId) {
+        updateBloodRequestStatusInFirestore(reqId, 'fulfilled').catch(() => {});
       }
     }
 
-    addAuditLog('Donation Completed', 'Donation', newDonation.id, {
+    addAuditLog('DONATION_CREATED', 'Donation', newDonation.id, {
       donorId: donationData.donorId,
       units: donationData.units,
       hospital: donationData.hospital,
+      donationDate: donationData.donationDate,
     });
 
     return newDonation;
+  };
+
+  const updateDonation = async (donationId: string, updates: Partial<Donation>) => {
+    if (isSupabaseConfigured) {
+      await updateDonationInSupabase(donationId, updates);
+    }
+
+    setDonations((prev) =>
+      prev.map((d) => (d.id === donationId ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d))
+    );
+
+    addAuditLog('DONATION_UPDATED', 'Donation', donationId, updates);
   };
 
   const deleteDonation = async (donationId: string) => {
@@ -1235,20 +1339,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prev.map((d) => {
           if (
             d.donorId === targetDonation.donorId ||
-            d.userId === targetDonation.donorUserId ||
+            (targetDonation.donorUserId && d.userId === targetDonation.donorUserId) ||
             d.id === targetDonation.donorId
           ) {
             const remaining = donations.filter(
-              (don) => don.id !== donationId && (don.donorId === d.donorId || don.donorUserId === d.userId)
+              (don) => don.id !== donationId && (don.donorId === d.donorId || (d.userId && don.donorUserId === d.userId))
             );
             const dates = remaining
               .map((r) => r.donationDate)
               .filter((dt): dt is string => Boolean(dt))
               .sort();
+
+            const histBaseline = d.historicalDonationCount ?? (d.totalDonations ? Math.max(0, d.totalDonations - 1) : 0);
+
             return {
               ...d,
-              totalDonations: remaining.length,
-              lastDonationDate: dates.length > 0 ? dates[dates.length - 1] : undefined,
+              totalDonations: histBaseline + remaining.length,
+              lastDonationDate: dates.length > 0 ? dates[dates.length - 1] : d.lastDonationDate,
               updatedAt: new Date().toISOString(),
             };
           }
@@ -1257,7 +1364,378 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     }
 
-    addAuditLog('Donation Deleted', 'Donation', donationId);
+    addAuditLog('DONATION_DELETED', 'Donation', donationId, {
+      donorId: targetDonation?.donorId,
+    });
+  };
+
+  const submitDonationReport = async (
+    data: Omit<
+      DonationSubmission,
+      'id' | 'status' | 'submittedAt' | 'createdAt' | 'updatedAt' | 'reviewedAt' | 'reviewedBy' | 'reviewNotes' | 'approvedDonationId'
+    >
+  ): Promise<DonationSubmission> => {
+    // 1. Duplicate check against existing official donations and pending submissions
+    const dupCheck = checkDuplicateDonation(
+      data.donorId,
+      data.donorUserId,
+      data.donationDate,
+      donations,
+      donationSubmissions
+    );
+    if (dupCheck.isDuplicate) {
+      throw new Error(dupCheck.reason || 'এই তারিখের জন্য রক্তদানের তথ্য ইতোমধ্যে বিদ্যমান।');
+    }
+
+    let newSubmission: DonationSubmission;
+    if (isSupabaseConfigured && !isDemoMode) {
+      try {
+        newSubmission = await submitDonationReportInSupabase(data);
+      } catch (err: any) {
+        console.warn('Supabase submission error, falling back to local state:', err);
+        const now = new Date().toISOString();
+        const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`;
+        newSubmission = {
+          ...data,
+          id,
+          status: 'pending',
+          submittedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+    } else {
+      const now = new Date().toISOString();
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`;
+      newSubmission = {
+        ...data,
+        id,
+        status: 'pending',
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await submitDonationReportInSupabase(data);
+        } catch (e) {
+          console.warn('Supabase submission fallback', e);
+        }
+      }
+    }
+
+    setDonationSubmissions((prev) => [newSubmission, ...prev]);
+
+    // Send confirmation notification to donor
+    if (data.donorUserId) {
+      const donorNotif: NotificationItem = {
+        id: `notif-sub-${Date.now()}`,
+        userId: data.donorUserId,
+        title: 'রক্তদানের তথ্য জমা হয়েছে',
+        message: 'আপনার রক্তদানের তথ্য যাচাইয়ের জন্য জমা হয়েছে। এডমিন/মডারেটরের অনুমোদনের পর এটি আপনার রক্তদান ইতিহাসে যুক্ত হবে।',
+        type: 'donation',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [donorNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(donorNotif).catch((e) => console.warn('Could not send donor notif', e));
+      }
+    }
+
+    // Notify all active reviewers (super_admin, admin, moderator)
+    const reviewers = users.filter(
+      (u) => ['super_admin', 'admin', 'moderator'].includes(u.role) && u.status === 'active'
+    );
+    reviewers.forEach((rev) => {
+      const staffNotif: NotificationItem = {
+        id: `notif-rev-${rev.id}-${Date.now()}`,
+        userId: rev.id,
+        title: 'নতুন রক্তদানের তথ্য যাচাইয়ের জন্য অপেক্ষমাণ',
+        message: `রক্তদাতা "${data.donorName}" (${data.donorId}) নতুন রক্তদানের তথ্য (${data.bloodGroup}, তারিখ: ${data.donationDate}) জমা দিয়েছেন। যাচাই প্রয়োজন।`,
+        type: 'donation',
+        link: '/admin',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [staffNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(staffNotif).catch((e) => console.warn('Could not send reviewer notif', e));
+      }
+    });
+
+    addAuditLog('DONATION_SUBMITTED', 'DonationSubmission', newSubmission.id, {
+      donorId: data.donorId,
+      donationDate: data.donationDate,
+      bloodGroup: data.bloodGroup,
+    });
+
+    return newSubmission;
+  };
+
+  const updateDonationSubmission = async (
+    id: string,
+    updates: Partial<Pick<DonationSubmission, 'donationDate' | 'hospital' | 'location' | 'campId' | 'bloodRequestId' | 'units' | 'donationType' | 'notes'>>
+  ): Promise<void> => {
+    if (isSupabaseConfigured) {
+      try {
+        await updateDonationSubmissionInSupabase(id, updates);
+      } catch (e) {
+        console.warn('Supabase update submission fallback', e);
+      }
+    }
+
+    setDonationSubmissions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s))
+    );
+
+    addAuditLog('DONATION_SUBMISSION_UPDATED', 'DonationSubmission', id, updates);
+  };
+
+  const cancelDonationSubmission = async (id: string): Promise<void> => {
+    if (isSupabaseConfigured) {
+      try {
+        await cancelDonationSubmissionInSupabase(id);
+      } catch (e) {
+        console.warn('Supabase cancel submission fallback', e);
+      }
+    }
+
+    setDonationSubmissions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status: 'cancelled', updatedAt: new Date().toISOString() } : s))
+    );
+
+    addAuditLog('DONATION_SUBMISSION_CANCELLED', 'DonationSubmission', id);
+  };
+
+  const approveDonationSubmission = async (
+    id: string,
+    reviewNotes?: string
+  ): Promise<{ success: boolean; donationId?: string }> => {
+    const target = donationSubmissions.find((s) => s.id === id);
+    if (!target) {
+      throw new Error('Donation submission not found');
+    }
+
+    let donationId: string | undefined;
+    if (isSupabaseConfigured) {
+      try {
+        const res = await approveDonationSubmissionInSupabase(id, reviewNotes);
+        donationId = res.donationId;
+      } catch (e) {
+        console.warn('Supabase approve submission fallback', e);
+        donationId = `don-${Date.now()}`;
+      }
+    } else {
+      donationId = `don-${Date.now()}`;
+    }
+
+    const approvedDonId = donationId || `don-${Date.now()}`;
+
+    // 1. Create official donation record
+    const officialDonation: Donation = {
+      id: approvedDonId,
+      donorId: target.donorId,
+      donorUserId: target.donorUserId,
+      donorName: target.donorName,
+      bloodGroup: target.bloodGroup,
+      donationDate: target.donationDate,
+      hospital: target.hospital || 'ধামরাই রক্তদান কেন্দ্র',
+      location: target.location || target.hospital || 'ধামরাই',
+      campId: target.campId,
+      bloodRequestId: target.bloodRequestId,
+      units: target.units || 1,
+      donationType: target.donationType || 'Whole Blood',
+      source: 'donor_reported',
+      verifiedBy: 'এডমিন',
+      verificationDate: new Date().toISOString().split('T')[0],
+      notes: target.notes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setDonations((prev) => [officialDonation, ...prev]);
+
+    // 2. Update submission status in state
+    setDonationSubmissions((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              status: 'approved',
+              approvedDonationId: approvedDonId,
+              reviewedBy: 'এডমিন',
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: reviewNotes || undefined,
+              updatedAt: new Date().toISOString(),
+            }
+          : s
+      )
+    );
+
+    // 3. Update donor totalDonations and lastDonationDate
+    setDonors((prev) =>
+      prev.map((d) => {
+        if (
+          d.donorId === target.donorId ||
+          (target.donorUserId && d.userId === target.donorUserId) ||
+          d.id === target.donorId
+        ) {
+          const currentLast = d.lastDonationDate;
+          const newDate = target.donationDate;
+          let latestDate = currentLast;
+          if (newDate) {
+            latestDate = currentLast && currentLast > newDate ? currentLast : newDate;
+          }
+
+          return {
+            ...d,
+            totalDonations: (d.totalDonations || 0) + 1,
+            lastDonationDate: latestDate,
+            availability: false,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return d;
+      })
+    );
+
+    // 4. Send notification to donor
+    if (target.donorUserId) {
+      const donorNotif: NotificationItem = {
+        id: `notif-appr-${Date.now()}`,
+        userId: target.donorUserId,
+        title: 'আপনার রক্তদানের তথ্য অনুমোদিত হয়েছে',
+        message: `আপনার জমা দেওয়া রক্তদানের তথ্য (${target.bloodGroup}, তারিখ: ${target.donationDate}) সফলভাবে যাচাই ও সিস্টেমে সংরক্ষণ করা হয়েছে। ধন্যবাদ!`,
+        type: 'donation',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [donorNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(donorNotif).catch((e) => console.warn('Could not send approval notif', e));
+      }
+    }
+
+    addAuditLog('DONATION_SUBMISSION_APPROVED', 'DonationSubmission', id, {
+      donorId: target.donorId,
+      donationId: approvedDonId,
+      donationDate: target.donationDate,
+      reviewNotes,
+    });
+    addAuditLog('DONATION_CREATED', 'Donation', approvedDonId, {
+      source: 'donor_reported',
+      donorId: target.donorId,
+      donationDate: target.donationDate,
+    });
+
+    return { success: true, donationId: approvedDonId };
+  };
+
+  const rejectDonationSubmission = async (id: string, reason: string): Promise<void> => {
+    const target = donationSubmissions.find((s) => s.id === id);
+    if (!target) {
+      throw new Error('Donation submission not found');
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        await rejectDonationSubmissionInSupabase(id, reason);
+      } catch (e) {
+        console.warn('Supabase reject submission fallback', e);
+      }
+    }
+
+    setDonationSubmissions((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              status: 'rejected',
+              reviewedBy: 'এডমিন',
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: reason,
+              updatedAt: new Date().toISOString(),
+            }
+          : s
+      )
+    );
+
+    if (target.donorUserId) {
+      const donorNotif: NotificationItem = {
+        id: `notif-rej-${Date.now()}`,
+        userId: target.donorUserId,
+        title: 'রক্তদানের তথ্য যাচাই করা যায়নি',
+        message: `আপনার জমা দেওয়া রক্তদানের তথ্য (${target.donationDate}) অনুমোদিত হয়নি। কারণ: ${reason}`,
+        type: 'donation',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [donorNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(donorNotif).catch((e) => console.warn('Could not send rejection notif', e));
+      }
+    }
+
+    addAuditLog('DONATION_SUBMISSION_REJECTED', 'DonationSubmission', id, {
+      donorId: target.donorId,
+      reason,
+    });
+  };
+
+  const requestDonationSubmissionInfo = async (id: string, message: string): Promise<void> => {
+    const target = donationSubmissions.find((s) => s.id === id);
+    if (!target) {
+      throw new Error('Donation submission not found');
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        await requestDonationSubmissionInfoInSupabase(id, message);
+      } catch (e) {
+        console.warn('Supabase request info fallback', e);
+      }
+    }
+
+    setDonationSubmissions((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              status: 'needs_info',
+              reviewedBy: 'এডমিন',
+              reviewedAt: new Date().toISOString(),
+              reviewNotes: message,
+              updatedAt: new Date().toISOString(),
+            }
+          : s
+      )
+    );
+
+    if (target.donorUserId) {
+      const donorNotif: NotificationItem = {
+        id: `notif-ninfo-${Date.now()}`,
+        userId: target.donorUserId,
+        title: 'রক্তদানের তথ্য সম্পর্কে অতিরিক্ত তথ্য প্রয়োজন',
+        message: `আপনার রক্তদানের তথ্য যাচাইয়ের জন্য কিছু অতিরিক্ত তথ্য প্রয়োজন: ${message}। অনুগ্রহ করে প্রোফাইল থেকে আপডেট করুন।`,
+        type: 'donation',
+        link: '/profile',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [donorNotif, ...prev]);
+      if (isSupabaseConfigured) {
+        sendNotificationToSupabase(donorNotif).catch((e) => console.warn('Could not send needs_info notif', e));
+      }
+    }
+
+    addAuditLog('DONATION_SUBMISSION_NEEDS_INFO', 'DonationSubmission', id, {
+      donorId: target.donorId,
+      message,
+    });
   };
 
   const addLocation = async (locationData: Omit<LocationItem, 'id'>): Promise<LocationItem> => {
@@ -2315,6 +2793,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         bloodRequests,
         donorRequests,
         donations,
+        donationSubmissions,
         locations,
         branches,
         notifications,
@@ -2340,7 +2819,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendDonorRequest,
         respondDonorRequest,
         recordDonation,
+        updateDonation,
         deleteDonation,
+        submitDonationReport,
+        updateDonationSubmission,
+        cancelDonationSubmission,
+        approveDonationSubmission,
+        rejectDonationSubmission,
+        requestDonationSubmissionInfo,
         addBloodCamp,
         updateBloodCamp,
         deleteBloodCamp,

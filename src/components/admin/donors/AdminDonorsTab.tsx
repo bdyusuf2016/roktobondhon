@@ -25,6 +25,7 @@ import { useDialog } from '../../../contexts/DialogContext';
 import type { Donor, BloodGroup, Donation } from '../../../types';
 import { DonorImportWizard } from './import/DonorImportWizard';
 import { DonorImportHistory } from './import/DonorImportHistory';
+import { RecordDonationModal } from '../donations/RecordDonationModal';
 
 export const AdminDonorsTab: React.FC = () => {
   const { donors, donations, verifyDonor, deleteDonor, recordDonation, deleteDonation } = useData();
@@ -67,6 +68,8 @@ export const AdminDonorsTab: React.FC = () => {
 
   // Manage Donations Modal State
   const [activeDonationDonor, setActiveDonationDonor] = useState<Donor | null>(null);
+  const [isRecordDonationOpen, setIsRecordDonationOpen] = useState(false);
+  const [recordTargetDonorId, setRecordTargetDonorId] = useState<string | undefined>(undefined);
   const [showAddDonationForm, setShowAddDonationForm] = useState(false);
   const [newDonationDate, setNewDonationDate] = useState<string>('');
   const [hasSpecificDate, setHasSpecificDate] = useState(true);
@@ -984,16 +987,31 @@ export const AdminDonorsTab: React.FC = () => {
                   <span className="text-base font-black text-red-700">
                     মোট রক্তদান: {activeDonationDonor.totalDonations || activeDonorDonations.length || 0} বার
                   </span>
+                  {(activeDonationDonor.historicalDonationCount !== undefined && activeDonationDonor.historicalDonationCount > 0) && (
+                    <span className="text-[11px] text-slate-600 block">
+                      (কাগজভিত্তিক পূর্ব রেকর্ড: {activeDonationDonor.historicalDonationCount} বার, ডিজিটাল রেকর্ড: {activeDonorDonations.length} বার)
+                    </span>
+                  )}
+                  {activeDonationDonor.lastDonationDate && (
+                    <span className="text-[10px] text-slate-500 block font-mono">
+                      সর্বশেষ রক্তদান: {activeDonationDonor.lastDonationDate}
+                    </span>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowAddDonationForm(!showAddDonationForm)}
-                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ রক্তদান যোগ করুন</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecordTargetDonorId(activeDonationDonor.donorId || activeDonationDonor.id);
+                      setIsRecordDonationOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ রক্তদান রেকর্ড করুন</span>
+                  </button>
+                </div>
               </div>
 
               {/* Inline Add Donation Form */}
@@ -1182,6 +1200,24 @@ export const AdminDonorsTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* 4. REUSABLE RECORD DONATION MODAL */}
+      {/* ========================================================================= */}
+      <RecordDonationModal
+        isOpen={isRecordDonationOpen}
+        preSelectedDonorId={recordTargetDonorId}
+        onClose={() => {
+          setIsRecordDonationOpen(false);
+          setRecordTargetDonorId(undefined);
+        }}
+        onSuccess={() => {
+          setIsRecordDonationOpen(false);
+          setRecordTargetDonorId(undefined);
+          setActionSuccess('রক্তদানের তথ্য সফলভাবে রেকর্ড ও সংরক্ষিত হয়েছে।');
+          setTimeout(() => setActionSuccess(null), 4000);
+        }}
+      />
     </div>
   );
 };

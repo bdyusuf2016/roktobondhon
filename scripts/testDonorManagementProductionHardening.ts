@@ -211,8 +211,8 @@ console.log('\n--- [CATEGORY 3: DONATION HISTORY & METRICS] ---');
 // 18. Authorized staff adds donation
 assert(
   donationServiceContent.includes('recordDonationInSupabase') &&
-  adminDonationsTabContent.includes('handleCreateDonation') &&
-  adminDonorsTabContent.includes('handleAddDonationForDonor'),
+  (adminDonationsTabContent.includes('RecordDonationModal') || adminDonationsTabContent.includes('handleCreateDonation')) &&
+  (adminDonorsTabContent.includes('RecordDonationModal') || adminDonorsTabContent.includes('handleAddDonationForDonor')),
   'Test 18: Authorized staff can record a verified donation record'
 );
 

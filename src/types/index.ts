@@ -134,6 +134,7 @@ export interface Donor extends DonorPublic {
   updatedAt: string;
   source?: 'registered' | 'imported' | 'manual';
   importBatchId?: string;
+  historicalDonationCount?: number;
 }
 
 
@@ -212,17 +213,53 @@ export interface DonorRequest {
 export interface Donation {
   id: string;
   donorId: string;
-  donorUserId: string;
+  donorUserId?: string;
   donorName: string;
   bloodGroup: BloodGroup;
   requestId?: string;
+  bloodRequestId?: string;
+  campId?: string;
+  location?: string;
   donationDate?: string | null;
   hospital?: string;
   units: number;
   donationType: DonationType;
+  source?: 'manual' | 'imported' | 'camp' | 'request' | 'donor_reported' | 'other';
   verifiedBy: string;
   verificationDate: string;
   notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type DonationSubmissionStatus = 'pending' | 'needs_info' | 'approved' | 'rejected' | 'cancelled';
+
+export interface DonationSubmission {
+  id: string;
+  donorId: string;
+  donorUserId: string;
+  donorName: string;
+  donorPhone?: string;
+  bloodGroup: BloodGroup;
+  donationDate: string;
+  hospital?: string;
+  location?: string;
+  campId?: string;
+  bloodRequestId?: string;
+  patientName?: string;
+  units: number;
+  donationType: DonationType;
+  notes?: string;
+  status: DonationSubmissionStatus;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
+  reviewerNotes?: string;
+  rejectionReason?: string;
+  approvedDonationId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LocationItem {

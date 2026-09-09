@@ -42,14 +42,23 @@ import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { INITIAL_LOCATIONS } from '../services/locationService';
 import { printCertificateInStandaloneWindow } from '../services/certificatePrintService';
 import { volunteerForBloodRequest } from '../services/donorRequestService';
-import type { BloodGroup, Gender } from '../types';
+import { DonorSelfReportModal } from '../components/profile/DonorSelfReportModal';
+import type { BloodGroup, Gender, DonationSubmission } from '../types';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, logout, updateCurrentUser, changePassword } = useAuth();
-  const { donors, bloodRequests, donations, updateDonor, registerDonor } = useData();
+  const {
+    donors,
+    bloodRequests,
+    donations,
+    donationSubmissions,
+    updateDonor,
+    registerDonor,
+    cancelDonationSubmission,
+  } = useData();
   const { config } = useOrgConfig();
 
   // Active Tab
@@ -59,6 +68,8 @@ export const ProfilePage: React.FC = () => {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showDonorCardModal, setShowDonorCardModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [editingSubmission, setEditingSubmission] = useState<DonationSubmission | null>(null);
   const [volunteeredIds, setVolunteeredIds] = useState<Record<string, boolean>>({});
   const [volunteeringId, setVolunteeringId] = useState<string | null>(null);
 
@@ -134,6 +145,15 @@ export const ProfilePage: React.FC = () => {
   const myDonations = donations.filter(
     (d) => d.donorUserId === currentUser.id || (myDonor && d.donorId === myDonor.donorId)
   );
+
+  // User's self-reported donation submissions
+  const mySubmissions = donationSubmissions.filter(
+    (s) => s.donorUserId === currentUser.id || (myDonor && s.donorId === myDonor.donorId)
+  );
+  const pendingSubmissions = mySubmissions.filter(
+    (s) => s.status === 'pending' || s.status === 'needs_info'
+  );
+  const rejectedSubmissions = mySubmissions.filter((s) => s.status === 'rejected');
 
   // Donor Badge & Level Calculation
   const totalDonations = myDonor?.totalDonations || myDonations.length || 0;
@@ -387,6 +407,20 @@ export const ProfilePage: React.FC = () => {
       });
     } finally {
       setVolunteeringId(null);
+    }
+  };
+
+  const handleCancelSubmission = async (submissionId: string) => {
+    if (!window.confirm('আপনি কি এই রক্তদানের রিপোর্টটি বাতিল করতে চান?')) return;
+    try {
+      setIsSubmitting(true);
+      await cancelDonationSubmission(submissionId);
+      setToastMessage({ type: 'success', text: 'রক্তদানের রিপোর্ট সফলভাবে বাতিল করা হয়েছে' });
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      setToastMessage({ type: 'error', text: err?.message || 'বাতিল করতে সমস্যা হয়েছে' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -952,64 +986,240 @@ export const ProfilePage: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: DONATION LOGS & CERTIFICATES */}
+      {/* TAB 3: DONATION LOGS, SUBMISSIONS & CERTIFICATES */}
       {/* ========================================================================= */}
       {activeTab === 'donations' && (
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4 animate-in fade-in duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h2 className="text-base font-black text-slate-900 tracking-tight">
-                রক্তদানের পূর্ণাঙ্গ ইতিহাস ও প্রশংসাপত্র
-              </h2>
-              <p className="text-xs text-slate-500">আপনার প্রতিটি রক্তদান একটি অমূল্য মানবসেবা</p>
+        <div className="space-y-6 animate-in fade-in duration-150">
+          {/* Main Card Header */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <Droplets className="w-5 h-5 text-red-600" />
+                  রক্তদানের পূর্ণাঙ্গ ইতিহাস ও রিপোর্ট
+                </h2>
+                <p className="text-xs text-slate-500">আপনার প্রতিটি রক্তদান একটি অমূল্য মানবসেবা</p>
+                {myDonor?.historicalDonationCount !== undefined && myDonor.historicalDonationCount > 0 && (
+                  <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+                    (কাগজভিত্তিক পূর্ব রেকর্ড: {myDonor.historicalDonationCount} বার, ডিজিটাল রেকর্ড: {myDonations.length} বার)
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+                  যাচাইকৃত মোট: {totalDonations} বার
+                </span>
+                {myDonor && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSubmission(null);
+                      setShowReportModal(true);
+                    }}
+                    className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs border border-red-700/60 transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    + রক্তদানের তথ্য জমা দিন
+                  </button>
+                )}
+              </div>
             </div>
-            <span className="text-xs font-black text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-200">
-              মোট: {totalDonations} বার
-            </span>
-          </div>
 
-          {myDonations.length > 0 ? (
-            <div className="space-y-3 pt-2">
-              {myDonations.map((don, idx) => (
-                <div
-                  key={don.id || idx}
-                  className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{don.hospital || 'ধামরাই রক্তদান কেন্দ্র'}</span>
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        যাচাইকৃত
-                      </span>
-                    </div>
-                    <p className="text-slate-500">
-                      তারিখ:{' '}
-                      <span className="font-mono font-semibold text-slate-700">
-                        {don.donationDate ? don.donationDate : 'তারিখ উল্লেখ নেই'}
-                      </span>{' '}
-                      • পরিমাণ: {don.units || 1} ব্যাগ ({don.donationType || 'Whole Blood'})
-                    </p>
-                    {don.notes && <p className="text-slate-400 text-[11px]">মন্তব্য: {don.notes}</p>}
-                  </div>
-
-                  <div className="flex items-center gap-2 self-start sm:self-center">
-                    <Link
-                      to="/certificate"
-                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold flex items-center gap-1 transition-colors"
-                    >
-                      <Award className="w-3.5 h-3.5 text-amber-600" />
-                      সনদপত্র দেখুন
-                    </Link>
-                  </div>
+            {/* Pending & Needs Info Submissions */}
+            {pendingSubmissions.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>পর্যালোচনাধীন রক্তদানের রিপোর্ট ({pendingSubmissions.length}টি)</span>
                 </div>
-              ))}
+
+                <div className="space-y-3">
+                  {pendingSubmissions.map((sub) => {
+                    const isNeedsInfo = sub.status === 'needs_info';
+                    return (
+                      <div
+                        key={sub.id}
+                        className={`p-4 rounded-xl border transition-all text-xs space-y-3 ${
+                          isNeedsInfo
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : 'bg-blue-50/60 border-blue-200'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-slate-900 text-sm">
+                                {sub.hospital || 'ধামরাই রক্তদান কেন্দ্র'}
+                              </span>
+                              <span
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                  isNeedsInfo
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                    : 'bg-blue-100 text-blue-900 border-blue-300'
+                                }`}
+                              >
+                                {isNeedsInfo ? '⚠️ অতিরিক্ত তথ্য প্রয়োজন' : '⏳ এডমিন পর্যালোচনায় অপেক্ষমাণ'}
+                              </span>
+                            </div>
+
+                            <p className="text-slate-600">
+                              তারিখ:{' '}
+                              <span className="font-mono font-bold text-slate-800">
+                                {sub.donationDate}
+                              </span>{' '}
+                              • পরিমাণ: {sub.units || 1} ব্যাগ ({sub.donationType || 'Whole Blood'})
+                              {sub.patientName && ` • রোগী: ${sub.patientName}`}
+                            </p>
+
+                            {sub.notes && (
+                              <p className="text-slate-500 text-[11px]">
+                                আপনার বিবরণ: {sub.notes}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 self-start sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSubmission(sub);
+                                setShowReportModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+                              সংশোধন
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleCancelSubmission(sub.id)}
+                              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5 text-rose-600" />
+                              বাতিল
+                            </button>
+                          </div>
+                        </div>
+
+                        {isNeedsInfo && sub.reviewerNotes && (
+                          <div className="p-3 bg-amber-100/80 border border-amber-300 rounded-lg text-amber-950 text-xs space-y-1">
+                            <p className="font-bold flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
+                              এডমিন / মডারেটরের বার্তা:
+                            </p>
+                            <p className="text-[11px] leading-relaxed">{sub.reviewerNotes}</p>
+                            <p className="text-[10px] text-amber-800 font-semibold pt-1">
+                              👉 &quot;সংশোধন&quot; বাটনে ক্লিক করে তথ্য হালনাগাদ করে পুনরায় জমা দিন।
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Rejected Submissions */}
+            {rejectedSubmissions.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-rose-900">
+                  <ShieldAlert className="w-4 h-4 text-rose-600" />
+                  <span>অননুমোদিত রিপোর্ট ({rejectedSubmissions.length}টি)</span>
+                </div>
+
+                <div className="space-y-2">
+                  {rejectedSubmissions.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/50 text-xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">{sub.hospital}</span>
+                        <span className="text-[11px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">
+                          বাতিলকৃত
+                        </span>
+                      </div>
+                      <p className="text-slate-600">তারিখ: {sub.donationDate}</p>
+                      {sub.rejectionReason && (
+                        <p className="text-rose-800 text-[11px]">
+                          <strong>বাতিলের কারণ:</strong> {sub.rejectionReason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Official Confirmed Donations List */}
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  যাচাইকৃত রক্তদান রেকর্ডসমূহ ({myDonations.length})
+                </h3>
+              </div>
+
+              {myDonations.length > 0 ? (
+                <div className="space-y-3">
+                  {myDonations.map((don, idx) => (
+                    <div
+                      key={don.id || idx}
+                      className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">{don.hospital || 'ধামরাই রক্তদান কেন্দ্র'}</span>
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            যাচাইকৃত
+                          </span>
+                        </div>
+                        <p className="text-slate-500">
+                          তারিখ:{' '}
+                          <span className="font-mono font-semibold text-slate-700">
+                            {don.donationDate ? don.donationDate : 'তারিখ উল্লেখ নেই'}
+                          </span>{' '}
+                          • পরিমাণ: {don.units || 1} ব্যাগ ({don.donationType || 'Whole Blood'})
+                        </p>
+                        {don.notes && <p className="text-slate-400 text-[11px]">মন্তব্য: {don.notes}</p>}
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-center">
+                        <Link
+                          to="/certificate"
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <Award className="w-3.5 h-3.5 text-amber-600" />
+                          সনদপত্র দেখুন
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center space-y-3 text-slate-400">
+                  <Droplets className="w-10 h-10 mx-auto text-slate-300" />
+                  <p className="text-xs font-medium">এখনো কোনো যাচাইকৃত ডিজিটাল রক্তদান রেকর্ড নেই।</p>
+                  {myDonor && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSubmission(null);
+                        setShowReportModal(true);
+                      }}
+                      className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      আপনি কি রক্তদান করেছেন? তথ্য জমা দিন
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="py-12 text-center space-y-2 text-slate-400">
-              <Droplets className="w-10 h-10 mx-auto text-slate-300" />
-              <p className="text-xs font-medium">এখনো কোনো রক্তদান সম্পন্ন হয়নি।</p>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -1760,6 +1970,19 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Donor Self-Reported Donation Modal */}
+      {showReportModal && (
+        <DonorSelfReportModal
+          isOpen={showReportModal}
+          onClose={() => {
+            setShowReportModal(false);
+            setEditingSubmission(null);
+          }}
+          donor={myDonor}
+          editingSubmission={editingSubmission}
+        />
       )}
     </div>
   );
