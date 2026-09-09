@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:import": "tsx scripts/testDonorImportSystem.ts",
+    "test:two-tier": "tsx scripts/testTwoTierAuthentication.ts",
+    "test:donor-hardening": "tsx scripts/testDonorManagementProductionHardening.ts",
     "test:regression": "tsx scripts/runMasterRegressionSuite.ts",
     "test:security": "tsx scripts/testSecurityPenetration.ts",
     "test:security:authenticated": "tsx scripts/testAuthenticatedMultiRoleSecurity.ts",
@@ -29,7 +32,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.18.3",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

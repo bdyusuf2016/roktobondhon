@@ -23,7 +23,7 @@ function mapUserRow(row: any): User {
 }
 
 /**
- * Fetch user profile from Supabase: users table
+ * Fetch staff user profile from Supabase: users table
  */
 export async function getUserProfile(uid: string, email?: string | null, phone?: string | null): Promise<User | null> {
   if (!isSupabaseConfigured || !supabase) return null;
@@ -63,7 +63,7 @@ export async function getUserProfile(uid: string, email?: string | null, phone?:
     }
 
     if (error) {
-      console.error('Error fetching user profile from Supabase:', error);
+      console.error('Error fetching staff user profile from Supabase:', error);
       return null;
     }
 
@@ -72,6 +72,98 @@ export async function getUserProfile(uid: string, email?: string | null, phone?:
     console.error('Exception in getUserProfile:', err);
     return null;
   }
+}
+
+/**
+ * Fetch ordinary donor profile by auth user_id from public.donors
+ */
+export async function getDonorProfileByUserId(uid: string, email?: string | null, phone?: string | null): Promise<User | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    // 1. Primary lookup by user_id = uid
+    let { data, error } = await supabase
+      .from('donors')
+      .select('*')
+      .eq('user_id', uid)
+      .maybeSingle();
+
+    // 2. Fallback by email
+    if (!data && email) {
+      const emailQuery = await supabase
+        .from('donors')
+        .select('*')
+        .ilike('email', email.trim().toLowerCase())
+        .maybeSingle();
+      if (emailQuery.data) {
+        data = emailQuery.data;
+      }
+    }
+
+    // 3. Fallback by phone
+    if (!data && phone) {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const phoneQuery = await supabase
+        .from('donors')
+        .select('*')
+        .ilike('phone', `%${cleanPhone.slice(-10)}%`)
+        .maybeSingle();
+      if (phoneQuery.data) {
+        data = phoneQuery.data;
+      }
+    }
+
+    if (error) {
+      console.error('Error fetching donor profile by user_id from Supabase:', error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return {
+      id: uid,
+      fullName: data.full_name || 'রক্তদাতা সদস্য',
+      phone: data.phone || '',
+      email: data.email || undefined,
+      role: 'donor',
+      organizationId: data.organization_id || 'org-roktobondon',
+      branchId: data.branch_id || undefined,
+      photoUrl: data.photo_url || undefined,
+      status: data.verification_status === 'suspended' ? 'suspended' : 'active',
+      phoneVerified: Boolean(data.phone),
+      createdAt: data.created_at || new Date().toISOString(),
+      updatedAt: data.updated_at || new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error('Exception in getDonorProfileByUserId:', err);
+    return null;
+  }
+}
+
+/**
+ * Two-Tier Session Resolution:
+ * Tier 1: Check public.users (Staff/Portal users)
+ * Tier 2: Check public.donors (Ordinary Donors)
+ * Does NOT create public.users for ordinary donors.
+ */
+export async function resolveAuthenticatedUserSession(
+  uid: string,
+  email?: string | null,
+  phone?: string | null
+): Promise<{ user: User | null; tier: 'staff' | 'donor' | 'none' }> {
+  // Tier 1: Check Staff Users table
+  const staffProfile = await getUserProfile(uid, email, phone);
+  if (staffProfile) {
+    return { user: staffProfile, tier: 'staff' };
+  }
+
+  // Tier 2: Check Donors table
+  const donorProfile = await getDonorProfileByUserId(uid, email, phone);
+  if (donorProfile) {
+    return { user: donorProfile, tier: 'donor' };
+  }
+
+  return { user: null, tier: 'none' };
 }
 
 /**

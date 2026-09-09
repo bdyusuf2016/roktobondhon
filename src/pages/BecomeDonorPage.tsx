@@ -135,7 +135,8 @@ export const BecomeDonorPage: React.FC = () => {
         },
       });
 
-      if (currentUser) {
+      // 3. If user was not previously a staff user, ensure role is donor
+      if (currentUser && currentUser.role === 'recipient') {
         updateCurrentUser({ role: 'donor' });
       }
 

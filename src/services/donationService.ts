@@ -64,12 +64,12 @@ export async function recordDonationInSupabase(
         donor_name: newDonation.donorName,
         blood_group: newDonation.bloodGroup,
         request_id: newDonation.requestId || null,
-        donation_date: newDonation.donationDate,
-        hospital: newDonation.hospital,
-        units: newDonation.units,
-        donation_type: newDonation.donationType,
-        verified_by: newDonation.verifiedBy,
-        verification_date: newDonation.verificationDate || new Date().toISOString(),
+        donation_date: newDonation.donationDate || null,
+        hospital: newDonation.hospital || 'ধামরাই রক্তদান কেন্দ্র',
+        units: newDonation.units || 1,
+        donation_type: newDonation.donationType || 'Whole Blood',
+        verified_by: newDonation.verifiedBy || 'এডমিন',
+        verification_date: newDonation.verificationDate || new Date().toISOString().split('T')[0],
         notes: newDonation.notes || null,
         created_at: new Date().toISOString(),
       });
@@ -85,5 +85,25 @@ export async function recordDonationInSupabase(
   return newDonation;
 }
 
+/**
+ * Delete a donation record (authorized admin only)
+ */
+export async function deleteDonationInSupabase(donationId: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return true;
+  try {
+    const { error } = await supabase.from('donations').delete().eq('id', donationId);
+    if (error) {
+      console.error('Error deleting donation in Supabase:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleting donation in Supabase:', err);
+    return false;
+  }
+}
+
 // Compatibility aliases
 export const recordDonationInFirestore = recordDonationInSupabase;
+export const deleteDonationInFirestore = deleteDonationInSupabase;
+

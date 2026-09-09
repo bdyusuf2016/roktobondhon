@@ -44,7 +44,7 @@ export const LoginPage: React.FC = () => {
       const saved = localStorage.getItem('roktobondon_current_user');
       const parsed = saved ? JSON.parse(saved) : null;
 
-      if (parsed?.role === 'super_admin' || parsed?.role === 'admin' || parsed?.role === 'moderator') {
+      if (parsed?.role === 'super_admin' || parsed?.role === 'admin' || parsed?.role === 'moderator' || parsed?.role === 'volunteer') {
         navigate('/admin');
       } else {
         navigate('/profile');

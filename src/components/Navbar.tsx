@@ -38,7 +38,9 @@ export const Navbar: React.FC = () => {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const roleMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifications.filter(
+    (n) => !n.isRead && (n.userId === currentUser?.id || n.userId === 'all')
+  ).length;
 
   const isActive = (path: string) => location.pathname === path;
 

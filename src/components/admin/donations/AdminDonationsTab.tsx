@@ -10,7 +10,8 @@ import {
   Users,
   ShieldCheck,
   Filter,
-  FileText
+  FileText,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -19,9 +20,12 @@ import { BaseModal } from '../../modals/BaseModal';
 import type { BloodGroup, DonationType, Donor } from '../../../types';
 
 export const AdminDonationsTab: React.FC = () => {
-  const { donations, donors, hospitals, recordDonation, hasPermission } = useData();
+  const { donations, donors, hospitals, recordDonation, deleteDonation, hasPermission } = useData();
   const { currentUser } = useAuth();
   const dialog = useDialog();
+
+  const isSuperAdminOrAdmin =
+    currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 
   const canRecordDonation = hasPermission(currentUser?.role || 'admin', 'record_donation');
 
@@ -35,6 +39,7 @@ export const AdminDonationsTab: React.FC = () => {
   const [donorSearchQuery, setDonorSearchQuery] = useState('');
   const [donationHospital, setDonationHospital] = useState('ধামরাই উপজেলা স্বাস্থ্য কমপ্লেক্স');
   const [donationDate, setDonationDate] = useState(new Date().toISOString().split('T')[0]);
+  const [hasSpecificDate, setHasSpecificDate] = useState(true);
   const [donationUnits, setDonationUnits] = useState(1);
   const [donationType, setDonationType] = useState<DonationType>('Whole Blood');
   const [donationNotes, setDonationNotes] = useState('সরাসরি এডমিন প্যানেল থেকে সত্যায়িত রক্তদান রেকর্ড।');
@@ -74,7 +79,7 @@ export const AdminDonationsTab: React.FC = () => {
         donorUserId: donor.userId,
         donorName: donor.fullName,
         bloodGroup: donor.bloodGroup,
-        donationDate,
+        donationDate: hasSpecificDate && donationDate ? donationDate : null,
         hospital: donationHospital,
         units: donationUnits,
         donationType,
@@ -101,6 +106,33 @@ export const AdminDonationsTab: React.FC = () => {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteDonation = async (donationId: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'রক্তদান রেকর্ড মুছে ফেলবেন?',
+      message: 'এই রক্তদান রেকর্ডটি স্থায়ীভাবে মুছে ফেলা হবে এবং ডোনারের মোট রক্তদান সংখ্যা স্বয়ংক্রিয়ভাবে আপডেট হবে।',
+      theme: 'danger',
+      confirmText: 'হ্যাঁ, মুছুন',
+      cancelText: 'বাতিল',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await deleteDonation(donationId);
+      dialog.alert({
+        title: 'মুছে ফেলা হয়েছে',
+        message: 'রক্তদান রেকর্ডটি সফলভাবে মুছে ফেলা হয়েছে।',
+        theme: 'success',
+      });
+    } catch (err: any) {
+      dialog.alert({
+        title: 'ব্যর্থ হয়েছে',
+        message: err.message || 'রক্তদান রেকর্ড মুছতে সমস্যা হয়েছে।',
+        theme: 'danger',
+      });
     }
   };
 
@@ -245,7 +277,7 @@ export const AdminDonationsTab: React.FC = () => {
                 <th className="py-2.5 px-3 font-semibold">হাসপাতাল</th>
                 <th className="py-2.5 px-3 font-semibold">ধরন ও পরিমাণ</th>
                 <th className="py-2.5 px-3 font-semibold">যাচাইকারী</th>
-                <th className="py-2.5 px-3 font-semibold text-right">স্ট্যাটাস</th>
+                <th className="py-2.5 px-3 font-semibold text-right">স্ট্যাটাস / অ্যাকশন</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -258,7 +290,13 @@ export const AdminDonationsTab: React.FC = () => {
               ) : (
                 filteredDonations.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-2.5 px-3 font-medium text-slate-800">{d.donationDate}</td>
+                    <td className="py-2.5 px-3 font-medium text-slate-800">
+                      {d.donationDate ? (
+                        <span className="font-mono">{d.donationDate}</span>
+                      ) : (
+                        <span className="italic text-slate-400">তারিখ উল্লেখ নেই</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-3 font-mono text-slate-500 text-[11px]">{d.donorId}</td>
                     <td className="py-2.5 px-3 font-bold text-slate-900">{d.donorName}</td>
                     <td className="py-2.5 px-3">
@@ -272,11 +310,21 @@ export const AdminDonationsTab: React.FC = () => {
                       <span className="text-[10px] text-slate-400 block">{d.donationType || 'Whole Blood'}</span>
                     </td>
                     <td className="py-2.5 px-3 text-slate-500 text-[11px]">{d.verifiedBy}</td>
-                    <td className="py-2.5 px-3 text-right">
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1.5">
                       <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         সত্যায়িত
                       </span>
+                      {isSuperAdminOrAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDonation(d.id)}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer inline-flex"
+                          title="রেকর্ড মুছুন"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -389,18 +437,35 @@ export const AdminDonationsTab: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                রক্তদানের তারিখ *
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-semibold text-slate-700 text-xs">
+                রক্তদানের তারিখ (ঐচ্ছিক)
               </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!hasSpecificDate}
+                  onChange={(e) => setHasSpecificDate(!e.target.checked)}
+                  className="rounded text-red-600 focus:ring-red-500"
+                />
+                <span>তারিখ নির্দিষ্ট নয় / পরে জানানো হবে</span>
+              </label>
+            </div>
+
+            {hasSpecificDate ? (
               <input
                 type="date"
-                required
                 value={donationDate}
                 onChange={(e) => setDonationDate(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-red-500"
               />
-            </div>
+            ) : (
+              <div className="p-2 bg-slate-100 border border-dashed border-slate-300 rounded-lg text-[11px] text-slate-500 font-mono italic">
+                তারিখ উল্লেখ নেই (সরাসরি ডোনারের মোট রক্তদান সংখ্যা ১ বৃদ্ধি পাবে)
+              </div>
+            )}
+          </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -32,6 +32,14 @@ export const NotificationsPage: React.FC = () => {
     setDeclineModalItem(null);
   };
 
+  // Filter notifications matching current user or broadcast
+  const userNotifications = notifications.filter(
+    (n) =>
+      n.userId === currentUser?.id ||
+      n.userId === 'all' ||
+      (currentUser?.role && ['super_admin', 'admin'].includes(currentUser.role))
+  );
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
@@ -147,38 +155,44 @@ export const NotificationsPage: React.FC = () => {
       {/* System Notifications */}
       <div className="space-y-3 pt-4 border-t border-slate-200">
         <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-          সাধারণ বার্তা ও ঘোষণা ({notifications.length})
+          সাধারণ বার্তা ও ঘোষণা ({userNotifications.length})
         </h2>
 
-        <div className="space-y-2">
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => markNotificationRead(n.id)}
-              className={`p-4 rounded-xl border transition-colors cursor-pointer text-xs ${
-                n.isRead
-                  ? 'bg-white border-slate-200/90 text-slate-600 opacity-80'
-                  : 'bg-red-50/40 border-red-200 shadow-2xs font-medium'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="font-bold text-slate-900 text-sm">{n.title}</h4>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+        {userNotifications.length === 0 ? (
+          <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+            বর্তমানে আপনার জন্য কোনো নতুন বিজ্ঞপ্তি নেই।
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {userNotifications.map((n) => (
+              <div
+                key={n.id}
+                onClick={() => markNotificationRead(n.id)}
+                className={`p-4 rounded-xl border transition-colors cursor-pointer text-xs ${
+                  n.isRead
+                    ? 'bg-white border-slate-200/90 text-slate-600 opacity-80'
+                    : 'bg-red-50/40 border-red-200 shadow-2xs font-medium'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <h4 className="font-bold text-slate-900 text-sm">{n.title}</h4>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <p className="text-slate-600 mt-1">{n.message}</p>
+                {n.link && (
+                  <Link
+                    to={n.link}
+                    className="inline-block mt-2 text-red-600 font-bold hover:underline"
+                  >
+                    বিস্তারিত দেখুন →
+                  </Link>
+                )}
               </div>
-              <p className="text-slate-600 mt-1">{n.message}</p>
-              {n.link && (
-                <Link
-                  to={n.link}
-                  className="inline-block mt-2 text-red-600 font-bold hover:underline"
-                >
-                  বিস্তারিত দেখুন →
-                </Link>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Decline Reason Modal */}

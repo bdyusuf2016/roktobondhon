@@ -45,6 +45,7 @@ import {
   createDonorRecord,
   updateDonorRecord,
   verifyDonorStatus,
+  deleteDonorAccount,
   mapDonorRow,
 } from '../services/donorService';
 import {
@@ -57,7 +58,7 @@ import {
   sendDonorContactRequest,
   respondToDonorRequest,
 } from '../services/donorRequestService';
-import { recordDonationInFirestore } from '../services/donationService';
+import { recordDonationInFirestore, deleteDonationInFirestore } from '../services/donationService';
 import { recordAuditLog } from '../services/auditService';
 import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
 import type { BackupCollectionKey, PlatformBackupPayload } from '../types/backup';
@@ -92,9 +93,11 @@ interface DataContextType {
   registerDonor: (data: Omit<Donor, 'id' | 'donorId' | 'createdAt' | 'updatedAt' | 'verificationStatus' | 'totalDonations'>) => Promise<Donor>;
   updateDonor: (id: string, data: Partial<Donor>) => Promise<void>;
   verifyDonor: (donorId: string, status: VerificationStatus, verifierName: string, notes?: string) => Promise<void>;
+  deleteDonor: (donorId: string) => Promise<void>;
   sendDonorRequest: (bloodRequestId: string, donor: Donor, requesterUserId: string, matchScore: number) => Promise<DonorRequest>;
   respondDonorRequest: (requestId: string, status: 'accepted' | 'maybe' | 'declined', declineReason?: string) => Promise<void>;
   recordDonation: (donation: Omit<Donation, 'id'>) => Promise<Donation>;
+  deleteDonation: (donationId: string) => Promise<void>;
   addBloodCamp: (camp: Omit<BloodCamp, 'id' | 'createdAt' | 'registeredCount'>) => Promise<BloodCamp>;
   updateBloodCamp: (id: string, data: Partial<BloodCamp>) => Promise<void>;
   deleteBloodCamp: (id: string) => Promise<void>;
@@ -587,6 +590,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }))
           );
         }
+
+        // 10. Fetch notifications
+        const { data: notifData } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (notifData && notifData.length > 0 && isMounted) {
+          setNotifications(
+            notifData.map((row) => ({
+              id: row.id,
+              userId: row.user_id,
+              title: row.title,
+              message: row.message,
+              type: row.type || 'system',
+              link: row.link || undefined,
+              isRead: Boolean(row.is_read),
+              createdAt: row.created_at || new Date().toISOString(),
+            }))
+          );
+        }
       } catch (err) {
         console.warn('Supabase initial synchronization notice:', err);
       } finally {
@@ -596,8 +619,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     loadSupabaseData();
 
+    // Setup real-time listener for notifications
+    const channel = supabase
+      .channel('public:notifications')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new as any;
+            const newNotif: NotificationItem = {
+              id: row.id,
+              userId: row.user_id,
+              title: row.title,
+              message: row.message,
+              type: row.type || 'system',
+              link: row.link || undefined,
+              isRead: Boolean(row.is_read),
+              createdAt: row.created_at || new Date().toISOString(),
+            };
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const row = payload.new as any;
+            setNotifications((prev) =>
+              prev.map((n) => (n.id === row.id ? { ...n, isRead: Boolean(row.is_read) } : n))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            const row = payload.old as any;
+            if (row?.id) {
+              setNotifications((prev) => prev.filter((n) => n.id !== row.id));
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -866,6 +928,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setDonors((prev) => [newDonor, ...prev]);
+
+      // Generate notifications (for donor: Pending; for active reviewers: New Donor Awaiting Verification)
+      const nowIso = new Date().toISOString();
+      const donorNotif: NotificationItem = {
+        id: `notif-${Date.now()}-donor`,
+        userId: newDonor.userId || newDonor.id,
+        title: 'রক্তদাতা প্রোফাইল যাচাইকরণ প্রক্রিয়াধীন',
+        message: 'আপনার রক্তদাতা প্রোফাইল সফলভাবে সংরক্ষিত হয়েছে। কালামপুর রক্ত দান পরিবারের তথ্য যাচাইয়ের পর আপনার প্রোফাইলটি সক্রিয় ও পাবলিক তালিকায় প্রদর্শিত হবে।',
+        type: 'verification',
+        link: '/profile',
+        isRead: false,
+        createdAt: nowIso,
+      };
+
+      const reviewerNotifs: NotificationItem[] = users
+        .filter(
+          (u) =>
+            ['super_admin', 'admin', 'moderator'].includes(u.role) &&
+            u.status === 'active' &&
+            u.id !== newDonor.userId
+        )
+        .map((u, idx) => ({
+          id: `notif-${Date.now()}-rev-${idx}`,
+          userId: u.id,
+          title: 'নতুন রক্তদাতা যাচাইয়ের জন্য অপেক্ষমাণ',
+          message: `নতুন রক্তদাতা ${newDonor.fullName || 'নামহীন'} (আইডি: ${newDonor.donorId}) নিবন্ধিত হয়েছেন। অনুগ্রহ করে প্রোফাইলটি যাচাই করুন।`,
+          type: 'verification',
+          link: '/admin?tab=donors',
+          isRead: false,
+          createdAt: nowIso,
+        }));
+
+      setNotifications((prev) => [donorNotif, ...reviewerNotifs, ...prev]);
+
       addAuditLog('Donor Registered', 'Donor', id, { donorId, bloodGroup: newDonor.bloodGroup });
       return newDonor;
     } finally {
@@ -916,6 +1012,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : d
         )
       );
+
+      // 4. Generate notification for donor outcome
+      let notifTitle = '';
+      let notifMsg = '';
+      if (status === 'verified') {
+        notifTitle = 'অভিনন্দন! আপনার রক্তদাতা প্রোফাইল ভেরিফাইড হয়েছে';
+        notifMsg = 'কালামপুর রক্ত দান পরিবার আপনার রক্তদাতা প্রোফাইলটি সফলভাবে যাচাই ও ভেরিফাইড করেছে। এখন থেকে আপনি সরাসরি জরুরি রক্তদানের অনুরোধ পাবেন।';
+      } else if (status === 'rejected') {
+        notifTitle = 'রক্তদাতা প্রোফাইল আবেদন স্থগিত বা প্রত্যাখ্যাত';
+        notifMsg = notes
+          ? `তথ্য অমিল বা অসম্পূর্ণতার কারণে আপনার আবেদনটি স্থগিত করা হয়েছে। কারণ: ${notes}`
+          : 'তথ্য অমিল বা অসম্পূর্ণতার কারণে আপনার আবেদনটি গ্রহণ করা সম্ভব হয়নি।';
+      } else if (status === 'suspended') {
+        notifTitle = 'রক্তদাতা প্রোফাইল সাময়িকভাবে স্থগিত';
+        notifMsg = notes
+          ? `আপনার রক্তদাতা প্রোফাইলটি সাময়িকভাবে স্থগিত করা হয়েছে। কারণ: ${notes}`
+          : 'আপনার রক্তদাতা প্রোফাইলটি সাময়িকভাবে স্থগিত করা হয়েছে।';
+      } else {
+        notifTitle = 'রক্তদাতা প্রোফাইল পুনর্যাচাই প্রক্রিয়াধীন';
+        notifMsg = 'আপনার রক্তদাতা প্রোফাইলটি পুনরায় যাচাইকরণের জন্য অপেক্ষমান রাখা হয়েছে।';
+      }
+
+      const targetUserId = currentDonor?.userId || result.donorId;
+      if (targetUserId) {
+        const donorOutcomeNotif: NotificationItem = {
+          id: `notif-${Date.now()}-outcome`,
+          userId: targetUserId,
+          title: notifTitle,
+          message: notifMsg,
+          type: 'verification',
+          link: '/profile',
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        };
+        setNotifications((prev) => [donorOutcomeNotif, ...prev]);
+      }
 
       addAuditLog(`Donor Verification: ${status}`, 'Donor', result.donorId, {
         verifierName: result.verifiedBy,
@@ -1014,6 +1146,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAuditLog(`Donor Response: ${status}`, 'DonorRequest', requestId, { status, declineReason });
   };
 
+  const deleteDonor = async (donorId: string) => {
+    try {
+      const result = await deleteDonorAccount(donorId);
+      setDonors((prev) => prev.filter((d) => d.id !== donorId && d.donorId !== donorId && d.id !== result.donorId));
+      addAuditLog(result.isStaff ? 'Donor Profile Deleted' : 'Donor Account Deleted', 'Donor', donorId, {
+        result,
+      });
+    } catch (err: any) {
+      console.error('Error deleting donor:', err);
+      throw err;
+    }
+  };
+
   const recordDonation = async (donationData: Omit<Donation, 'id'>): Promise<Donation> => {
     let newDonation: Donation;
     if (isSupabaseConfigured && !isDemoMode) {
@@ -1032,14 +1177,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setDonations((prev) => [newDonation, ...prev]);
 
-    // Also update donor's totalDonations & lastDonationDate
+    // Also update donor's totalDonations & lastDonationDate (only update date if non-null)
     setDonors((prev) =>
       prev.map((d) =>
         d.donorId === donationData.donorId || d.userId === donationData.donorUserId || d.id === donationData.donorId
           ? {
               ...d,
               totalDonations: (d.totalDonations || 0) + 1,
-              lastDonationDate: donationData.donationDate,
+              lastDonationDate: donationData.donationDate || d.lastDonationDate,
               availability: false,
               updatedAt: new Date().toISOString(),
             }
@@ -1068,6 +1213,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return newDonation;
+  };
+
+  const deleteDonation = async (donationId: string) => {
+    const targetDonation = donations.find((d) => d.id === donationId);
+    if (isSupabaseConfigured) {
+      await deleteDonationInFirestore(donationId);
+    }
+    setDonations((prev) => prev.filter((d) => d.id !== donationId));
+
+    if (targetDonation) {
+      // Re-calculate donor totalDonations and lastDonationDate from remaining donations
+      setDonors((prev) =>
+        prev.map((d) => {
+          if (
+            d.donorId === targetDonation.donorId ||
+            d.userId === targetDonation.donorUserId ||
+            d.id === targetDonation.donorId
+          ) {
+            const remaining = donations.filter(
+              (don) => don.id !== donationId && (don.donorId === d.donorId || don.donorUserId === d.userId)
+            );
+            const dates = remaining
+              .map((r) => r.donationDate)
+              .filter((dt): dt is string => Boolean(dt))
+              .sort();
+            return {
+              ...d,
+              totalDonations: remaining.length,
+              lastDonationDate: dates.length > 0 ? dates[dates.length - 1] : undefined,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return d;
+        })
+      );
+    }
+
+    addAuditLog('Donation Deleted', 'Donation', donationId);
   };
 
   const addLocation = async (locationData: Omit<LocationItem, 'id'>): Promise<LocationItem> => {
@@ -2146,9 +2329,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registerDonor,
         updateDonor,
         verifyDonor,
+        deleteDonor,
         sendDonorRequest,
         respondDonorRequest,
         recordDonation,
+        deleteDonation,
         addBloodCamp,
         updateBloodCamp,
         deleteBloodCamp,

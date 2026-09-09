@@ -97,8 +97,9 @@ export interface DonorPublic {
 
 export interface DonorPrivate {
   donorId: string;
-  userId: string;
+  userId?: string | null;
   phone: string;
+  alternatePhone?: string;
   email?: string;
   gender?: 'male' | 'female' | 'other';
   dateOfBirth?: string;
@@ -115,8 +116,9 @@ export interface DonorPrivate {
 }
 
 export interface Donor extends DonorPublic {
-  userId: string;
+  userId?: string | null;
   phone: string;
+  alternatePhone?: string;
   gender?: 'male' | 'female' | 'other';
   dateOfBirth?: string;
   email?: string;
@@ -130,6 +132,8 @@ export interface Donor extends DonorPublic {
   verifiedBy?: string;
   verifiedAt?: string;
   updatedAt: string;
+  source?: 'registered' | 'imported' | 'manual';
+  importBatchId?: string;
 }
 
 
@@ -212,8 +216,8 @@ export interface Donation {
   donorName: string;
   bloodGroup: BloodGroup;
   requestId?: string;
-  donationDate: string;
-  hospital: string;
+  donationDate?: string | null;
+  hospital?: string;
   units: number;
   donationType: DonationType;
   verifiedBy: string;

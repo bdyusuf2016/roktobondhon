@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { usePermission } from '../../hooks/usePermission';
 import { AdminGuard } from '../../components/admin/AdminGuard';
@@ -47,8 +48,16 @@ interface AdminDashboardPageProps {
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   initialTab = 'overview',
 }) => {
-  const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab);
+  const [searchParams] = useSearchParams();
+  const queryTab = searchParams.get('tab') as AdminTabKey | null;
+  const [activeTab, setActiveTab] = useState<AdminTabKey>(queryTab || initialTab);
   const { can, currentRole, isSuperAdmin } = usePermission();
+
+  useEffect(() => {
+    if (queryTab) {
+      setActiveTab(queryTab);
+    }
+  }, [queryTab]);
   const {
     donors,
     bloodRequests,

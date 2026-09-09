@@ -419,3 +419,97 @@ export async function verifyDonorStatus(
   };
 }
 
+/**
+ * Result returned by donor deletion
+ */
+export interface DeleteDonorResult {
+  success: boolean;
+  isStaff?: boolean;
+  authDeleted?: boolean;
+  donorId: string;
+  humanId?: string;
+  message: string;
+}
+
+/**
+ * Delete a donor account / profile (Super Admin & Admin only)
+ * Executes via secure Edge Function (admin-delete-donor) with fallback to admin_delete_donor RPC.
+ */
+export async function deleteDonorAccount(donorId: string): Promise<DeleteDonorResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: true,
+      donorId,
+      message: 'ডোনার সফলভাবে ডিলিট করা হয়েছে (Local State)।',
+    };
+  }
+
+  // 1. Primary Path: Call Supabase Edge Function
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-delete-donor', {
+      body: { donorId },
+    });
+
+    if (!error && data && data.success) {
+      return {
+        success: true,
+        isStaff: Boolean(data.isStaff),
+        authDeleted: Boolean(data.authDeleted),
+        donorId: data.donorId || donorId,
+        humanId: data.humanId,
+        message: data.message || 'ডোনার সফলভাবে ডিলিট করা হয়েছে।',
+      };
+    }
+
+    if (error) {
+      const errMsg = error.message || '';
+      if (errMsg.includes('অনুমতি') || errMsg.includes('Unauthorized') || errMsg.includes('Forbidden')) {
+        throw new Error(errMsg);
+      }
+      console.warn('Edge Function admin-delete-donor failed, attempting RPC fallback:', errMsg);
+    }
+  } catch (err: any) {
+    if (err.message && (err.message.includes('অনুমতি') || err.message.includes('Unauthorized'))) {
+      throw err;
+    }
+    console.warn('Exception calling admin-delete-donor Edge Function:', err);
+  }
+
+  // 2. Fallback Path: Call admin_delete_donor PostgreSQL RPC
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc('admin_delete_donor', {
+      p_donor_id: donorId,
+    });
+
+    if (!rpcError && rpcData && rpcData.success) {
+      return {
+        success: true,
+        isStaff: Boolean(rpcData.is_staff),
+        donorId: rpcData.donor_id || donorId,
+        humanId: rpcData.human_id,
+        message: rpcData.is_staff
+          ? 'স্টাফ মেম্বারের রক্তদাতা প্রোফাইল ডিলিট করা হয়েছে (স্টাফ অ্যাকাউন্ট অক্ষত রাখা হয়েছে)।'
+          : 'রক্তদাতার প্রোফাইল সফলভাবে ডিলিট করা হয়েছে।',
+      };
+    }
+
+    if (rpcError) {
+      throw new Error(`ডোনার ডিলিট ব্যর্থ হয়েছে: ${rpcError.message}`);
+    }
+  } catch (rpcErr: any) {
+    console.error('RPC admin_delete_donor failed:', rpcErr);
+    // Direct RLS delete fallback
+    const { error: directErr } = await supabase.from('donors').delete().or(`id.eq.${donorId},donor_id.eq.${donorId}`);
+    if (directErr) {
+      throw new Error(`ডোনার ডিলিট ব্যর্থ হয়েছে: ${directErr.message}`);
+    }
+  }
+
+  return {
+    success: true,
+    donorId,
+    message: 'ডোনার সফলভাবে ডিলিট করা হয়েছে।',
+  };
+}
+
+

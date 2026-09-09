@@ -10,7 +10,9 @@ export const BottomNav: React.FC = () => {
   const { notifications } = useData();
   const { currentUser } = useAuth();
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifications.filter(
+    (n) => !n.isRead && (n.userId === currentUser?.id || n.userId === 'all')
+  ).length;
   const currentPath = location.pathname;
 
   const isActive = (path: string) => {

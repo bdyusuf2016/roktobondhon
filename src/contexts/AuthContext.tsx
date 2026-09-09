@@ -14,6 +14,8 @@ import {
 } from '../services/authService';
 import {
   getUserProfile,
+  getDonorProfileByUserId,
+  resolveAuthenticatedUserSession,
   createUserProfile,
   updateUserProfile as updateSupabaseUserProfile,
 } from '../services/userService';
@@ -64,7 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  // Listen to Supabase Auth state
+  // Listen to Supabase Auth state with two-tier resolution
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
@@ -72,21 +74,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSupabaseUser(sbUser);
       if (sbUser) {
         try {
-          const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone);
-          if (profile) {
-            setCurrentUser(profile);
-          } else {
-            // New user registration in Supabase
-            const newProfile = await createUserProfile(sbUser.id, {
-              fullName: sbUser.user_metadata?.full_name || 'সম্মানিত সদস্য',
-              phone: sbUser.phone || '',
-              email: sbUser.email || undefined,
-              role: 'donor',
-              photoUrl: sbUser.user_metadata?.avatar_url || undefined,
-              phoneVerified: Boolean(sbUser.phone),
-            });
-            setCurrentUser(newProfile);
+          const { user: resolvedUser } = await resolveAuthenticatedUserSession(
+            sbUser.id,
+            sbUser.email,
+            sbUser.phone
+          );
+
+          if (resolvedUser) {
+            setCurrentUser(resolvedUser);
           }
+          // Do NOT create public.users for ordinary donors or unattached sessions
         } catch (err) {
           console.error('Error synchronizing auth user profile:', err);
         }
@@ -110,18 +107,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const sbUser = await confirmSupabasePhoneOtp(phone, otp);
       setSupabaseUser(sbUser);
 
-      // Load or create user profile
-      const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone || phone);
-      if (profile) {
-        setCurrentUser(profile);
+      // Two-tier resolution
+      const { user: resolvedUser } = await resolveAuthenticatedUserSession(
+        sbUser.id,
+        sbUser.email,
+        sbUser.phone || phone
+      );
+
+      if (resolvedUser) {
+        if (resolvedUser.status === 'suspended') {
+          await signOutUser();
+          setSupabaseUser(null);
+          setCurrentUser(null);
+          throw new Error('আপনার অ্যাকাউন্টটি স্থগিত (Suspended) রয়েছে। অনুগ্রহ করে এডমিনের সাথে যোগাযোগ করুন।');
+        }
+        setCurrentUser(resolvedUser);
       } else {
-        const newProfile = await createUserProfile(sbUser.id, {
+        // Fallback for new donor registration via phone OTP
+        const fallbackDonorUser: User = {
+          id: sbUser.id,
           fullName: sbUser.user_metadata?.full_name || 'রক্তদাতা সদস্য',
           phone: sbUser.phone || phone,
           role: 'donor',
+          organizationId: 'org-roktobondon',
           phoneVerified: true,
-        });
-        setCurrentUser(newProfile);
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setCurrentUser(fallbackDonorUser);
       }
     } finally {
       setIsLoading(false);
@@ -135,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanPhone = isPhoneInput ? emailOrPhone.replace(/[^0-9]/g, '') : '';
       let targetEmail = emailOrPhone.trim().toLowerCase();
 
-      // If user typed a phone number, resolve their registered email first
+      // If user typed a phone number, resolve their registered email first (check users then donors)
       if (isPhoneInput && isSupabaseConfigured && supabase) {
         try {
           const { data: userRows } = await supabase
@@ -145,6 +159,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .limit(1);
           if (userRows && userRows.length > 0 && userRows[0].email) {
             targetEmail = userRows[0].email.toLowerCase();
+          } else {
+            const { data: donorRows } = await supabase
+              .from('donors')
+              .select('email')
+              .ilike('phone', `%${cleanPhone.slice(-10)}%`)
+              .limit(1);
+            if (donorRows && donorRows.length > 0 && donorRows[0].email) {
+              targetEmail = donorRows[0].email.toLowerCase();
+            }
           }
         } catch (lookupErr) {
           console.warn('Phone-to-email lookup error:', lookupErr);
@@ -157,19 +180,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const sbUser = await signInEmail(targetEmail, pass);
           if (sbUser) {
             setSupabaseUser(sbUser);
-            const profile = await getUserProfile(sbUser.id, sbUser.email, sbUser.phone);
-            if (profile) {
-              setCurrentUser(profile);
+
+            // Two-tier session resolution
+            const { user: resolvedUser, tier } = await resolveAuthenticatedUserSession(
+              sbUser.id,
+              sbUser.email,
+              sbUser.phone
+            );
+
+            if (resolvedUser) {
+              if (resolvedUser.status === 'suspended') {
+                await signOutUser();
+                setSupabaseUser(null);
+                setCurrentUser(null);
+                throw new Error('আপনার অ্যাকাউন্টটি স্থগিত (Suspended) রয়েছে। অনুগ্রহ করে এডমিনের সাথে যোগাযোগ করুন।');
+              }
+              setCurrentUser(resolvedUser);
               return;
+            }
+
+            // Neither public.users nor public.donors exists
+            if (!isDemoMode) {
+              await signOutUser();
+              setSupabaseUser(null);
+              setCurrentUser(null);
+              throw new Error('অ্যাকাউন্ট কনফিগারেশন ত্রুটি: আপনার অ্যাকাউন্টের সাথে কোনো অনুমোদিত স্টাফ বা রক্তদাতা প্রোফাইল পাওয়া যায়নি।');
             }
           }
         } catch (authErr: any) {
           console.warn('Supabase auth attempt notice:', authErr);
-          // In production mode, do not bypass real Supabase Auth to prevent ghost/unauthenticated sessions
           if (!isDemoMode) {
             const errDetail = authErr.message || '';
             if (errDetail.toLowerCase().includes('email not confirmed')) {
-              throw new Error('আপনার ইমেইলটি Supabase Auth-এ এখনও কনফার্ম করা হয়নি। অনুগ্রহ করে Supabase Dashboard থেকে কনফার্ম করুন।');
+              throw new Error('আপনার ইমেইলটি Supabase Auth-এ এখনও কনফার্ম করা হয়নি। অনুগ্রহ করে আপনার ইমেইল ইনবক্স চেক করুন অথবা এডমিনের সাথে যোগাযোগ করুন।');
             } else if (errDetail.toLowerCase().includes('invalid login credentials')) {
               throw new Error('ভুল ইমেইল বা পাসওয়ার্ড প্রদান করেছেন। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।');
             }
@@ -178,7 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 2. Direct database query in users table (only if demo mode or fallback)
+      // 2. Direct database query (only if demo mode)
       if (isSupabaseConfigured && supabase && isDemoMode) {
         try {
           let query = supabase.from('users').select('*');
@@ -241,16 +284,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       if (isSupabaseConfigured && supabase && email && pass) {
+        // Register in Supabase Auth
         const sbUser = await registerEmail(email, pass, { fullName, phone });
         setSupabaseUser(sbUser);
-        const profile = await createUserProfile(sbUser.id, {
+
+        // For ordinary donors: return Auth-linked user object without inserting public.users row
+        const donorUser: User = {
+          id: sbUser.id,
           fullName,
           phone,
           email,
-          role,
-        });
-        setCurrentUser(profile);
-        return profile;
+          role: role === 'donor' || !role ? 'donor' : role,
+          organizationId: 'org-roktobondon',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Only insert public.users if explicitly a staff role (super_admin, admin, moderator, volunteer)
+        if (role !== 'donor' && role !== 'recipient') {
+          const staffProfile = await createUserProfile(sbUser.id, {
+            fullName,
+            phone,
+            email,
+            role,
+          });
+          setCurrentUser(staffProfile);
+          return staffProfile;
+        }
+
+        setCurrentUser(donorUser);
+        return donorUser;
       }
 
       if (!isDemoMode && isSupabaseConfigured) {
@@ -307,14 +371,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updated = { ...currentUser, ...data, updatedAt: new Date().toISOString() };
       setCurrentUser(updated);
 
-      if (isSupabaseConfigured && !isDemoMode) {
+      if (isSupabaseConfigured && !isDemoMode && supabase) {
         try {
-          await updateSupabaseUserProfile(currentUser.id, {
-            fullName: data.fullName,
-            photoUrl: data.photoUrl,
-            email: data.email,
-            phone: data.phone,
-          });
+          if (currentUser.role !== 'donor' && currentUser.role !== 'recipient') {
+            // Staff profile: update public.users
+            await updateSupabaseUserProfile(currentUser.id, {
+              fullName: data.fullName,
+              photoUrl: data.photoUrl,
+              email: data.email,
+              phone: data.phone,
+            });
+          } else {
+            // Ordinary donor: update public.donors allowlisted fields
+            const donorUpdates: Record<string, any> = {
+              updated_at: new Date().toISOString(),
+            };
+            if (data.fullName !== undefined) donorUpdates.full_name = data.fullName;
+            if (data.photoUrl !== undefined) donorUpdates.photo_url = data.photoUrl;
+            if (data.email !== undefined) donorUpdates.email = data.email;
+            if (data.phone !== undefined) donorUpdates.phone = data.phone;
+
+            await supabase
+              .from('donors')
+              .update(donorUpdates)
+              .eq('user_id', currentUser.id);
+          }
         } catch (err) {
           console.error('Failed to sync profile update to Supabase:', err);
         }

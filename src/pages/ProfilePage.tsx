@@ -127,7 +127,7 @@ export const ProfilePage: React.FC = () => {
   }
 
   // Find linked donor record if any
-  const myDonor = donors.find((d) => d.userId === currentUser.id || d.phone === currentUser.phone);
+  const myDonor = donors.find((d) => d.userId === currentUser.id || (d.email && currentUser.email && d.email.toLowerCase() === currentUser.email.toLowerCase()) || d.phone === currentUser.phone);
   // User's blood requests
   const myRequests = bloodRequests.filter((r) => r.userId === currentUser.id);
   // User's donations
@@ -964,7 +964,7 @@ export const ProfilePage: React.FC = () => {
               <p className="text-xs text-slate-500">আপনার প্রতিটি রক্তদান একটি অমূল্য মানবসেবা</p>
             </div>
             <span className="text-xs font-black text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-200">
-              মোট: {myDonations.length} বার
+              মোট: {totalDonations} বার
             </span>
           </div>
 
@@ -977,13 +977,17 @@ export const ProfilePage: React.FC = () => {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 text-sm">{don.hospital}</span>
+                      <span className="font-bold text-slate-900 text-sm">{don.hospital || 'ধামরাই রক্তদান কেন্দ্র'}</span>
                       <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                         যাচাইকৃত
                       </span>
                     </div>
                     <p className="text-slate-500">
-                      তারিখ: <span className="font-mono font-semibold text-slate-700">{don.donationDate}</span> • পরিমাণ: {don.units} ব্যাগ ({don.donationType})
+                      তারিখ:{' '}
+                      <span className="font-mono font-semibold text-slate-700">
+                        {don.donationDate ? don.donationDate : 'তারিখ উল্লেখ নেই'}
+                      </span>{' '}
+                      • পরিমাণ: {don.units || 1} ব্যাগ ({don.donationType || 'Whole Blood'})
                     </p>
                     {don.notes && <p className="text-slate-400 text-[11px]">মন্তব্য: {don.notes}</p>}
                   </div>

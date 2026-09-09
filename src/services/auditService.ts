@@ -40,19 +40,18 @@ export async function recordAuditLog(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('audit_logs').insert({
-        id: log.id,
-        user_id: log.userId,
-        user_name: log.userName,
-        user_role: log.userRole,
-        action: log.action,
-        target_type: log.targetType,
-        target_id: log.targetId,
-        metadata: log.metadata,
-        timestamp: log.timestamp,
+      const { error } = await supabase.rpc('record_audit_log', {
+        p_action: action,
+        p_target_type: targetType,
+        p_target_id: targetId,
+        p_metadata: metadata || {},
       });
+
+      if (error) {
+        console.warn('RPC record_audit_log error:', error.message);
+      }
     } catch (err) {
-      console.warn('Failed to record audit log in Supabase:', err);
+      console.warn('Failed to record audit log via RPC:', err);
     }
   }
 
