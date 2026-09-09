@@ -59,6 +59,7 @@ import {
   respondToDonorRequest,
 } from '../services/donorRequestService';
 import { recordDonationInFirestore, deleteDonationInFirestore } from '../services/donationService';
+import { sendNotificationToSupabase } from '../services/notificationService';
 import { recordAuditLog } from '../services/auditService';
 import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
 import type { BackupCollectionKey, PlatformBackupPayload } from '../types/backup';
@@ -961,6 +962,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
 
       setNotifications((prev) => [donorNotif, ...reviewerNotifs, ...prev]);
+
+      if (isSupabaseConfigured && donorNotif.userId) {
+        sendNotificationToSupabase(donorNotif).catch((e) => {
+          console.warn('Could not persist donor registration notification', e);
+        });
+      }
 
       addAuditLog('Donor Registered', 'Donor', id, { donorId, bloodGroup: newDonor.bloodGroup });
       return newDonor;
