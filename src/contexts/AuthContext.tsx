@@ -39,23 +39,72 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Role-bearing profiles must always be resolved from an active Supabase session.
-  // A browser-persisted copy can be stale or locally modified.
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Synchronously restore user profile from storage to eliminate /login flash on reload
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('roktobondon_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const hasCachedUser = Boolean(localStorage.getItem('roktobondon_current_user'));
+    return Boolean(isSupabaseConfigured && supabase && !hasCachedUser);
+  });
 
-  // Remove the legacy role cache. Supabase owns session persistence.
+  // Keep local user cache synchronized
   useEffect(() => {
-    localStorage.removeItem('roktobondon_current_user');
-  }, []);
+    if (currentUser) {
+      localStorage.setItem('roktobondon_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('roktobondon_current_user');
+    }
+  }, [currentUser]);
 
   // Listen to Supabase Auth state with two-tier resolution
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      setIsLoading(false);
+      return;
+    }
 
+    let isMounted = true;
+
+    // 1. Check existing session immediately on startup
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!isMounted) return;
+      if (session?.user) {
+        setSupabaseUser(session.user);
+        try {
+          const { user: resolvedUser } = await resolveAuthenticatedUserSession(
+            session.user.id,
+            session.user.email,
+            session.user.phone
+          );
+          if (isMounted && resolvedUser) {
+            setCurrentUser(resolvedUser);
+          }
+        } catch (err) {
+          console.error('Error synchronizing auth user profile:', err);
+        }
+      } else {
+        if (!isDemoMode && isMounted) {
+          setCurrentUser(null);
+        }
+      }
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (isMounted) setIsLoading(false);
+    });
+
+    // 2. Subscribe to live auth state changes
     const unsubscribe = subscribeToAuth(async (sbUser) => {
+      if (!isMounted) return;
       setSupabaseUser(sbUser);
       if (sbUser) {
         try {
@@ -65,17 +114,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             sbUser.phone
           );
 
-          if (resolvedUser) {
+          if (isMounted && resolvedUser) {
             setCurrentUser(resolvedUser);
           }
-          // Do NOT create public.users for ordinary donors or unattached sessions
         } catch (err) {
           console.error('Error synchronizing auth user profile:', err);
         }
+      } else {
+        if (!isDemoMode && isMounted) {
+          setCurrentUser(null);
+        }
+      }
+      if (isMounted) {
+        setIsLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const sendPhoneOtp = async (phoneNumber: string): Promise<boolean> => {

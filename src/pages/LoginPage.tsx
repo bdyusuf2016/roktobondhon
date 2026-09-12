@@ -12,15 +12,7 @@ export const LoginPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading, loginWithEmail, switchDemoRole, isDemoMode } = useAuth();
   const { config } = useOrgConfig();
 
-  // If already logged in, automatically redirect away from /login
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center text-sm font-semibold text-slate-500">
-        অ্যাক্সেস যাচাই করা হচ্ছে...
-      </div>
-    );
-  }
-
+  // If already logged in, immediately redirect away from /login
   if (currentUser) {
     const redirectParam = searchParams.get('redirect');
     const target =
@@ -30,6 +22,15 @@ export const LoginPage: React.FC = () => {
         ? '/admin'
         : '/profile';
     return <Navigate to={target} replace />;
+  }
+
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+        <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+        <span>অ্যাক্সেস যাচাই করা হচ্ছে...</span>
+      </div>
+    );
   }
 
   const [identifier, setIdentifier] = useState('');
