@@ -943,20 +943,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const isSameDistrict = isDistrictMatch(d.district, newReq.district);
           const isSameUpazila = isUpazilaMatch(d.upazila, newReq.upazila);
 
-          if (shouldNotifyUpazila && isSameDistrict && isSameUpazila) return true;
           if (shouldNotifyDistrict && isSameDistrict) return true;
+          if (shouldNotifyUpazila && isSameDistrict && (isSameUpazila || !newReq.upazila)) return true;
           return false;
         });
 
         matchingDonors.forEach((d, idx) => {
           if (!d.userId) return;
           const isExactUpazila = isUpazilaMatch(d.upazila, newReq.upazila);
+          const isExactGroup = d.bloodGroup === newReq.bloodGroup;
           const donorNotif: NotificationItem = {
             id: `notif-target-${d.userId}-${Date.now()}-${idx}`,
             userId: d.userId,
-            title: isExactUpazila
-              ? `🚨 আপনার নিজ উপজেলা (${newReq.upazila})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`
-              : `🚨 আপনার জেলা (${newReq.district})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`,
+            title: isExactGroup
+              ? (isExactUpazila
+                  ? `🚨 আপনার নিজ উপজেলা (${newReq.upazila})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`
+                  : `🚨 আপনার জেলা (${newReq.district})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`)
+              : `🚨 রোগীর জন্য জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন (${newReq.district})!`,
             message: `${newReq.hospital}-এ রোগী ${newReq.patientName}-এর জন্য জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন (${newReq.requiredUnits} ব্যাগ)। আপনার সাহায্য রোগীর জীবন বাঁচাতে পারে।`,
             type: 'request',
             link: `/request/${newReq.id}`,

@@ -59,21 +59,42 @@ export const RequestBloodPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Calculate live count of ready nearby compatible donors
-  const availableNearbyDonorsCount = useMemo(() => {
+  // 1. Calculate live count of ready nearby donors of the EXACT requested blood group
+  const exactNearbyDonorsCount = useMemo(() => {
     return donors.filter((d) => {
       if (!d.availability) return false;
+      if (d.bloodGroup !== bloodGroup) return false;
 
-      const isCompat = isBloodCompatible(bloodGroup, d.bloodGroup);
       const sameDist = isDistrictMatch(d.district, district);
       const sameUpa = isUpazilaMatch(d.upazila, upazila);
 
       if (notifyDistrictDonors) {
-        return isCompat && sameDist;
+        return sameDist;
       }
 
       if (notifyUpazilaDonors) {
-        return isCompat && sameDist && sameUpa;
+        return sameDist && (sameUpa || !upazila);
+      }
+
+      return false;
+    }).length;
+  }, [donors, bloodGroup, district, upazila, notifyDistrictDonors, notifyUpazilaDonors]);
+
+  // 2. Calculate live count of ready nearby compatible donors (medically compatible alternative groups)
+  const compatibleNearbyDonorsCount = useMemo(() => {
+    return donors.filter((d) => {
+      if (!d.availability) return false;
+      if (!isBloodCompatible(bloodGroup, d.bloodGroup)) return false;
+
+      const sameDist = isDistrictMatch(d.district, district);
+      const sameUpa = isUpazilaMatch(d.upazila, upazila);
+
+      if (notifyDistrictDonors) {
+        return sameDist;
+      }
+
+      if (notifyUpazilaDonors) {
+        return sameDist && (sameUpa || !upazila);
       }
 
       return false;
@@ -561,14 +582,33 @@ export const RequestBloodPage: React.FC = () => {
 
             {/* Live Count Indicator */}
             {(notifyUpazilaDonors || notifyDistrictDonors) && (
-              <div className="flex items-center gap-2 px-3.5 py-2.5 bg-red-50 border border-red-200/80 rounded-lg text-xs text-red-900 animate-in fade-in duration-200">
-                <span className="relative flex h-2 w-2 shrink-0">
+              <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-red-50 border border-red-200/80 rounded-lg text-xs text-red-900 animate-in fade-in duration-200">
+                <span className="relative flex h-2 w-2 shrink-0 mt-0.5 sm:mt-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
                 </span>
-                <span className="text-[11px]">
-                  নির্বাচিত এলাকায় আপনার প্রয়োজনীয় <strong>{bloodGroup}</strong> গ্রুপের প্রায়{' '}
-                  <strong className="text-red-700 font-mono text-xs">{availableNearbyDonorsCount} জন</strong> প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন।
+                <span className="text-[11px] leading-relaxed">
+                  {exactNearbyDonorsCount > 0 ? (
+                    <>
+                      নির্বাচিত এলাকায় আপনার প্রয়োজনীয় <strong>{bloodGroup}</strong> গ্রুপের প্রায়{' '}
+                      <strong className="text-red-700 font-mono text-xs font-bold">{exactNearbyDonorsCount} জন</strong> প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন
+                      {compatibleNearbyDonorsCount > exactNearbyDonorsCount && (
+                        <span className="text-slate-600 font-normal">
+                          {' '}(এবং জরুরি প্রয়োজনে বিকল্প সামঞ্জস্যপূর্ণ গ্রুপের আরও <strong className="text-slate-800 font-mono text-xs font-semibold">{compatibleNearbyDonorsCount - exactNearbyDonorsCount} জন</strong> সক্রিয়)
+                        </span>
+                      )}
+                      ।
+                    </>
+                  ) : compatibleNearbyDonorsCount > 0 ? (
+                    <>
+                      নির্বাচিত এলাকায় সরাসরি <strong>{bloodGroup}</strong> গ্রুপের কোনো রক্তদাতা এই মুহূর্তে না থাকলেও জরুরি প্রয়োজনে বিকল্প সামঞ্জস্যপূর্ণ গ্রুপের প্রায়{' '}
+                      <strong className="text-red-700 font-mono text-xs font-bold">{compatibleNearbyDonorsCount} জন</strong> প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন।
+                    </>
+                  ) : (
+                    <>
+                      নির্বাচিত এলাকায় এই মুহূর্তে <strong>{bloodGroup}</strong> গ্রুপের কোনো প্রস্তুত রক্তদাতা পাওয়া যায়নি। জরুরি প্রয়োজনে <strong>পুরো জেলা অ্যালার্ট</strong> সক্রিয় করার পরামর্শ দেওয়া হচ্ছে।
+                    </>
+                  )}
                 </span>
               </div>
             )}

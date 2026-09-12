@@ -18,21 +18,21 @@ import { generateBloodRequestId, generateDonorId } from '../services/idGenerator
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const LOCATIONS = [
-  { district: 'Dhaka', upazila: 'Dhamrai', area: 'Dhamrai Sadar', code: 'DHM' },
-  { district: 'Dhaka', upazila: 'Dhamrai', area: 'Kushura', code: 'DHM' },
-  { district: 'Dhaka', upazila: 'Dhamrai', area: 'Rowail', code: 'DHM' },
-  { district: 'Dhaka', upazila: 'Dhamrai', area: 'Balia', code: 'DHM' },
-  { district: 'Dhaka', upazila: 'Savar', area: 'Savar Bazar', code: 'SVR' },
-  { district: 'Dhaka', upazila: 'Savar', area: 'Ashulia', code: 'SVR' },
-  { district: 'Dhaka', upazila: 'Savar', area: 'Aminbazar', code: 'SVR' },
-  { district: 'Dhaka', upazila: 'Savar', area: 'Birulia', code: 'SVR' },
-  { district: 'Manikganj', upazila: 'Manikganj Sadar', area: 'Bus Stand', code: 'MNK' },
-  { district: 'Manikganj', upazila: 'Manikganj Sadar', area: 'Beutha', code: 'MNK' },
-  { district: 'Manikganj', upazila: 'Singair', area: 'Singair Bazar', code: 'SNG' },
-  { district: 'Manikganj', upazila: 'Singair', area: 'Charigram', code: 'SNG' },
-  { district: 'Manikganj', upazila: 'Saturia', area: 'Baliati', code: 'SAT' },
-  { district: 'Manikganj', upazila: 'Shivalaya', area: 'Aricha Ghat', code: 'SHV' },
-  { district: 'Manikganj', upazila: 'Harirampur', area: 'Jhitka', code: 'HRP' },
+  { district: 'ঢাকা', upazila: 'ধামরাই', area: 'ধামরাই সদর', code: 'DHM' },
+  { district: 'ঢাকা', upazila: 'ধামরাই', area: 'কুশুরা', code: 'DHM' },
+  { district: 'ঢাকা', upazila: 'ধামরাই', area: 'রোয়াইল', code: 'DHM' },
+  { district: 'ঢাকা', upazila: 'ধামরাই', area: 'বালিয়া', code: 'DHM' },
+  { district: 'ঢাকা', upazila: 'সাভার', area: 'সাভার বাজার', code: 'SVR' },
+  { district: 'ঢাকা', upazila: 'সাভার', area: 'আশুলিয়া', code: 'SVR' },
+  { district: 'ঢাকা', upazila: 'সাভার', area: 'আমিনবাজার', code: 'SVR' },
+  { district: 'ঢাকা', upazila: 'সাভার', area: 'বিরুলিয়া', code: 'SVR' },
+  { district: 'মানিকগঞ্জ', upazila: 'মানিকগঞ্জ সদর', area: 'বাস স্ট্যান্ড', code: 'MNK' },
+  { district: 'মানিকগঞ্জ', upazila: 'মানিকগঞ্জ সদর', area: 'বেউথা', code: 'MNK' },
+  { district: 'মানিকগঞ্জ', upazila: 'সিংগাইর', area: 'সিংগাইর বাজার', code: 'SNG' },
+  { district: 'মানিকগঞ্জ', upazila: 'সিংগাইর', area: 'চারিগ্রাম', code: 'SNG' },
+  { district: 'মানিকগঞ্জ', upazila: 'সাটুরিয়া', area: 'বালিয়াটি', code: 'SAT' },
+  { district: 'মানিকগঞ্জ', upazila: 'শিবালয়', area: 'আরিচা ঘাট', code: 'SHV' },
+  { district: 'মানিকগঞ্জ', upazila: 'হরিরামপুর', area: 'ঝিটকা', code: 'HRP' },
 ];
 
 const BANGLA_FIRST_NAMES = [

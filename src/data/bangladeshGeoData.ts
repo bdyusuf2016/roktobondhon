@@ -878,20 +878,253 @@ export function isDistrictMatch(donorDistrict?: string, searchDistrict?: string)
     return d1.id === d2.id;
   }
 
+
   return cleanDonor.includes(cleanSearch) || cleanSearch.includes(cleanDonor);
 }
 
 /**
- * Check if two upazilas match
+ * Bilingual alias dictionary for Upazilas across Bangladesh
+ */
+export const UPAZILA_BILINGUAL_ALIASES: Record<string, string[]> = {
+  // Dhaka Division
+  'ধামরাই': ['dhamrai'],
+  'সাভার': ['savar', 'ashulia', 'সাভার বাজার', 'আশুলিয়া'],
+  'কেরানীগঞ্জ': ['keraniganj', 'keranigonj'],
+  'নবাবগঞ্জ': ['nawabganj', 'nawabgonj'],
+  'দোহার': ['dohar'],
+  'ঢাকা উত্তর সিটি কর্পোরেশন': ['dhaka north', 'dhaka north city corporation', 'dncc'],
+  'ঢাকা দক্ষিণ সিটি কর্পোরেশন': ['dhaka south', 'dhaka south city corporation', 'dscc'],
+  'মিরপুর': ['mirpur'],
+  'উত্তরা': ['uttara'],
+  'গুলশান': ['gulshan'],
+  'মোহাম্মদপুর': ['mohammadpur'],
+  'ধানমন্ডি': ['dhanmondi'],
+  'মতিঝিল': ['motijheel', 'motijhil'],
+  'যাত্রাবাড়ী': ['jatrabari'],
+  'পুরান ঢাকা': ['puran dhaka', 'old dhaka'],
+
+  // Manikganj
+  'মানিকগঞ্জ সদর': ['manikganj sadar', 'manikganj'],
+  'সাটুরিয়া': ['saturia'],
+  'সিংগাইর': ['singair', 'shingair'],
+  'শিবালয়': ['shivalaya', 'shibalaya', 'shiblay'],
+  'ঘিওর': ['ghior'],
+  'হরিরামপুর': ['harirampur'],
+  'দৌলতপুর': ['daulatpur', 'dowlatpur'],
+
+  // Gazipur
+  'গাজীপুর সদর': ['gazipur sadar', 'gazipur'],
+  'কালিয়াকৈর': ['kaliakair', 'koliakoir'],
+  'শ্রীপুর': ['sreepur', 'sripur'],
+  'কাপাসিয়া': ['kapasia'],
+  'কালীগঞ্জ': ['kaliganj', 'kaligonj'],
+  'টঙ্গী': ['tongi'],
+
+  // Narayanganj
+  'নারায়ণগঞ্জ সদর': ['narayanganj sadar', 'narayanganj'],
+  'রূপগঞ্জ': ['rupganj', 'rupgonj'],
+  'সোনারগাঁও': ['sonargaon'],
+  'আড়াইহাজার': ['araihazar'],
+  'বন্দর': ['bandar'],
+
+  // Narsingdi
+  'নরসিংদী সদর': ['narsingdi sadar', 'narsingdi'],
+  'পলাশ': ['palash'],
+  'বেলাব': ['belabo', 'belab'],
+  'মনোহরদী': ['monohardi'],
+  'রায়পুরা': ['raipura'],
+  'শিবপুর': ['shibpur'],
+
+  // Munshiganj
+  'মুন্সীগঞ্জ সদর': ['munshiganj sadar', 'munshiganj'],
+  'শ্রীনগর': ['sreenagar', 'srinagar'],
+  'সিরাজদিখান': ['sirajdikhan'],
+  'লৌহজং': ['louhajang'],
+  'গজারিয়া': ['gajaria'],
+  'টংগীবাড়ী': ['tongibari'],
+
+  // Tangail
+  'টাঙ্গাইল সদর': ['tangail sadar', 'tangail'],
+  'মির্জাপুর': ['mirzapur'],
+  'কালিহাতী': ['kalihati'],
+  'ঘাটাইল': ['ghatail'],
+  'মধুপুর': ['madhupur'],
+  'গোপালপুর': ['gopalpur'],
+  'ভূঞাপুর': ['bhuapur'],
+  'নাগরপুর': ['nagarpur'],
+  'সখিপুর': ['sakhipur'],
+  'দেলদুয়ার': ['delduar'],
+  'বাসাইল': ['basail'],
+  'ধনবাড়ী': ['dhanbari'],
+
+  // Chattogram Division
+  'চট্টগ্রাম সদর': ['chattogram sadar', 'chittagong sadar', 'chattogram', 'chittagong'],
+  'হাটহাজারী': ['hathazari'],
+  'সীতাকুণ্ড': ['sitakunda', 'sitakundu'],
+  'মীরসরাই': ['mirsharai', 'mirshorai'],
+  'পটিয়া': ['patiya'],
+  'বোয়ালখালী': ['boalkhali'],
+  'রাউজান': ['raozan'],
+  'রাঙ্গুনিয়া': ['rangunia'],
+  'আনোয়ারা': ['anwara'],
+  'চন্দনাইশ': ['chandanaish'],
+  'বাঁশখালী': ['banshkhali'],
+  'লোহাগাড়া': ['lohagara'],
+  'সাতকানিয়া': ['satkania'],
+  'সন্দ্বীপ': ['sandwip'],
+  'ফটিকছড়ি': ['fatikchhari', 'fatickchari'],
+  'কর্ণফুলী': ['karnaphuli'],
+
+  // Cox's Bazar
+  'কক্সবাজার সদর': ['coxs bazar sadar', 'cox\'s bazar sadar', 'coxs bazar', 'cox\'s bazar'],
+  'চকরিয়া': ['chakaria'],
+  'টেকনাফ': ['teknaf'],
+  'উখিয়া': ['ukhiya'],
+  'রামু': ['ramu'],
+  'মহেশখালী': ['maheshkhali'],
+  'কুতুবদিয়া': ['kutubdia'],
+  'পেকুয়া': ['pekua'],
+
+  // Cumilla
+  'কুমিল্লা আদর্শ সদর': ['cumilla adarsha sadar', 'cumilla sadar', 'comilla sadar'],
+  'কুমিল্লা সদর দক্ষিণ': ['cumilla sadar dakshin', 'comilla south'],
+  'লাকসাম': ['laksam'],
+  'দাউদকান্দি': ['daudkandi'],
+  'দেবীদ্বার': ['debidwar'],
+  'হোমনা': ['homna'],
+  'মুরাদনগর': ['muradnagar'],
+  'চান্দিনা': ['chandina'],
+  'চৌদ্দগ্রাম': ['chauddagram'],
+  'বরুড়া': ['barura'],
+  'বুড়িচং': ['burichang'],
+  'ব্রাহ্মণপাড়া': ['brahmanpara'],
+
+  // Sylhet Division
+  'সিলেট সদর': ['sylhet sadar', 'sylhet'],
+  'বিয়ানীবাজার': ['beanibazar'],
+  'গোলাপগঞ্জ': ['golapganj'],
+  'গোয়াইনঘাট': ['gowainghat'],
+  'জৈন্তাপুর': ['jaintiapur'],
+  'কানাইঘাট': ['kanaighat'],
+  'বালাগঞ্জ': ['balaganj'],
+  'ফেঞ্চুগঞ্জ': ['fenchuganj'],
+  'জকিগঞ্জ': ['zakiganj'],
+  'কোম্পানীগঞ্জ': ['companiganj'],
+  'দক্ষিণ সুরমা': ['dakshin surma', 'south surma'],
+  'ওসমানী নগর': ['osmani nagar'],
+
+  // Rajshahi Division
+  'রাজশাহী সদর': ['rajshahi sadar', 'rajshahi'],
+  'বাঘা': ['bagha'],
+  'বাগমারা': ['bagmara'],
+  'চারঘাট': ['charghat'],
+  'দুর্গাপুর': ['durgapur'],
+  'গোদাগাড়ী': ['godagari'],
+  'মোহনপুর': ['mohanpur'],
+  'পবা': ['paba'],
+  'পুঠিয়া': ['puthia'],
+  'তানোর': ['tanore', 'tanor'],
+
+  // Bogura
+  'বগুড়া সদর': ['bogura sadar', 'bogra sadar', 'bogura', 'bogra'],
+  'ধুনট': ['dhunat'],
+  'দুপচাঁচিয়া': ['dupchanchia'],
+  'গাবতলী': ['gabtali'],
+  'কাহালু': ['kahaloo', 'kahalu'],
+  'নন্দীগ্রাম': ['nandigram'],
+  'সারিয়াকান্দি': ['sariakandi'],
+  'শাজাহানপুর': ['shajahanpur'],
+  'শেরপুর': ['sherpur'],
+  'শিবগঞ্জ': ['shibganj'],
+  'সোনাতলা': ['sonatola'],
+  'আদমদীঘি': ['adamdighi'],
+
+  // Khulna Division
+  'খুলনা সদর': ['khulna sadar', 'khulna'],
+  'বটিয়াঘাটা': ['batiaghata'],
+  'দাকোপ': ['dacope'],
+  'ডুমুরিয়া': ['dumuria'],
+  'দিঘলিয়া': ['dighalia'],
+  'কয়রা': ['koyra'],
+  'পাইকগাছা': ['paikgachha', 'paikgacha'],
+  'ফুলতলা': ['phultala'],
+  'রূপসা': ['rupsha'],
+  'তেরখাদা': ['terokhada'],
+
+  // Barishal Division
+  'বরিশাল সদর': ['barishal sadar', 'barisal sadar', 'barishal', 'barisal'],
+  'আগৈলঝাড়া': ['agailjhara'],
+  'বাবুগঞ্জ': ['babuganj'],
+  'বাকেরগঞ্জ': ['bakerganj'],
+  'বানারীপাড়া': ['banaripara'],
+  'গৌরনদী': ['gaurnadi'],
+  'হিজলা': ['hizla'],
+  'মেহেন্দিগঞ্জ': ['mehendiganj'],
+  'মুলাদী': ['muladi'],
+  'উজিরপুর': ['wazirpur'],
+
+  // Rangpur Division
+  'রংপুর সদর': ['rangpur sadar', 'rangpur'],
+  'বদরগঞ্জ': ['badarganj'],
+  'গংগাচড়া': ['gangachhara', 'gangachara'],
+  'কাউনিয়া': ['kaunia'],
+  'মিঠাপুকুর': ['mithapukur'],
+  'পীরগাছা': ['pirgachha'],
+  'পীরগঞ্জ': ['pirganj'],
+  'তারাগঞ্জ': ['taraganj'],
+};
+
+/**
+ * Check if two upazilas match (supports bilingual English vs Bengali and alias matching)
  */
 export function isUpazilaMatch(donorUpazila?: string, searchUpazila?: string): boolean {
   if (!searchUpazila) return true;
   if (!donorUpazila) return false;
 
-  const cleanDonor = donorUpazila.toLowerCase().trim();
-  const cleanSearch = searchUpazila.toLowerCase().trim();
+  const cleanDonor = donorUpazila.toLowerCase().replace(/[()]/g, ' ').trim();
+  const cleanSearch = searchUpazila.toLowerCase().replace(/[()]/g, ' ').trim();
 
   if (cleanDonor === cleanSearch) return true;
+  if (cleanDonor.includes(cleanSearch) || cleanSearch.includes(cleanDonor)) return true;
 
-  return cleanDonor.includes(cleanSearch) || cleanSearch.includes(cleanDonor);
+  // Check alias dictionary in both directions
+  for (const [bnName, aliases] of Object.entries(UPAZILA_BILINGUAL_ALIASES)) {
+    const cleanBn = bnName.toLowerCase().trim();
+    const isDonorMatched =
+      cleanDonor === cleanBn ||
+      cleanDonor.includes(cleanBn) ||
+      aliases.some((a) => cleanDonor === a || cleanDonor.includes(a));
+
+    const isSearchMatched =
+      cleanSearch === cleanBn ||
+      cleanSearch.includes(cleanBn) ||
+      aliases.some((a) => cleanSearch === a || cleanSearch.includes(a));
+
+    if (isDonorMatched && isSearchMatched) {
+      return true;
+    }
+  }
+
+  // Fuzzy normalizer: strip common suffixes like 'sadar', 'upazila', 'thana'
+  const stripSuffixes = (str: string) =>
+    str
+      .replace(/\b(sadar|upazila|thana)\b/gi, '')
+      .replace(/(সদর|উপজেলা|থানা)/g, '')
+      .trim();
+
+  const strippedDonor = stripSuffixes(cleanDonor);
+  const strippedSearch = stripSuffixes(cleanSearch);
+
+  if (
+    strippedDonor &&
+    strippedSearch &&
+    (strippedDonor === strippedSearch ||
+      strippedDonor.includes(strippedSearch) ||
+      strippedSearch.includes(strippedDonor))
+  ) {
+    return true;
+  }
+
+  return false;
 }
+
