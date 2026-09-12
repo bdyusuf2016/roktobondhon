@@ -63,15 +63,22 @@ export const RequestBloodPage: React.FC = () => {
   const availableNearbyDonorsCount = useMemo(() => {
     return donors.filter((d) => {
       if (!d.availability) return false;
+
       const isCompat = isBloodCompatible(bloodGroup, d.bloodGroup);
       const sameDist = isDistrictMatch(d.district, district);
       const sameUpa = isUpazilaMatch(d.upazila, upazila);
+
       if (notifyDistrictDonors) {
         return isCompat && sameDist;
       }
-      return isCompat && sameDist && sameUpa;
+
+      if (notifyUpazilaDonors) {
+        return isCompat && sameDist && sameUpa;
+      }
+
+      return false;
     }).length;
-  }, [donors, bloodGroup, district, upazila, notifyDistrictDonors]);
+  }, [donors, bloodGroup, district, upazila, notifyDistrictDonors, notifyUpazilaDonors]);
 
   // Check if request system is disabled by admin
   const isRequestDisabled = reqConfig?.requestEnabled === false;
