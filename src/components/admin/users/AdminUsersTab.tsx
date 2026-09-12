@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Heart,
   ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -46,6 +48,7 @@ export const AdminUsersTab: React.FC = () => {
   const [selectedDonorForPreview, setSelectedDonorForPreview] = useState<Donor | null>(null);
   const [userTabMode, setUserTabMode] = useState<'users' | 'matrix'>('users');
   const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<'all' | 'blood' | 'directory' | 'funds' | 'system'>('all');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -315,8 +318,30 @@ export const AdminUsersTab: React.FC = () => {
                     return (
                       <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900">{u.fullName}</div>
-                          <span className="text-[10px] text-slate-400 font-mono">{u.id}</span>
+                          <div className="flex items-center gap-1.5 group">
+                            <span className="font-bold text-slate-900">{u.fullName}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(u.id);
+                                setCopiedId(u.id);
+                                setTimeout(() => setCopiedId(null), 1500);
+                              }}
+                              title={`সিস্টেম আইডি কপি করুন: ${u.id}`}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 transition-opacity p-0.5 rounded cursor-pointer"
+                            >
+                              {copiedId === u.id ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                          {u.createdAt && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              যুক্ত হয়েছেন: {new Date(u.createdAt).toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2">
