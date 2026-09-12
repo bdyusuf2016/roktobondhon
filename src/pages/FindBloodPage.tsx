@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, ShieldCheck, AlertCircle, RefreshCw, MapPin } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DonorCard } from '../components/DonorCard';
+import { SearchableSelect } from '../components/common/SearchableSelect';
 import type { BloodGroup } from '../types';
 import {
   BANGLADESH_DIVISIONS,
@@ -133,67 +134,61 @@ export const FindBloodPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Dynamic Division, District & Upazila Selectors */}
+        {/* Dynamic Division, District & Upazila Searchable Selectors */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              বিভাগ (Division)
-            </label>
-            <select
+            <SearchableSelect
+              label="বিভাগ (Division)"
+              placeholder="সকল বিভাগ"
+              searchPlaceholder="বিভাগ খুঁজুন..."
+              allOptionLabel="সকল বিভাগ (৮ বিভাগ)"
               value={division}
-              onChange={(e) => {
-                setDivision(e.target.value);
+              onChange={(val) => {
+                setDivision(val);
                 setDistrict('');
                 setUpazila('');
               }}
-              className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
-            >
-              <option value="">সকল বিভাগ (৮ বিভাগ)</option>
-              {BANGLADESH_DIVISIONS.map((div) => (
-                <option key={div.id} value={div.id}>
-                  {div.nameBn} ({div.nameEn})
-                </option>
-              ))}
-            </select>
+              options={BANGLADESH_DIVISIONS.map((div) => ({
+                value: div.id,
+                label: `${div.nameBn} (${div.nameEn})`,
+                subLabel: div.nameEn,
+              }))}
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              জেলা ({availableDistricts.length} জেলা)
-            </label>
-            <select
+            <SearchableSelect
+              label={`জেলা (${availableDistricts.length} জেলা)`}
+              placeholder="সকল জেলা"
+              searchPlaceholder="জেলা সার্চ করুন (যেমন: ঢাকা, বগুড়া)..."
+              allOptionLabel="সকল জেলা"
               value={district}
-              onChange={(e) => {
-                setDistrict(e.target.value);
+              onChange={(val) => {
+                setDistrict(val);
                 setUpazila('');
               }}
-              className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
-            >
-              <option value="">সকল জেলা</option>
-              {availableDistricts.map((dist) => (
-                <option key={dist.id} value={dist.nameBn}>
-                  {dist.nameBn} ({dist.nameEn})
-                </option>
-              ))}
-            </select>
+              options={availableDistricts.map((dist) => ({
+                value: dist.nameBn,
+                label: `${dist.nameBn} (${dist.nameEn})`,
+                subLabel: dist.nameEn,
+              }))}
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              উপজেলা / থানা
-            </label>
-            <select
+            <SearchableSelect
+              label="উপজেলা / থানা"
+              placeholder={district ? 'সকল উপজেলা' : 'প্রথমে জেলা নির্বাচন করুন'}
+              searchPlaceholder="উপজেলা সার্চ করুন (যেমন: সাভার, ধামরাই)..."
+              allOptionLabel={district ? 'সকল উপজেলা' : undefined}
+              disabled={!district}
               value={upazila}
-              onChange={(e) => setUpazila(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
-            >
-              <option value="">{district ? 'সকল উপজেলা' : 'প্রথমে জেলা নির্বাচন করুন'}</option>
-              {availableUpazilas.map((upa) => (
-                <option key={upa} value={upa}>
-                  {upa}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setUpazila(val)}
+              options={availableUpazilas.map((upa) => ({
+                value: upa,
+                label: upa,
+              }))}
+            />
           </div>
 
           <div>
