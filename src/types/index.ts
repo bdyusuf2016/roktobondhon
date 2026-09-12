@@ -161,6 +161,8 @@ export interface BloodRequestPublic {
   organizationId?: string;
   createdAt: string;
   expiresAt?: string;
+  notifyUpazilaDonors?: boolean;
+  notifyDistrictDonors?: boolean;
 }
 
 export interface BloodRequest {
@@ -191,6 +193,8 @@ export interface BloodRequest {
   organizationId?: string;
   createdAt: string;
   expiresAt?: string;
+  notifyUpazilaDonors?: boolean;
+  notifyDistrictDonors?: boolean;
 }
 
 export interface DonorRequest {

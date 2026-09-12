@@ -9,9 +9,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Share2,
+  MessageCircle,
 } from 'lucide-react';
 import type { BloodRequest } from '../types';
 import { useDialog } from '../contexts/DialogContext';
+import { getRequestWhatsAppLink } from '../services/whatsappService';
 
 interface BloodRequestCardProps {
   request: BloodRequest;
@@ -161,14 +163,27 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
           <Share2 className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {request.contactNumber ? (
-            <a
-              href={`tel:${request.contactNumber}`}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-            >
-              কল করুন
-            </a>
+            <>
+              <a
+                href={`tel:${request.contactNumber}`}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors"
+                title="সরাসরি কল করুন"
+              >
+                কল
+              </a>
+              <a
+                href={getRequestWhatsAppLink(request)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-[#25D366] hover:bg-[#20bd5a] border border-emerald-600/30 flex items-center gap-1 shadow-2xs transition-transform active:scale-95"
+                title="হোয়াটসঅ্যাপে মেসেজ পাঠান"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </a>
+            </>
           ) : (
             <Link
               to={`/request/${request.id}`}

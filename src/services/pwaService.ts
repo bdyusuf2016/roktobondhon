@@ -101,7 +101,8 @@ export async function processSyncQueue(
   handler?: (item: SyncQueueItem) => Promise<boolean>
 ): Promise<{ processed: number; failed: number }> {
   const queue = getSyncQueue();
-  const pendingItems = queue.filter((i) => i.status === 'pending' || i.status === 'failed');
+  // Retrying `syncing` items also recovers records left mid-flight by a reload.
+  const pendingItems = queue.filter((i) => i.status === 'pending' || i.status === 'failed' || i.status === 'syncing');
 
   let processed = 0;
   let failed = 0;
@@ -111,13 +112,12 @@ export async function processSyncQueue(
     saveSyncQueue([...queue]);
 
     try {
-      let isSuccess = true;
+      let isSuccess = false;
       if (handler) {
         isSuccess = await handler(item);
       } else {
-        // Default simulated processor for standard actions
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        isSuccess = true;
+        // Never acknowledge or delete real data without a server response.
+        item.lastError = 'সার্ভারে সিঙ্ক করার কোনো হ্যান্ডলার কনফিগার করা নেই';
       }
 
       if (isSuccess) {

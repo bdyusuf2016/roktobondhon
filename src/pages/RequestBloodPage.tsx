@@ -12,19 +12,22 @@ import {
   User,
   ShieldAlert,
   Sparkles,
+  BellRing,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
 import type { BloodGroup, EmergencyLevel } from '../types';
-import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
+import { BANGLADESH_DISTRICTS, getUpazilasForDistrict, isDistrictMatch, isUpazilaMatch } from '../data/bangladeshGeoData';
+import { isBloodCompatible } from '../services/matchingService';
+import { SearchableSelect } from '../components/common/SearchableSelect';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export const RequestBloodPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { createBloodRequest, hospitals, addHospital } = useData();
+  const { createBloodRequest, hospitals, addHospital, donors } = useData();
   const { currentUser } = useAuth();
   const { config } = useSystemConfig();
 
@@ -50,9 +53,25 @@ export const RequestBloodPage: React.FC = () => {
   const [relationship, setRelationship] = useState('রোগী নিজেই');
   const [emergencyLevel, setEmergencyLevel] = useState<EmergencyLevel>('URGENT');
   const [notes, setNotes] = useState('');
+  const [notifyUpazilaDonors, setNotifyUpazilaDonors] = useState(true);
+  const [notifyDistrictDonors, setNotifyDistrictDonors] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Calculate live count of ready nearby compatible donors
+  const availableNearbyDonorsCount = useMemo(() => {
+    return donors.filter((d) => {
+      if (!d.availability) return false;
+      const isCompat = isBloodCompatible(bloodGroup, d.bloodGroup);
+      const sameDist = isDistrictMatch(d.district, district);
+      const sameUpa = isUpazilaMatch(d.upazila, upazila);
+      if (notifyDistrictDonors) {
+        return isCompat && sameDist;
+      }
+      return isCompat && sameDist && sameUpa;
+    }).length;
+  }, [donors, bloodGroup, district, upazila, notifyDistrictDonors]);
 
   // Check if request system is disabled by admin
   const isRequestDisabled = reqConfig?.requestEnabled === false;
@@ -154,6 +173,8 @@ export const RequestBloodPage: React.FC = () => {
         notes: notes.trim(),
         organizationId: 'org-roktobondon',
         expiresAt,
+        notifyUpazilaDonors,
+        notifyDistrictDonors,
       });
 
       // Redirect immediately to matching engine for this request
@@ -357,42 +378,37 @@ export const RequestBloodPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                জেলা *
-              </label>
-              <select
+              <SearchableSelect
+                label="জেলা *"
+                placeholder="জেলা নির্বাচন করুন"
+                searchPlaceholder="জেলা সার্চ করুন..."
                 value={district}
-                onChange={(e) => {
-                  const newDist = e.target.value;
-                  setDistrict(newDist);
-                  const upas = getUpazilasForDistrict(newDist);
+                onChange={(val) => {
+                  setDistrict(val);
+                  const upas = getUpazilasForDistrict(val);
                   setUpazila(upas.length > 0 ? upas[0] : '');
                 }}
-                className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
-              >
-                {BANGLADESH_DISTRICTS.map((d) => (
-                  <option key={d.id} value={d.nameBn}>
-                    {d.nameBn} ({d.nameEn})
-                  </option>
-                ))}
-              </select>
+                options={BANGLADESH_DISTRICTS.map((d) => ({
+                  value: d.nameBn,
+                  label: `${d.nameBn} (${d.nameEn})`,
+                  subLabel: d.nameEn,
+                }))}
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                উপজেলা / থানা *
-              </label>
-              <select
+              <SearchableSelect
+                label="উপজেলা / থানা *"
+                placeholder={district ? 'উপজেলা নির্বাচন করুন' : 'প্রথমে জেলা নির্বাচন করুন'}
+                searchPlaceholder="উপজেলা সার্চ করুন..."
+                disabled={!district}
                 value={upazila}
-                onChange={(e) => setUpazila(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
-              >
-                {availableUpazilas.map((upa) => (
-                  <option key={upa} value={upa}>
-                    {upa}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setUpazila(val)}
+                options={availableUpazilas.map((upa) => ({
+                  value: upa,
+                  label: upa,
+                }))}
+              />
             </div>
 
             <div>
@@ -477,6 +493,78 @@ export const RequestBloodPage: React.FC = () => {
               placeholder="অপারেশন বা রোগের বিস্তারিত, কেবিন/ওয়ার্ড নম্বর ইত্যাদি..."
               className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden"
             />
+          </div>
+        </div>
+
+        {/* Section 4: Donor Alert & Notification Preferences */}
+        <div className="space-y-3 pt-4 border-t border-slate-100 bg-gradient-to-br from-slate-50 to-red-50/20 p-4 rounded-xl border border-slate-200/90">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-red-100 text-red-600 flex items-center justify-center">
+                <BellRing className="w-3.5 h-3.5" />
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                ৪. রক্তদাতা নোটিফিকেশন অ্যালার্ট অপশন
+              </h2>
+            </div>
+            <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+              তাৎক্ষণিক অ্যালার্ট
+            </span>
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            {/* Option 1: Upazila Targeted Alerts */}
+            <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-200/90 hover:border-red-400 transition-all cursor-pointer shadow-xs">
+              <input
+                type="checkbox"
+                checked={notifyUpazilaDonors}
+                onChange={(e) => setNotifyUpazilaDonors(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+              />
+              <div className="text-xs space-y-0.5 select-none">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  📍 নিজ উপজেলা ({upazila || 'নির্বাচিত উপজেলা'})-এর প্রস্তুত রক্তদাতাদের তাৎক্ষণিক অ্যালার্ট পাঠান
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.2 rounded">
+                    প্রস্তাবিত
+                  </span>
+                </span>
+                <p className="text-slate-500 text-[11px] leading-relaxed">
+                  আবেদন সাবমিট হওয়া মাত্রই {upazila || 'উপজেলা'}-এর নিবন্ধিত ও রক্তদানে প্রস্তুত {bloodGroup} গ্রুপের রক্তদাতাদের প্রোফাইলে সরাসরি জরুরি নোটিফিকেশন পৌঁছে যাবে।
+                </p>
+              </div>
+            </label>
+
+            {/* Option 2: Full District Alerts */}
+            <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-200/90 hover:border-red-400 transition-all cursor-pointer shadow-xs">
+              <input
+                type="checkbox"
+                checked={notifyDistrictDonors}
+                onChange={(e) => setNotifyDistrictDonors(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500 cursor-pointer"
+              />
+              <div className="text-xs space-y-0.5 select-none">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  🚨 অতি জরুরি প্রয়োজনে পুরো জেলা ({district || 'নির্বাচিত জেলা'})-এর সকল রক্তদাতাদেরও অ্যালার্ট পাঠান
+                </span>
+                <p className="text-slate-500 text-[11px] leading-relaxed">
+                  রোগীর অবস্থা ক্রিটিক্যাল হলে এবং নিজ উপজেলার বাইরেও বিস্তৃত এলাকায় দ্রুত রক্তদাতার সন্ধানের প্রয়োজন হলে এটি সক্রিয় করুন।
+                </p>
+              </div>
+            </label>
+
+            {/* Live Count Indicator */}
+            {(notifyUpazilaDonors || notifyDistrictDonors) && (
+              <div className="flex items-center gap-2 px-3.5 py-2.5 bg-red-50 border border-red-200/80 rounded-lg text-xs text-red-900 animate-in fade-in duration-200">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                </span>
+                <span className="text-[11px]">
+                  নির্বাচিত এলাকায় আপনার প্রয়োজনীয় <strong>{bloodGroup}</strong> গ্রুপের প্রায়{' '}
+                  <strong className="text-red-700 font-mono text-xs">{availableNearbyDonorsCount} জন</strong> প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন।
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { OrgConfigProvider } from './contexts/OrgConfigContext';
 import { SystemConfigProvider } from './contexts/SystemConfigContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import { DialogProvider } from './contexts/DialogContext';
 import { EmergencyAlertBanner } from './components/EmergencyAlertBanner';
@@ -39,6 +39,44 @@ import { BloodCampsPage } from './pages/BloodCampsPage';
 import { HealthEligibilityPage } from './pages/HealthEligibilityPage';
 import { useSEO } from './hooks/useSEO';
 
+function ProtectedAuthenticatedRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[40vh] flex items-center justify-center text-sm font-semibold text-slate-500">
+        অ্যাক্সেস যাচাই করা হচ্ছে...
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
+  const { currentUser, isLoading } = useAuth();
+
+  const privilegedRoles = new Set(['super_admin', 'admin', 'moderator', 'volunteer']);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[40vh] flex items-center justify-center text-sm font-semibold text-slate-500">
+        অ্যাক্সেস যাচাই করা হচ্ছে...
+      </div>
+    );
+  }
+
+  if (!currentUser || !privilegedRoles.has(currentUser.role)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function AppContent() {
   useSEO();
 
@@ -62,10 +100,38 @@ function AppContent() {
           <Route path="/camps" element={<BloodCampsPage />} />
           <Route path="/certificate" element={<CertificatePage />} />
           <Route path="/health-checker" element={<HealthEligibilityPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/admin" element={<AdminDashboardPage />} />
-          <Route path="/admin/settings" element={<AdminSettingsPage />} />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedAuthenticatedRoute>
+                <NotificationsPage />
+              </ProtectedAuthenticatedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedAuthenticatedRoute>
+                <ProfilePage />
+              </ProtectedAuthenticatedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedAdminRoute>
+                <AdminDashboardPage />
+              </ProtectedAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedAdminRoute>
+                <AdminSettingsPage />
+              </ProtectedAdminRoute>
+            }
+          />
           <Route path="/donate" element={<DonatePage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />

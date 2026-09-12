@@ -38,33 +38,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'roktobondon_current_user';
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // Load cached user session from localStorage
-    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse cached user', e);
-      }
-    }
-    return null;
-  });
+  // Role-bearing profiles must always be resolved from an active Supabase session.
+  // A browser-persisted copy can be stale or locally modified.
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync current user to local storage for persistence across refreshes
+  // Remove the legacy role cache. Supabase owns session persistence.
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  }, [currentUser]);
+    localStorage.removeItem('roktobondon_current_user');
+  }, []);
 
   // Listen to Supabase Auth state with two-tier resolution
   useEffect(() => {
@@ -123,7 +108,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setCurrentUser(resolvedUser);
       } else {
-        // Fallback for new donor registration via phone OTP
+        if (!isDemoMode) {
+          await signOutUser();
+          setSupabaseUser(null);
+          setCurrentUser(null);
+          throw new Error('অ্যাকাউন্টের সাথে কোনো অনুমোদিত প্রোফাইল পাওয়া যায়নি। অনুগ্রহ করে লগইন করুন বা প্রশাসনের সাথে যোগাযোগ করুন।');
+        }
+
+        // Fallback for new donor registration via phone OTP in local demo mode
         const fallbackDonorUser: User = {
           id: sbUser.id,
           fullName: sbUser.user_metadata?.full_name || 'রক্তদাতা সদস্য',
@@ -346,12 +338,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setSupabaseUser(null);
       setCurrentUser(null);
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem('roktobondon_current_user');
       setIsLoading(false);
     }
   };
 
   const switchDemoRole = (role: UserRole) => {
+    if (!isDemoMode) {
+      console.warn('Demo role switching is disabled outside demo mode.');
+      return;
+    }
+
     if (currentUser) {
       setCurrentUser({ ...currentUser, role });
     }

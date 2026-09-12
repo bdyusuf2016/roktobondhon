@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Zap,
   Heart,
+  MessageCircle,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +27,7 @@ import { EmergencyBroadcastModal } from '../components/EmergencyBroadcastModal';
 import { SocialShareBar } from '../components/common/SocialShareBar';
 import { useSEO } from '../hooks/useSEO';
 import { volunteerForBloodRequest } from '../services/donorRequestService';
+import { getRequestWhatsAppLink } from '../services/whatsappService';
 import type { Donor } from '../types';
 
 export const RequestDetailPage: React.FC = () => {
@@ -261,13 +263,26 @@ export const RequestDetailPage: React.FC = () => {
             )}
 
             {request.contactNumber ? (
-              <a
-                href={`tel:${request.contactNumber}`}
-                className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-700/60 transition-colors"
-              >
-                <Phone className="w-4 h-4" />
-                কল করুন ({request.contactNumber})
-              </a>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={`tel:${request.contactNumber}`}
+                  className="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-colors font-mono"
+                  title="সরাসরি ফোন করুন"
+                >
+                  <Phone className="w-4 h-4 text-emerald-400" />
+                  কল করুন ({request.contactNumber})
+                </a>
+                <a
+                  href={getRequestWhatsAppLink(request)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-2.5 rounded-lg bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs border border-emerald-600/30 transition-transform active:scale-95"
+                  title="রোগীর স্বজনকে WhatsApp এ মেসেজ দিন"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp মেসেজ
+                </a>
+              </div>
             ) : (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1 text-center max-w-xs">
                 <span className="font-semibold text-slate-800 block">রোগীর তথ্যের নিরাপত্তা নিশ্চিতকরণ</span>

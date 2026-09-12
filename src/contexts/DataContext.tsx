@@ -78,9 +78,12 @@ import {
   checkDuplicateDonation,
 } from '../services/donationSubmissionService';
 import { sendNotificationToSupabase } from '../services/notificationService';
+import { isDistrictMatch, isUpazilaMatch } from '../data/bangladeshGeoData';
+import { isBloodCompatible } from '../services/matchingService';
 import { recordAuditLog } from '../services/auditService';
 import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
 import type { BackupCollectionKey, PlatformBackupPayload } from '../types/backup';
+import { useAuth } from './AuthContext';
 
 interface DataContextType {
   donors: Donor[];
@@ -223,9 +226,52 @@ const STORAGE_KEYS = {
   PERMISSION_MATRIX: 'roktobondon_permission_matrix_v1',
 };
 
+// These collections contain contact, health, financial, account, or audit data.
+// Browser localStorage is readable by scripts on this origin, so it is not an
+// appropriate cache for them. Data remains in memory for the current session
+// and is reloaded from Supabase after authentication.
+const SENSITIVE_STORAGE_KEYS = new Set<string>([
+  STORAGE_KEYS.DONORS,
+  STORAGE_KEYS.REQUESTS,
+  STORAGE_KEYS.DONOR_REQUESTS,
+  STORAGE_KEYS.DONATIONS,
+  STORAGE_KEYS.DONATION_SUBMISSIONS,
+  STORAGE_KEYS.NOTIFICATIONS,
+  STORAGE_KEYS.AUDIT_LOGS,
+  STORAGE_KEYS.FUND_DONATIONS,
+  STORAGE_KEYS.FUND_DISBURSEMENTS,
+  STORAGE_KEYS.USERS,
+  STORAGE_KEYS.CAMP_REGISTRATIONS,
+]);
+
+function readCachedValue(key: string): string | null {
+  if (SENSITIVE_STORAGE_KEYS.has(key)) {
+    localStorage.removeItem(key); // clear legacy persisted PII on upgrade
+    return null;
+  }
+  return localStorage.getItem(key);
+}
+
+function persistCachedValue(key: string, value: unknown): void {
+  if (SENSITIVE_STORAGE_KEYS.has(key)) {
+    localStorage.removeItem(key);
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
+
+  const requireAdminRole = (action: string, allowModerator = false) => {
+    const allowedRoles = allowModerator ? ['super_admin', 'admin', 'moderator'] : ['super_admin', 'admin'];
+    if (!currentUser || !allowedRoles.includes(currentUser.role)) {
+      throw new Error(`${action} করতে আপনার অনুমোদিত প্রশাসনিক অ্যাকাউন্ট প্রয়োজন।`);
+    }
+  };
+
   const [donors, setDonors] = useState<Donor[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.DONORS);
+    const saved = readCachedValue(STORAGE_KEYS.DONORS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -238,7 +284,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.REQUESTS);
+    const saved = readCachedValue(STORAGE_KEYS.REQUESTS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -251,7 +297,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donorRequests, setDonorRequests] = useState<DonorRequest[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.DONOR_REQUESTS);
+    const saved = readCachedValue(STORAGE_KEYS.DONOR_REQUESTS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -264,7 +310,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donations, setDonations] = useState<Donation[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.DONATIONS);
+    const saved = readCachedValue(STORAGE_KEYS.DONATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -277,7 +323,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donationSubmissions, setDonationSubmissions] = useState<DonationSubmission[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.DONATION_SUBMISSIONS);
+    const saved = readCachedValue(STORAGE_KEYS.DONATION_SUBMISSIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -290,7 +336,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [locations, setLocations] = useState<LocationItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
+    const saved = readCachedValue(STORAGE_KEYS.LOCATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -303,7 +349,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.BRANCHES);
+    const saved = readCachedValue(STORAGE_KEYS.BRANCHES);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -316,7 +362,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    const saved = readCachedValue(STORAGE_KEYS.NOTIFICATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -344,7 +390,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timestamp: new Date().toISOString(),
       },
     ];
-    const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+    const saved = readCachedValue(STORAGE_KEYS.AUDIT_LOGS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -357,7 +403,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [hospitals, setHospitals] = useState<Hospital[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.HOSPITALS);
+    const saved = readCachedValue(STORAGE_KEYS.HOSPITALS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -370,7 +416,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDonations, setFundDonations] = useState<FundDonation[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.FUND_DONATIONS);
+    const saved = readCachedValue(STORAGE_KEYS.FUND_DONATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -383,7 +429,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PAYMENT_METHODS);
+    const saved = readCachedValue(STORAGE_KEYS.PAYMENT_METHODS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -396,7 +442,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [donationCauses, setDonationCauses] = useState<DonationCauseConfig[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.DONATION_CAUSES);
+    const saved = readCachedValue(STORAGE_KEYS.DONATION_CAUSES);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -409,7 +455,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [fundDisbursements, setFundDisbursements] = useState<FundDisbursement[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.FUND_DISBURSEMENTS);
+    const saved = readCachedValue(STORAGE_KEYS.FUND_DISBURSEMENTS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -422,7 +468,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.USERS);
+    const saved = readCachedValue(STORAGE_KEYS.USERS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -435,7 +481,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrix>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PERMISSION_MATRIX);
+    const saved = readCachedValue(STORAGE_KEYS.PERMISSION_MATRIX);
     if (saved) {
       try {
         return { ...DEFAULT_PERMISSION_MATRIX, ...JSON.parse(saved) };
@@ -447,7 +493,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [bloodCamps, setBloodCamps] = useState<BloodCamp[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.BLOOD_CAMPS);
+    const saved = readCachedValue(STORAGE_KEYS.BLOOD_CAMPS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -460,7 +506,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [campRegistrations, setCampRegistrations] = useState<CampRegistration[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CAMP_REGISTRATIONS);
+    const saved = readCachedValue(STORAGE_KEYS.CAMP_REGISTRATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -737,75 +783,75 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Sync to localStorage for instant local caching and fast reloads
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONORS, JSON.stringify(donors));
+    persistCachedValue(STORAGE_KEYS.DONORS, donors);
   }, [donors]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(bloodRequests));
+    persistCachedValue(STORAGE_KEYS.REQUESTS, bloodRequests);
   }, [bloodRequests]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONOR_REQUESTS, JSON.stringify(donorRequests));
+    persistCachedValue(STORAGE_KEYS.DONOR_REQUESTS, donorRequests);
   }, [donorRequests]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONATIONS, JSON.stringify(donations));
+    persistCachedValue(STORAGE_KEYS.DONATIONS, donations);
   }, [donations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONATION_SUBMISSIONS, JSON.stringify(donationSubmissions));
+    persistCachedValue(STORAGE_KEYS.DONATION_SUBMISSIONS, donationSubmissions);
   }, [donationSubmissions]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(locations));
+    persistCachedValue(STORAGE_KEYS.LOCATIONS, locations);
   }, [locations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.BRANCHES, JSON.stringify(branches));
+    persistCachedValue(STORAGE_KEYS.BRANCHES, branches);
   }, [branches]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
+    persistCachedValue(STORAGE_KEYS.NOTIFICATIONS, notifications);
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+    persistCachedValue(STORAGE_KEYS.AUDIT_LOGS, auditLogs);
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.HOSPITALS, JSON.stringify(hospitals));
+    persistCachedValue(STORAGE_KEYS.HOSPITALS, hospitals);
   }, [hospitals]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.FUND_DONATIONS, JSON.stringify(fundDonations));
+    persistCachedValue(STORAGE_KEYS.FUND_DONATIONS, fundDonations);
   }, [fundDonations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PAYMENT_METHODS, JSON.stringify(paymentMethods));
+    persistCachedValue(STORAGE_KEYS.PAYMENT_METHODS, paymentMethods);
   }, [paymentMethods]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.DONATION_CAUSES, JSON.stringify(donationCauses));
+    persistCachedValue(STORAGE_KEYS.DONATION_CAUSES, donationCauses);
   }, [donationCauses]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.FUND_DISBURSEMENTS, JSON.stringify(fundDisbursements));
+    persistCachedValue(STORAGE_KEYS.FUND_DISBURSEMENTS, fundDisbursements);
   }, [fundDisbursements]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    persistCachedValue(STORAGE_KEYS.USERS, users);
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PERMISSION_MATRIX, JSON.stringify(permissionMatrix));
+    persistCachedValue(STORAGE_KEYS.PERMISSION_MATRIX, permissionMatrix);
   }, [permissionMatrix]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.BLOOD_CAMPS, JSON.stringify(bloodCamps));
+    persistCachedValue(STORAGE_KEYS.BLOOD_CAMPS, bloodCamps);
   }, [bloodCamps]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CAMP_REGISTRATIONS, JSON.stringify(campRegistrations));
+    persistCachedValue(STORAGE_KEYS.CAMP_REGISTRATIONS, campRegistrations);
   }, [campRegistrations]);
 
   const addAuditLog = useCallback(
@@ -869,8 +915,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setBloodRequests((prev) => [newReq, ...prev]);
 
-      // Add notification
-      setNotifications((prev) => [
+      // Collect notifications (broadcast + targeted)
+      const newNotifs: NotificationItem[] = [
         {
           id: `notif-${Date.now()}`,
           userId: 'all',
@@ -881,12 +927,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isRead: false,
           createdAt: new Date().toISOString(),
         },
-        ...prev,
-      ]);
+      ];
+
+      // Targeted Donor Alerts: If upazila or district notification is enabled (default: upazila enabled)
+      const shouldNotifyUpazila = data.notifyUpazilaDonors !== false;
+      const shouldNotifyDistrict = Boolean(data.notifyDistrictDonors);
+
+      if (shouldNotifyUpazila || shouldNotifyDistrict) {
+        const matchingDonors = donors.filter((d) => {
+          if (!d.userId) return false;
+          if (!d.availability) return false;
+          if (!isBloodCompatible(newReq.bloodGroup, d.bloodGroup)) return false;
+
+          const isSameDistrict = isDistrictMatch(d.district, newReq.district);
+          const isSameUpazila = isUpazilaMatch(d.upazila, newReq.upazila);
+
+          if (shouldNotifyUpazila && isSameDistrict && isSameUpazila) return true;
+          if (shouldNotifyDistrict && isSameDistrict) return true;
+          return false;
+        });
+
+        matchingDonors.forEach((d, idx) => {
+          if (!d.userId) return;
+          const isExactUpazila = isUpazilaMatch(d.upazila, newReq.upazila);
+          const donorNotif: NotificationItem = {
+            id: `notif-target-${d.userId}-${Date.now()}-${idx}`,
+            userId: d.userId,
+            title: isExactUpazila
+              ? `🚨 আপনার নিজ উপজেলা (${newReq.upazila})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`
+              : `🚨 আপনার জেলা (${newReq.district})-এ জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন!`,
+            message: `${newReq.hospital}-এ রোগী ${newReq.patientName}-এর জন্য জরুরি ${newReq.bloodGroup} রক্তের প্রয়োজন (${newReq.requiredUnits} ব্যাগ)। আপনার সাহায্য রোগীর জীবন বাঁচাতে পারে।`,
+            type: 'request',
+            link: `/request/${newReq.id}`,
+            isRead: false,
+            createdAt: new Date().toISOString(),
+          };
+          newNotifs.push(donorNotif);
+
+          if (isSupabaseConfigured && supabase) {
+            sendNotificationToSupabase(donorNotif).catch((e) =>
+              console.warn('Could not send targeted donor notif', e)
+            );
+          }
+        });
+      }
+
+      setNotifications((prev) => [...newNotifs, ...prev]);
 
       addAuditLog('Blood Request Created', 'BloodRequest', newReq.id, {
         requestId: newReq.requestId,
         bloodGroup: newReq.bloodGroup,
+        targetedDonorsCount: newNotifs.length - 1,
       });
       return newReq;
     } finally {
@@ -2408,6 +2499,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUserRole = async (userId: string, newRole: UserRole) => {
+    requireAdminRole('ব্যবহারকারীর রোল পরিবর্তন');
+
     setUsers((prev) =>
       prev.map((u) =>
         u.id === userId ? { ...u, role: newRole, updatedAt: new Date().toISOString() } : u
@@ -2428,6 +2521,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUser = async (userId: string, data: Partial<User>) => {
+    requireAdminRole('ব্যবহারকারীর তথ্য আপডেট');
+
     setUsers((prev) =>
       prev.map((u) =>
         u.id === userId ? { ...u, ...data, updatedAt: new Date().toISOString() } : u
@@ -2457,6 +2552,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>,
     password?: string
   ): Promise<User> => {
+    requireAdminRole('নতুন ব্যবহারকারী তৈরি');
+
     let newUserId = `user-${Date.now()}`;
     const cleanPhone = userData.phone.trim();
     const cleanEmail = userData.email?.trim().toLowerCase() || `${cleanPhone}@roktobondhon.org`;
@@ -2526,6 +2623,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteUser = async (userId: string) => {
+    requireAdminRole('ব্যবহারকারী মুছে ফেলা');
+
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2539,6 +2638,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateRolePermission = async (role: UserRole, permission: PermissionKey, allowed: boolean) => {
+    requireAdminRole('রোল পারমিশন সেটআপ');
+
     setPermissionMatrix((prev) => ({
       ...prev,
       [role]: {
@@ -2553,6 +2654,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPermissionMatrix = () => {
+    requireAdminRole('পারমিশন ম্যাট্রিক্স রিস্টোর');
+
     setPermissionMatrix(DEFAULT_PERMISSION_MATRIX);
     localStorage.removeItem(STORAGE_KEYS.PERMISSION_MATRIX);
     addAuditLog('রোল পারমিশন ম্যাট্রিক্স ডিফল্ট অবস্থায় রিস্টোর করা হয়েছে', 'ROLE_PERMISSION', 'RESET');

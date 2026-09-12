@@ -2,7 +2,6 @@ import React from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { isDemoMode } from '../../supabase/config';
 
 interface AdminGuardProps {
   children: React.ReactNode;
@@ -12,12 +11,17 @@ interface AdminGuardProps {
 export const AdminGuard: React.FC<AdminGuardProps> = ({ children, requiredRole }) => {
   const { currentUser } = useAuth();
 
-  const isPrivilegedStaff =
-    isDemoMode ||
-    currentUser?.role === 'super_admin' ||
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'moderator' ||
-    (requiredRole === 'volunteer' && currentUser?.role === 'volunteer');
+  const allowedRoles: Array<'super_admin' | 'admin' | 'moderator' | 'volunteer'> = [
+    'super_admin',
+    'admin',
+    'moderator',
+  ];
+
+  if (requiredRole === 'volunteer') {
+    allowedRoles.push('volunteer');
+  }
+
+  const isPrivilegedStaff = Boolean(currentUser && allowedRoles.includes(currentUser.role as 'super_admin' | 'admin' | 'moderator' | 'volunteer'));
 
   if (!isPrivilegedStaff) {
     return (

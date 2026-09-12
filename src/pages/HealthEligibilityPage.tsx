@@ -163,7 +163,10 @@ export const HealthEligibilityPage: React.FC = () => {
     setIsAiLoading(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      // Never expose an AI provider key in a browser bundle. AI requests must
+      // go through an authenticated server/Edge Function; until one is wired,
+      // use the local, safety-reviewed guidance below.
+      const apiKey: string | undefined = undefined;
       if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
         const ai = new GoogleGenAI({ apiKey });
 

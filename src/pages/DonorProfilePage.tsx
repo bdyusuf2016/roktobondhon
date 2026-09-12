@@ -12,10 +12,12 @@ import {
   Lock,
   Building2,
   CheckCircle2,
+  MessageCircle,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { RequestDonorModal } from '../components/RequestDonorModal';
+import { getDonorWhatsAppLink } from '../services/whatsappService';
 
 export const DonorProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -129,13 +131,32 @@ export const DonorProfilePage: React.FC = () => {
             </Link>
 
             {canSeePhone && (
-              <a
-                href={`tel:${donor.phone}`}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center gap-1.5 border border-emerald-200 transition-colors"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                {donor.phone}
-              </a>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <a
+                  href={`tel:${donor.phone}`}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-200 transition-colors font-mono"
+                  title="সরাসরি ফোন করুন"
+                >
+                  <Phone className="w-3.5 h-3.5 text-slate-600" />
+                  {donor.phone}
+                </a>
+                <a
+                  href={getDonorWhatsAppLink({
+                    name: donor.name,
+                    phone: donor.phone,
+                    bloodGroup: donor.bloodGroup,
+                    upazila: donor.upazila,
+                    district: donor.district,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-emerald-600/30 shadow-xs transition-transform active:scale-95"
+                  title="হোয়াটসঅ্যাপে সরাসরি মেসেজ পাঠান"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  WhatsApp মেসেজ
+                </a>
+              </div>
             )}
           </div>
         </div>
