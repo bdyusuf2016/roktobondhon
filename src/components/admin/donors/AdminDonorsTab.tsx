@@ -58,6 +58,87 @@ export const AdminDonorsTab: React.FC = () => {
   const canImport = ['super_admin', 'admin', 'moderator'].includes(currentUser?.role || '');
   const canOnboard = ['super_admin', 'admin', 'moderator', 'volunteer'].includes(currentUser?.role || '');
 
+  // Helper to find associated staff user (if donor is also a staff member)
+  const getDonorStaffUser = (donor: Donor): User | null => {
+    const cleanDonorPhone = donor.phone ? donor.phone.replace(/[^0-9]/g, '') : '';
+    const cleanDonorEmail = donor.email ? donor.email.trim().toLowerCase() : '';
+    return (
+      users.find(
+        (u) =>
+          ['super_admin', 'admin', 'moderator', 'volunteer'].includes(u.role) &&
+          ((donor.userId && u.id === donor.userId) ||
+            (cleanDonorPhone && u.phone && (u.phone.replace(/[^0-9]/g, '') === cleanDonorPhone || u.phone.replace(/[^0-9]/g, '').endsWith(cleanDonorPhone.slice(-10)))) ||
+            (cleanDonorEmail && u.email && u.email.trim().toLowerCase() === cleanDonorEmail))
+      ) || null
+    );
+  };
+
+  // Generalized deletion permission checker across ALL roles
+  const getDonorDeletePermission = (donor: Donor): { allowed: boolean; reason?: string; staffRole?: UserRole } => {
+    if (!currentUser) return { allowed: false, reason: 'অননুমোদিত অনুরোধ।' };
+
+    // 1. Self-deletion guard: cannot delete own profile
+    const isSelf =
+      (donor.userId && currentUser.id === donor.userId) ||
+      (donor.phone && currentUser.phone && (donor.phone.replace(/[^0-9]/g, '') === currentUser.phone.replace(/[^0-9]/g, '') || donor.phone.replace(/[^0-9]/g, '').endsWith(currentUser.phone.replace(/[^0-9]/g, '').slice(-10)))) ||
+      (donor.email && currentUser.email && donor.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase());
+
+    if (isSelf) {
+      return {
+        allowed: false,
+        reason: 'আপনি নিজের রক্তদাতা প্রোফাইল মুছে ফেলতে পারবেন না।',
+      };
+    }
+
+    const staffProfile = getDonorStaffUser(donor);
+
+    // 2. If target donor has NO staff profile (ordinary donor)
+    if (!staffProfile) {
+      if (currentUser.role === 'super_admin' || currentUser.role === 'admin') {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: 'রক্তদাতা মুছে ফেলার জন্য এডমিন বা সুপার এডমিন হওয়া আবশ্যক।',
+      };
+    }
+
+    // 3. Target donor IS a staff member (dual role protection)
+    const targetStaffRole = staffProfile.role;
+
+    // Super Admin can delete donor profile of any staff member (except self)
+    if (currentUser.role === 'super_admin') {
+      return { allowed: true, staffRole: targetStaffRole };
+    }
+
+    // Regular Admin:
+    if (currentUser.role === 'admin') {
+      if (targetStaffRole === 'super_admin') {
+        return {
+          allowed: false,
+          staffRole: targetStaffRole,
+          reason: 'সুপার অ্যাডমিনের রক্তদাতা প্রোফাইল সাধারণ অ্যাডমিন কর্তৃক মুছে ফেলা নিষিদ্ধ।',
+        };
+      }
+      if (targetStaffRole === 'admin') {
+        return {
+          allowed: false,
+          staffRole: targetStaffRole,
+          reason: 'সহকর্মী অ্যাডমিনের রক্তদাতা প্রোফাইল মুছে ফেলার অনুমতি শুধুমাত্র সুপার অ্যাডমিনের রয়েছে।',
+        };
+      }
+      // Admin can manage moderator/volunteer
+      return { allowed: true, staffRole: targetStaffRole };
+    }
+
+    // Other lower roles (moderator, volunteer, etc.)
+    return {
+      allowed: false,
+      staffRole: targetStaffRole,
+      reason: `আপনার "${ROLE_LABELS[currentUser.role]?.bn || currentUser.role}" ভূমিকা দিয়ে রক্তদাতা প্রোফাইল মুছে ফেলা নিষিদ্ধ।`,
+    };
+  };
+
   // Onboard Donor Modal State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
 
@@ -290,6 +371,15 @@ export const AdminDonorsTab: React.FC = () => {
   // HANDLERS: Donor Deletion
   // ==========================================
   const openDeleteDialog = (donor: Donor) => {
+    const perm = getDonorDeletePermission(donor);
+    if (!perm.allowed) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: perm.reason || 'আপনার এই রক্তদাতা প্রোফাইল মুছে ফেলার প্রশাসনিক অনুমতি নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     setDeleteTarget(donor);
     setDeleteModalError(null);
   };
@@ -303,6 +393,14 @@ export const AdminDonorsTab: React.FC = () => {
   const handleDeleteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deleteTarget) return;
+
+    const perm = getDonorDeletePermission(deleteTarget);
+    if (!perm.allowed) {
+      const errMsg = perm.reason || 'আপনার এই রক্তদাতা প্রোফাইল মুছে ফেলার প্রশাসনিক অনুমতি নেই।';
+      setDeleteModalError(errMsg);
+      setActionError(errMsg);
+      return;
+    }
 
     setDeletingId(deleteTarget.id);
     setDeleteModalError(null);
@@ -872,18 +970,43 @@ export const AdminDonorsTab: React.FC = () => {
                             </button>
                           )}
 
-                          {/* Delete Donor Button */}
-                          {isSuperAdminOrAdmin && (
-                            <button
-                              type="button"
-                              disabled={Boolean(verifyingId) || Boolean(deletingId)}
-                              onClick={() => openDeleteDialog(d)}
-                              className="px-2 py-1 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
-                              title="ডোনার প্রোফাইল মুছে ফেলুন"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 inline" />
-                            </button>
-                          )}
+                          {/* Delete Donor Action (Guarded across ALL roles) */}
+                          {isSuperAdminOrAdmin && (() => {
+                            const perm = getDonorDeletePermission(d);
+                            if (!perm.allowed) {
+                              const roleBadgeStyles: Record<string, { bg: string; text: string; label: string }> = {
+                                super_admin: { bg: 'bg-purple-50 border-purple-200', text: 'text-purple-700', label: 'সুপার এডমিন' },
+                                admin: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', label: 'এডমিন' },
+                                moderator: { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-700', label: 'মডারেটর' },
+                                volunteer: { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', label: 'স্বেচ্ছাসেবক' },
+                              };
+                              const style = perm.staffRole ? roleBadgeStyles[perm.staffRole] : null;
+
+                              return (
+                                <span
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold border inline-flex items-center gap-1 cursor-default select-none ${
+                                    style ? `${style.bg} ${style.text}` : 'bg-slate-100 border-slate-200 text-slate-600'
+                                  }`}
+                                  title={perm.reason || 'প্রোফাইলটি সুরক্ষিত'}
+                                >
+                                  <ShieldCheck className="w-3 h-3" />
+                                  <span>{style ? `${style.label} সুরক্ষিত` : 'সুরক্ষিত'}</span>
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <button
+                                type="button"
+                                disabled={Boolean(verifyingId) || Boolean(deletingId)}
+                                onClick={() => openDeleteDialog(d)}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
+                                title="ডোনার প্রোফাইল মুছে ফেলুন"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 inline" />
+                              </button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );

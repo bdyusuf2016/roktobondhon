@@ -1477,6 +1477,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteDonor = async (donorId: string) => {
+    // Comprehensive Security Guard: Enforce strict role hierarchy and self-deletion prevention across ALL roles
+    const target = donors.find((d) => d.id === donorId || d.donorId === donorId);
+    if (target && currentUser) {
+      const cleanDonorPhone = target.phone ? target.phone.replace(/[^0-9]/g, '') : '';
+      const cleanDonorEmail = target.email ? target.email.trim().toLowerCase() : '';
+
+      // 1. Self-deletion guard: cannot delete own donor profile
+      const isSelf =
+        (target.userId && currentUser.id === target.userId) ||
+        (cleanDonorPhone && currentUser.phone && (cleanDonorPhone === currentUser.phone.replace(/[^0-9]/g, '') || cleanDonorPhone.endsWith(currentUser.phone.replace(/[^0-9]/g, '').slice(-10)))) ||
+        (cleanDonorEmail && currentUser.email && cleanDonorEmail === currentUser.email.trim().toLowerCase());
+
+      if (isSelf) {
+        throw new Error('অননুমোদিত অ্যাকশন: আপনি নিজের রক্তদাতা প্রোফাইল মুছে ফেলতে পারবেন না।');
+      }
+
+      // 2. Identify if target donor is also a staff member
+      const staffProfile = users.find(
+        (u) =>
+          ['super_admin', 'admin', 'moderator', 'volunteer'].includes(u.role) &&
+          ((target.userId && u.id === target.userId) ||
+            (cleanDonorPhone && u.phone && (u.phone.replace(/[^0-9]/g, '') === cleanDonorPhone || u.phone.replace(/[^0-9]/g, '').endsWith(cleanDonorPhone.slice(-10)))) ||
+            (cleanDonorEmail && u.email && u.email.trim().toLowerCase() === cleanDonorEmail))
+      );
+
+      if (staffProfile) {
+        // Staff member target:
+        if (currentUser.role !== 'super_admin') {
+          if (staffProfile.role === 'super_admin') {
+            throw new Error('অননুমোদিত অ্যাকশন: সুপার অ্যাডমিনের রক্তদাতা প্রোফাইল মুছে ফেলা নিষিদ্ধ।');
+          }
+          if (staffProfile.role === 'admin' && currentUser.role === 'admin') {
+            throw new Error('অননুমোদিত অ্যাকশন: সহকর্মী অ্যাডমিনের রক্তদাতা প্রোফাইল মুছে ফেলার অনুমতি শুধুমাত্র সুপার অ্যাডমিনের রয়েছে।');
+          }
+          if (!['super_admin', 'admin'].includes(currentUser.role)) {
+            throw new Error(`অননুমোদিত অ্যাকশন: আপনার বর্তমান ভূমিকা দিয়ে ${staffProfile.role} রোলের রক্তদাতা প্রোফাইল মুছে ফেলা যাবে না।`);
+          }
+        }
+      } else {
+        // Ordinary donor target: only super_admin and admin can delete
+        if (!['super_admin', 'admin'].includes(currentUser.role)) {
+          throw new Error('অননুমোদিত অ্যাকশন: রক্তদাতা মুছে ফেলার জন্য অ্যাডমিন বা সুপার অ্যাডমিন ক্ষমতা আবশ্যক।');
+        }
+      }
+    }
+
     try {
       const result = await deleteDonorAccount(donorId);
       setDonors((prev) => prev.filter((d) => d.id !== donorId && d.donorId !== donorId && d.id !== result.donorId));
