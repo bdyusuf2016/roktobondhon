@@ -22,19 +22,115 @@ import {
 import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useDialog } from '../../../contexts/DialogContext';
-import type { Donor, BloodGroup, Donation } from '../../../types';
+import { ROLE_LABELS } from '../../../services/permissionService';
+import type { Donor, BloodGroup, Donation, UserRole } from '../../../types';
 import { DonorImportWizard } from './import/DonorImportWizard';
 import { DonorImportHistory } from './import/DonorImportHistory';
 import { RecordDonationModal } from '../donations/RecordDonationModal';
+import { PromoteDonorModal } from './PromoteDonorModal';
 
 export const AdminDonorsTab: React.FC = () => {
-  const { donors, donations, verifyDonor, deleteDonor, recordDonation, deleteDonation } = useData();
+  const {
+    donors,
+    donations,
+    verifyDonor,
+    deleteDonor,
+    recordDonation,
+    deleteDonation,
+    users,
+    addUser,
+    updateUser,
+    updateUserRole,
+    updateDonor,
+    addAuditLog,
+  } = useData();
   const { currentUser } = useAuth();
   const dialog = useDialog();
 
+  const isSuperAdmin = currentUser?.role === 'super_admin';
   const isSuperAdminOrAdmin =
     currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const canImport = ['super_admin', 'admin', 'moderator'].includes(currentUser?.role || '');
+
+  // Promote Donor to Staff State (Super Admin Only)
+  const [promoteTarget, setPromoteTarget] = useState<Donor | null>(null);
+
+  const handlePromoteDonor = async (
+    targetDonor: Donor,
+    targetRole: UserRole,
+    staffEmail: string,
+    staffPassword: string,
+    targetBranchId: string
+  ) => {
+    if (!isSuperAdmin) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'শুধুমাত্র সুপার এডমিন রক্তদাতাকে স্টাফ বা এডমিন পদে অনুমোদন দিতে পারেন।',
+        theme: 'danger',
+      });
+      return;
+    }
+
+    const cleanEmail = staffEmail.trim().toLowerCase();
+    const cleanPhone = targetDonor.phone.trim();
+
+    // Check if a user account already exists for this donor
+    const existingUser = users.find(
+      (u) =>
+        (targetDonor.userId && u.id === targetDonor.userId) ||
+        (u.phone && u.phone === cleanPhone) ||
+        (u.email && u.email.toLowerCase() === cleanEmail)
+    );
+
+    let assignedUserId = targetDonor.userId;
+
+    if (existingUser) {
+      // Update role of existing user
+      await updateUserRole(existingUser.id, targetRole);
+      await updateUser(existingUser.id, {
+        branchId: targetBranchId,
+        email: cleanEmail,
+        status: 'active',
+      });
+      assignedUserId = existingUser.id;
+    } else {
+      // Create new user account for this donor
+      const createdUser = await addUser(
+        {
+          fullName: targetDonor.fullName,
+          phone: cleanPhone,
+          email: cleanEmail,
+          role: targetRole,
+          branchId: targetBranchId,
+          organizationId: targetDonor.organizationId || 'org-roktobondon',
+          status: 'active',
+        },
+        staffPassword
+      );
+      assignedUserId = createdUser.id;
+    }
+
+    // Explicitly link donor to this user account
+    if (assignedUserId && targetDonor.userId !== assignedUserId) {
+      await updateDonor(targetDonor.id, {
+        userId: assignedUserId,
+        email: cleanEmail,
+      });
+    }
+
+    addAuditLog(
+      `সুপার এডমিন কর্তৃক রক্তদাতাকে স্টাফ পদে পদোন্নতি: ${targetDonor.fullName} (${targetDonor.donorId}) -> ${targetRole}`,
+      'USER',
+      assignedUserId || targetDonor.id,
+      { donorId: targetDonor.donorId, role: targetRole, email: cleanEmail }
+    );
+
+    dialog.alert({
+      title: 'স্টাফ অনুমোদন সম্পন্ন!',
+      message: `রক্তদাতা "${targetDonor.fullName}" (${targetDonor.donorId}) সফলভাবে "${ROLE_LABELS[targetRole]?.bn || targetRole}" হিসেবে যুক্ত হয়েছেন। তিনি এখন এই ইমেইল (${cleanEmail}) দিয়ে ড্যাশবোর্ডে লগইন করতে পারবেন।`,
+      theme: 'success',
+    });
+  };
 
   // Sub-Navigation Mode: 'list' (All/Pending) vs 'import' (Wizard/History)
   const [activeSubTab, setActiveSubTab] = useState<'all' | 'pending' | 'import'>('all');
@@ -547,6 +643,15 @@ export const AdminDonorsTab: React.FC = () => {
                     const isCurrentDeleting = deletingId === d.id;
                     const isImported = (d as any).source === 'imported';
 
+                    // Check if this donor is already linked to a staff account
+                    const matchingStaff = users.find(
+                      (u) =>
+                        ['super_admin', 'admin', 'moderator', 'volunteer'].includes(u.role) &&
+                        (u.id === d.userId ||
+                          (d.phone && u.phone === d.phone) ||
+                          (d.email && u.email && d.email.toLowerCase() === u.email.toLowerCase()))
+                    );
+
                     return (
                       <tr key={d.id} className="hover:bg-slate-50/60">
                         <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
@@ -610,6 +715,35 @@ export const AdminDonorsTab: React.FC = () => {
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right space-x-1 whitespace-nowrap">
+                          {/* Super Admin Exclusive Action: Promote Donor to Staff/Admin */}
+                          {matchingStaff ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold"
+                              title={`ইতোমধ্যে ${ROLE_LABELS[matchingStaff.role]?.bn || matchingStaff.role} পদে যুক্ত আছেন`}
+                            >
+                              <ShieldCheck className="w-3 h-3 text-purple-600" />
+                              <span>
+                                {matchingStaff.role === 'super_admin'
+                                  ? 'সুপার এডমিন'
+                                  : matchingStaff.role === 'admin'
+                                  ? 'এডমিন'
+                                  : matchingStaff.role === 'moderator'
+                                  ? 'মডারেটর'
+                                  : 'স্বেচ্ছাসেবক'}
+                              </span>
+                            </span>
+                          ) : isSuperAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => setPromoteTarget(d)}
+                              className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200 hover:border-indigo-600 transition-all shadow-2xs inline-flex items-center gap-1 cursor-pointer"
+                              title="শুধুমাত্র সুপার এডমিন: রক্তদাতাকে স্টাফ/এডমিন পদে অনুমোদন দিন"
+                            >
+                              <ShieldCheck className="w-3 h-3" />
+                              <span>স্টাফ বানান</span>
+                            </button>
+                          ) : null}
+
                           {/* Verify / Suspend Toggle Button */}
                           {d.verificationStatus !== 'verified' ? (
                             <button
@@ -1217,6 +1351,15 @@ export const AdminDonorsTab: React.FC = () => {
           setActionSuccess('রক্তদানের তথ্য সফলভাবে রেকর্ড ও সংরক্ষিত হয়েছে।');
           setTimeout(() => setActionSuccess(null), 4000);
         }}
+      />
+      {/* ========================================================================= */}
+      {/* 5. SUPER ADMIN PROMOTION MODAL */}
+      {/* ========================================================================= */}
+      <PromoteDonorModal
+        isOpen={Boolean(promoteTarget)}
+        donor={promoteTarget}
+        onClose={() => setPromoteTarget(null)}
+        onPromote={handlePromoteDonor}
       />
     </div>
   );

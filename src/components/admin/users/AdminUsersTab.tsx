@@ -31,6 +31,7 @@ export const AdminUsersTab: React.FC = () => {
     updateUser,
     addUser,
     deleteUser,
+    updateDonor,
     permissionMatrix,
     updateRolePermission,
     resetPermissionMatrix,
@@ -567,7 +568,40 @@ export const AdminUsersTab: React.FC = () => {
         <UserFormModal
           isOpen={showUserModal}
           onClose={() => setShowUserModal(false)}
-          user={selectedUserForEdit}
+          userToEdit={selectedUserForEdit}
+          onSave={async (formData, password) => {
+            if (selectedUserForEdit) {
+              await updateUser(selectedUserForEdit.id, formData);
+              if (formData.role !== selectedUserForEdit.role) {
+                await updateUserRole(selectedUserForEdit.id, formData.role);
+              }
+              dialog.alert({
+                title: 'তথ্য সংরক্ষিত',
+                message: `"${formData.fullName}"-এর তথ্য সফলভাবে আপডেট হয়েছে।`,
+                theme: 'success',
+              });
+            } else {
+              const createdUser = await addUser(formData, password);
+              // If an existing donor exists with the same phone or email, link their userId
+              const cleanPhone = formData.phone?.trim();
+              const cleanEmail = formData.email?.trim().toLowerCase();
+              const matchedDonor = donors.find(
+                (d) =>
+                  (cleanPhone && d.phone === cleanPhone) ||
+                  (cleanEmail && d.email && d.email.toLowerCase() === cleanEmail)
+              );
+              if (matchedDonor && createdUser?.id) {
+                await updateDonor(matchedDonor.id, { userId: createdUser.id });
+              }
+              dialog.alert({
+                title: 'সদস্য যুক্ত সম্পন্ন',
+                message: `নতুন টিম মেম্বার "${formData.fullName}" (${formData.role}) সফলভাবে তৈরি করা হয়েছে${
+                  matchedDonor ? ` এবং বিদ্যমান রক্তদাতা প্রোফাইলের (${matchedDonor.donorId}) সাথে লিংক করা হয়েছে।` : '।'
+                }`,
+                theme: 'success',
+              });
+            }
+          }}
         />
       )}
     </div>

@@ -104,18 +104,20 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onSave(
-        {
-          fullName: fullName.trim(),
-          email: email.trim().toLowerCase() || undefined,
-          phone: phone.trim(),
-          role,
-          organizationId: 'org-roktobondon',
-          branchId,
-          password: !isEditing ? password : undefined,
-        },
-        !isEditing ? password : undefined
-      );
+      if (typeof onSave === 'function') {
+        await onSave(
+          {
+            fullName: fullName.trim(),
+            email: email.trim().toLowerCase() || undefined,
+            phone: phone.trim(),
+            role,
+            organizationId: 'org-roktobondon',
+            branchId,
+            password: !isEditing ? password : undefined,
+          },
+          !isEditing ? password : undefined
+        );
+      }
       onClose();
     } catch (err: any) {
       setErrorMessage(err.message || 'ব্যবহারকারীর তথ্য সংরক্ষণ করতে ব্যর্থ হয়েছে।');
