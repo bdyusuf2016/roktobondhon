@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   ShieldCheck,
@@ -132,17 +133,48 @@ export const AdminDonorsTab: React.FC = () => {
     });
   };
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const querySubTab = searchParams.get('subtab');
+  const queryStatus = searchParams.get('status');
+  const isInitialPending = querySubTab === 'pending' || queryStatus === 'pending';
+
   // Sub-Navigation Mode: 'list' (All/Pending) vs 'import' (Wizard/History)
-  const [activeSubTab, setActiveSubTab] = useState<'all' | 'pending' | 'import'>('all');
+  const [activeSubTab, setActiveSubTab] = useState<'all' | 'pending' | 'import'>(
+    isInitialPending ? 'pending' : querySubTab === 'import' ? 'import' : 'all'
+  );
   const [importSubView, setImportSubView] = useState<'wizard' | 'history'>('wizard');
 
   // Filters State
-  const [donorFilterStatus, setDonorFilterStatus] = useState<string>('all');
+  const [donorFilterStatus, setDonorFilterStatus] = useState<string>(
+    isInitialPending ? 'pending' : 'all'
+  );
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [bloodGroupFilter, setBloodGroupFilter] = useState<string>('all');
   const [availabilityFilter, setAvailabilityFilter] = useState<string>('all');
   const [emergencyFilter, setEmergencyFilter] = useState<string>('all');
-  const [donorSearch, setDonorSearch] = useState('');
+  const [donorSearch, setDonorSearch] = useState(searchParams.get('donorId') || '');
+
+  // Synchronize when searchParams update (e.g. user clicks notification or URL changes)
+  useEffect(() => {
+    const sub = searchParams.get('subtab');
+    const st = searchParams.get('status');
+    const dId = searchParams.get('donorId');
+
+    if (sub === 'pending' || st === 'pending') {
+      setActiveSubTab('pending');
+      setDonorFilterStatus('pending');
+    } else if (sub === 'all') {
+      setActiveSubTab('all');
+      setDonorFilterStatus('all');
+    } else if (sub === 'import') {
+      setActiveSubTab('import');
+    }
+
+    if (dId) {
+      setDonorSearch(dId);
+    }
+  }, [searchParams]);
 
   // Action Loading & Notifications State
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -379,6 +411,13 @@ export const AdminDonorsTab: React.FC = () => {
             onClick={() => {
               setActiveSubTab('all');
               setDonorFilterStatus('all');
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', 'donors');
+                next.set('subtab', 'all');
+                next.delete('donorId');
+                return next;
+              });
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'all'
@@ -395,6 +434,12 @@ export const AdminDonorsTab: React.FC = () => {
             onClick={() => {
               setActiveSubTab('pending');
               setDonorFilterStatus('pending');
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', 'donors');
+                next.set('subtab', 'pending');
+                return next;
+              });
             }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'pending'
@@ -409,7 +454,16 @@ export const AdminDonorsTab: React.FC = () => {
           {canImport && (
             <button
               type="button"
-              onClick={() => setActiveSubTab('import')}
+              onClick={() => {
+                setActiveSubTab('import');
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set('tab', 'donors');
+                  next.set('subtab', 'import');
+                  next.delete('donorId');
+                  return next;
+                });
+              }}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeSubTab === 'import'
                   ? 'bg-red-600 text-white shadow-xs'

@@ -1016,7 +1016,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: 'নতুন রক্তদাতা যাচাইয়ের জন্য অপেক্ষমাণ',
           message: `নতুন রক্তদাতা ${newDonor.fullName || 'নামহীন'} (আইডি: ${newDonor.donorId}) নিবন্ধিত হয়েছেন। অনুগ্রহ করে প্রোফাইলটি যাচাই করুন।`,
           type: 'verification',
-          link: '/admin?tab=donors',
+          link: '/admin?tab=donors&subtab=pending',
           isRead: false,
           createdAt: nowIso,
         }));

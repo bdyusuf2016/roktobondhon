@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bell,
   CheckCircle2,
@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { DonorRequest } from '../types';
 
 export const NotificationsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { notifications, donorRequests, respondDonorRequest, markNotificationRead } = useData();
   const { currentUser } = useAuth();
 
@@ -164,33 +165,50 @@ export const NotificationsPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-2">
-            {userNotifications.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => markNotificationRead(n.id)}
-                className={`p-4 rounded-xl border transition-colors cursor-pointer text-xs ${
-                  n.isRead
-                    ? 'bg-white border-slate-200/90 text-slate-600 opacity-80'
-                    : 'bg-red-50/40 border-red-200 shadow-2xs font-medium'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-bold text-slate-900 text-sm">{n.title}</h4>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+            {userNotifications.map((n) => {
+              // Ensure pending donor verification notifications route directly to pending tab
+              let targetLink = n.link;
+              if (
+                n.title.includes('নতুন রক্তদাতা যাচাইয়ের জন্য অপেক্ষমাণ') ||
+                (n.type === 'verification' && n.link?.includes('tab=donors'))
+              ) {
+                targetLink = '/admin?tab=donors&subtab=pending';
+              }
+
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => {
+                    markNotificationRead(n.id);
+                    if (targetLink) {
+                      navigate(targetLink);
+                    }
+                  }}
+                  className={`p-4 rounded-xl border transition-colors cursor-pointer text-xs ${
+                    n.isRead
+                      ? 'bg-white border-slate-200/90 text-slate-600 opacity-80 hover:bg-slate-50/80'
+                      : 'bg-red-50/40 border-red-200 shadow-2xs font-medium hover:bg-red-50/70'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm">{n.title}</h4>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 mt-1">{n.message}</p>
+                  {targetLink && (
+                    <Link
+                      to={targetLink}
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-block mt-2 text-red-600 font-bold hover:underline"
+                    >
+                      বিস্তারিত দেখুন ও যাচাই করুন →
+                    </Link>
+                  )}
                 </div>
-                <p className="text-slate-600 mt-1">{n.message}</p>
-                {n.link && (
-                  <Link
-                    to={n.link}
-                    className="inline-block mt-2 text-red-600 font-bold hover:underline"
-                  >
-                    বিস্তারিত দেখুন →
-                  </Link>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
