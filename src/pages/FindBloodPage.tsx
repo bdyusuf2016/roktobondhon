@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, ShieldCheck, AlertCircle, RefreshCw, MapPin } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
@@ -12,6 +12,7 @@ import {
   getUpazilasForDistrict,
   isDistrictMatch,
   isUpazilaMatch,
+  findDistrict,
 } from '../data/bangladeshGeoData';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -29,6 +30,25 @@ export const FindBloodPage: React.FC = () => {
   const [verifiedOnly, setVerifiedOnly] = useState<boolean>(false);
   const [emergencyOnly, setEmergencyOnly] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Keep state synchronized with incoming query parameters
+  useEffect(() => {
+    const groupParam = searchParams.get('group');
+    const distParam = searchParams.get('district');
+    const upaParam = searchParams.get('upazila');
+    const divParam = searchParams.get('division');
+
+    if (groupParam !== null) setBloodGroup(groupParam);
+    if (distParam !== null) {
+      setDistrict(distParam);
+      if (!divParam) {
+        const found = findDistrict(distParam);
+        if (found) setDivision(found.divisionId);
+      }
+    }
+    if (upaParam !== null) setUpazila(upaParam);
+    if (divParam !== null) setDivision(divParam);
+  }, [searchParams]);
 
   // Update query params as user selects
   const handleGroupSelect = (group: string) => {
