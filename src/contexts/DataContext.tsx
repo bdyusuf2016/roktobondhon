@@ -316,27 +316,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const defaultNotif: NotificationItem[] = [
-      {
-        id: 'notif-welcome',
-        userId: 'all',
-        title: 'স্বাগতম রক্ত দান পরিবার কালামপুর প্ল্যাটফর্মে',
-        message: 'কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জে স্বেচ্ছাসেবী রক্তদাতাদের নেটওয়ার্কে আপনাকে স্বাগতম।',
-        type: 'system',
-        isRead: false,
-        createdAt: new Date().toISOString(),
-      },
-    ];
     const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((n) => n.id !== 'notif-welcome');
+          return filtered;
+        }
       } catch (e) {
         console.error(e);
       }
     }
-    return defaultNotif;
+    return [];
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {

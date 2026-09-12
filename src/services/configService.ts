@@ -60,9 +60,9 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     homepageSubtitle: 'কালামপুর, ধামরাই, সাভার ও মানিকগঞ্জে জরুরি রক্তের প্রয়োজনে তাৎক্ষণিক রক্তদাতা খুঁজুন।',
     ctaText: 'রক্তদাতা খুঁজুন',
     ctaLink: '/find-blood',
-    showAnnouncement: true,
-    announcementText: 'জরুরি রক্তের প্রয়োজনে ২৪ ঘণ্টা হটলাইনে যোগাযোগ করুন অথবা রক্তের আবেদন ফরম পূরণ করুন!',
-    announcementLink: '/request-blood',
+    showAnnouncement: false,
+    announcementText: '',
+    announcementLink: '',
     hotline: '+8801712-345678',
     copyright: '© 2026 রক্ত দান পরিবার কালামপুর। সর্বস্বত্ব সংরক্ষিত।',
     socialLinks: {
@@ -318,6 +318,12 @@ export async function getConfig<K extends SystemConfigSection>(
     const saved = safeStorage.getItem(key);
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (section === 'website' && parsed.announcementText === 'জরুরি রক্তের প্রয়োজনে ২৪ ঘণ্টা হটলাইনে যোগাযোগ করুন অথবা রক্তের আবেদন ফরম পূরণ করুন!') {
+        parsed.showAnnouncement = false;
+        parsed.announcementText = '';
+        parsed.announcementLink = '';
+        safeStorage.setItem(key, JSON.stringify(parsed));
+      }
       return { ...DEFAULT_SYSTEM_CONFIG[section], ...parsed };
     }
   } catch (err) {

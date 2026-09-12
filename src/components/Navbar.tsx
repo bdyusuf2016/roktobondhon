@@ -90,7 +90,10 @@ export const Navbar: React.FC = () => {
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] transition-all">
       {/* Dynamic Announcement Banner */}
-      {config.showAnnouncement && config.announcementTextBn && (
+      {config.showAnnouncement &&
+        config.announcementTextBn &&
+        config.announcementTextBn.trim().length > 0 &&
+        config.announcementTextBn !== 'জরুরি রক্তের প্রয়োজনে ২৪ ঘণ্টা হটলাইনে যোগাযোগ করুন অথবা রক্তের আবেদন ফরম পূরণ করুন!' && (
         <div className="bg-gradient-to-r from-red-700 via-red-600 to-rose-700 text-white text-[11px] sm:text-xs py-1.5 px-4 shadow-inner">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 truncate">
