@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { LogIn, Droplets, User, Lock, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
@@ -8,8 +8,29 @@ import type { UserRole } from '../types';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loginWithEmail, switchDemoRole, isDemoMode } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { currentUser, isLoading: isAuthLoading, loginWithEmail, switchDemoRole, isDemoMode } = useAuth();
   const { config } = useOrgConfig();
+
+  // If already logged in, automatically redirect away from /login
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center text-sm font-semibold text-slate-500">
+        অ্যাক্সেস যাচাই করা হচ্ছে...
+      </div>
+    );
+  }
+
+  if (currentUser) {
+    const redirectParam = searchParams.get('redirect');
+    const target =
+      redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')
+        ? redirectParam
+        : ['super_admin', 'admin', 'moderator', 'volunteer'].includes(currentUser.role)
+        ? '/admin'
+        : '/profile';
+    return <Navigate to={target} replace />;
+  }
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +65,10 @@ export const LoginPage: React.FC = () => {
       const saved = localStorage.getItem('roktobondon_current_user');
       const parsed = saved ? JSON.parse(saved) : null;
 
-      if (parsed?.role === 'super_admin' || parsed?.role === 'admin' || parsed?.role === 'moderator' || parsed?.role === 'volunteer') {
+      const redirectParam = searchParams.get('redirect');
+      if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
+        navigate(redirectParam);
+      } else if (parsed?.role === 'super_admin' || parsed?.role === 'admin' || parsed?.role === 'moderator' || parsed?.role === 'volunteer') {
         navigate('/admin');
       } else {
         navigate('/profile');
