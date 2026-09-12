@@ -4,7 +4,7 @@ import type { User, UserRole } from '../types';
 /**
  * Convert database row (snake_case) to User interface (camelCase)
  */
-function mapUserRow(row: any): User {
+export function mapUserRow(row: any): User {
   return {
     id: row.id,
     fullName: row.full_name || 'সদস্য',

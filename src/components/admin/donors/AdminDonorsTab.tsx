@@ -31,6 +31,8 @@ import { DonorImportHistory } from './import/DonorImportHistory';
 import { RecordDonationModal } from '../donations/RecordDonationModal';
 import { PromoteDonorModal } from './PromoteDonorModal';
 import { AdminOnboardDonorModal } from './AdminOnboardDonorModal';
+import { supabase, isSupabaseConfigured } from '../../../supabase/config';
+import { mapUserRow } from '../../../services/userService';
 
 export const AdminDonorsTab: React.FC = () => {
   const {
@@ -80,18 +82,34 @@ export const AdminDonorsTab: React.FC = () => {
     const cleanEmail = staffEmail.trim().toLowerCase();
     const cleanPhone = targetDonor.phone.trim();
 
-    // Check if a user account already exists for this donor
-    const existingUser = users.find(
+    // 1. Check if user already exists in local users state
+    let existingUser = users.find(
       (u) =>
         (targetDonor.userId && u.id === targetDonor.userId) ||
-        (u.phone && u.phone === cleanPhone) ||
-        (u.email && u.email.toLowerCase() === cleanEmail)
+        (u.phone && (u.phone === cleanPhone || u.phone.endsWith(cleanPhone.slice(-10)))) ||
+        (u.email && cleanEmail && u.email.toLowerCase() === cleanEmail)
     );
 
-    let assignedUserId = targetDonor.userId;
+    // 2. If not found in memory, query Supabase public.users directly
+    if (!existingUser && isSupabaseConfigured && supabase) {
+      if (targetDonor.userId) {
+        const { data } = await supabase.from('users').select('*').eq('id', targetDonor.userId).maybeSingle();
+        if (data) existingUser = mapUserRow(data);
+      }
+      if (!existingUser && cleanPhone) {
+        const { data } = await supabase.from('users').select('*').ilike('phone', `%${cleanPhone.slice(-10)}%`).maybeSingle();
+        if (data) existingUser = mapUserRow(data);
+      }
+      if (!existingUser && cleanEmail) {
+        const { data } = await supabase.from('users').select('*').ilike('email', cleanEmail).maybeSingle();
+        if (data) existingUser = mapUserRow(data);
+      }
+    }
+
+    let assignedUserId = existingUser?.id;
 
     if (existingUser) {
-      // User already onboarded: simply update their role to staff!
+      // User already exists in public.users: simply update their role to staff!
       await updateUserRole(existingUser.id, targetRole);
       await updateUser(existingUser.id, {
         branchId: targetBranchId,
@@ -100,8 +118,14 @@ export const AdminDonorsTab: React.FC = () => {
       });
       assignedUserId = existingUser.id;
     } else {
-      // Create user profile for this donor
+      // Donor is promoted to staff for the first time
+      const preferredId =
+        targetDonor.userId && targetDonor.userId !== targetDonor.id && !targetDonor.userId.startsWith('dnr-')
+          ? targetDonor.userId
+          : undefined;
+
       const createdUser = await addUser({
+        id: preferredId,
         fullName: targetDonor.fullName,
         phone: cleanPhone,
         email: cleanEmail,

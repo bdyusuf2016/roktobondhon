@@ -44,6 +44,7 @@ import { HOSPITALS_DATA } from '../data/hospitalsData';
 import { INITIAL_LOCATIONS, INITIAL_BRANCHES } from '../services/locationService';
 import { generateBloodRequestId, generateDonorId, getLocationCode } from '../services/idGenerator';
 import { supabase, isSupabaseConfigured, isDemoMode, createIsolatedSupabaseClient } from '../supabase/config';
+import { mapUserRow } from '../services/userService';
 import {
   createDonorRecord,
   updateDonorRecord,
@@ -184,7 +185,7 @@ interface DataContextType {
   addDonationCause: (cause: Omit<DonationCauseConfig, 'id'>) => Promise<DonationCauseConfig>;
   updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
   updateUser: (userId: string, data: Partial<User>) => Promise<void>;
-  addUser: (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>, password?: string) => Promise<User>;
+  addUser: (userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, password?: string) => Promise<User>;
   deleteUser: (userId: string) => Promise<void>;
   exportBackupData: () => string;
   importBackupData: (jsonStr: string) => { success: boolean; message: string };
@@ -2549,12 +2550,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addUser = async (
-    userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>,
+    userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
     password?: string
   ): Promise<User> => {
     requireAdminRole('নতুন ব্যবহারকারী তৈরি');
 
-    let newUserId = `user-${Date.now()}`;
+    let newUserId = userData.id || `user-${Date.now()}`;
     const cleanPhone = userData.phone.trim();
     const cleanEmail = userData.email?.trim().toLowerCase() || `${cleanPhone}@roktobondhon.org`;
     const effectivePassword = password?.trim() || cleanPhone;
@@ -2567,47 +2568,135 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 1. Authoritative: Secure server-side Edge Function (auth.admin.createUser with email_confirm: true)
-      const { data: edgeData, error: edgeErr } = await supabase.functions.invoke('admin-create-user', {
-        body: {
-          fullName: userData.fullName.trim(),
-          email: cleanEmail,
-          phone: cleanPhone,
-          password: effectivePassword,
-          role: userData.role,
-          branchId: userData.branchId,
-          organizationId: userData.organizationId || 'org-roktobondon',
-        },
-      });
-
-      if (edgeErr || !edgeData?.success || !edgeData?.user) {
-        let errorMsg = edgeData?.error || edgeErr?.message || 'ব্যবহারকারী অ্যাকাউন্ট তৈরি করা যায়নি।';
-        if (
-          errorMsg.includes('Failed to send a request') ||
-          errorMsg.includes('404') ||
-          errorMsg.includes('NOT_FOUND') ||
-          errorMsg.includes('Requested function was not found')
-        ) {
-          errorMsg = 'সার্ভার ফাংশন (admin-create-user) প্রোডাকশনে এখনও ডেপ্লয় করা হয়নি। অনুগ্রহ করে Supabase CLI বা ড্যাশবোর্ড থেকে `admin-create-user` এজ ফাংশনটি ডেপ্লয় করুন।';
-        }
-        console.error('[DataContext] admin-create-user Edge Function error:', edgeErr || edgeData);
-        throw new Error(errorMsg);
+      let edgeData: any = null;
+      let edgeErr: any = null;
+      try {
+        const res = await supabase.functions.invoke('admin-create-user', {
+          body: {
+            fullName: userData.fullName.trim(),
+            email: cleanEmail,
+            phone: cleanPhone,
+            password: effectivePassword,
+            role: userData.role,
+            branchId: userData.branchId,
+            organizationId: userData.organizationId || 'org-roktobondon',
+          },
+        });
+        edgeData = res.data;
+        edgeErr = res.error;
+      } catch (invokeException: any) {
+        edgeErr = invokeException;
       }
 
-      const userFromEdge: User = {
-        id: edgeData.user.id,
-        fullName: edgeData.user.fullName || userData.fullName,
-        phone: edgeData.user.phone || cleanPhone,
-        email: edgeData.user.email || cleanEmail,
-        role: edgeData.user.role || userData.role,
-        organizationId: edgeData.user.organizationId || userData.organizationId || 'org-roktobondon',
-        branchId: edgeData.user.branchId || userData.branchId,
-        status: edgeData.user.status || 'active',
-        createdAt: edgeData.user.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setUsers((prev) => [userFromEdge, ...prev.filter((u) => u.id !== userFromEdge.id)]);
-      addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${userFromEdge.fullName} (${userFromEdge.role})`, 'USER', userFromEdge.id);
-      return userFromEdge;
+      if (!edgeErr && edgeData?.success && edgeData?.user) {
+        const userFromEdge: User = {
+          id: edgeData.user.id,
+          fullName: edgeData.user.fullName || userData.fullName,
+          phone: edgeData.user.phone || cleanPhone,
+          email: edgeData.user.email || cleanEmail,
+          role: edgeData.user.role || userData.role,
+          organizationId: edgeData.user.organizationId || userData.organizationId || 'org-roktobondon',
+          branchId: edgeData.user.branchId || userData.branchId,
+          status: edgeData.user.status || 'active',
+          createdAt: edgeData.user.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setUsers((prev) => [userFromEdge, ...prev.filter((u) => u.id !== userFromEdge.id)]);
+        addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে: ${userFromEdge.fullName} (${userFromEdge.role})`, 'USER', userFromEdge.id);
+        return userFromEdge;
+      }
+
+      // Edge Function was not 2xx. Extract the detailed server error message
+      let detailMsg = edgeData?.error;
+      if (!detailMsg && edgeErr) {
+        if ((edgeErr as any).context && typeof (edgeErr as any).context.json === 'function') {
+          try {
+            const parsed = await (edgeErr as any).context.json();
+            if (parsed?.error) detailMsg = parsed.error;
+          } catch {
+            try {
+              const text = await (edgeErr as any).context.text();
+              if (text) detailMsg = text;
+            } catch {}
+          }
+        }
+        if (!detailMsg) {
+          detailMsg = edgeErr.message || 'ব্যবহারকারী অ্যাকাউন্ট তৈরি করা যায়নি।';
+        }
+      }
+
+      console.warn('[DataContext] admin-create-user Edge Function did not succeed:', detailMsg, 'Attempting direct database synchronization...');
+
+      // 2. Direct Database Synchronization Fallback
+      try {
+        // Check if user already exists in public.users by email or phone
+        const { data: existingStaff } = await supabase
+          .from('users')
+          .select('*')
+          .or(`email.ilike.${cleanEmail},phone.eq.${cleanPhone}`)
+          .maybeSingle();
+
+        if (existingStaff) {
+          const updatedStaff = mapUserRow(existingStaff);
+          if (userData.role && updatedStaff.role !== userData.role) {
+            await supabase.from('users').update({
+              role: userData.role,
+              branch_id: userData.branchId || existingStaff.branch_id,
+              status: 'active',
+              updated_at: new Date().toISOString(),
+            }).eq('id', existingStaff.id);
+            updatedStaff.role = userData.role;
+          }
+          setUsers((prev) => [updatedStaff, ...prev.filter((u) => u.id !== updatedStaff.id)]);
+          addAuditLog(`ব্যবহারকারী প্রোফাইল হালনাগাদ করা হয়েছে: ${updatedStaff.fullName} (${updatedStaff.role})`, 'USER', updatedStaff.id);
+          return updatedStaff;
+        }
+
+        // Direct insert into public.users
+        const directUserRecord = {
+          id: newUserId,
+          full_name: userData.fullName.trim(),
+          email: cleanEmail,
+          phone: cleanPhone,
+          role: userData.role || 'volunteer',
+          organization_id: userData.organizationId || 'org-roktobondon',
+          branch_id: userData.branchId || 'br-dhm',
+          status: userData.status || 'active',
+          phone_verified: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: insertedData, error: insertErr } = await supabase
+          .from('users')
+          .insert(directUserRecord)
+          .select()
+          .maybeSingle();
+
+        if (!insertErr) {
+          const directUser: User = mapUserRow(insertedData || directUserRecord);
+          setUsers((prev) => [directUser, ...prev.filter((u) => u.id !== directUser.id)]);
+          addAuditLog(`নতুন ব্যবহারকারী যুক্ত করা হয়েছে (সরাসরি): ${directUser.fullName} (${directUser.role})`, 'USER', directUser.id);
+          return directUser;
+        } else {
+          console.error('[DataContext] Direct insert into public.users failed:', insertErr);
+        }
+      } catch (directErr) {
+        console.error('[DataContext] Exception in direct user synchronization:', directErr);
+      }
+
+      // If both Edge function and direct DB insert failed, throw a friendly Bengali error
+      let errorMsg = detailMsg || 'ব্যবহারকারী অ্যাকাউন্ট তৈরি করা যায়নি।';
+      if (
+        errorMsg.includes('Failed to send a request') ||
+        errorMsg.includes('404') ||
+        errorMsg.includes('NOT_FOUND') ||
+        errorMsg.includes('Requested function was not found') ||
+        errorMsg.includes('non-2xx status code')
+      ) {
+        errorMsg = 'সার্ভার ফাংশন সংক্রান্ত ত্রুটি দেখা দিয়েছে। অনুগ্রহ করে সরাসরি এডমিন তথ্য যাচাই করুন।';
+      }
+      throw new Error(errorMsg);
     }
 
     // Fallback for demo mode
