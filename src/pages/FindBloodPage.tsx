@@ -4,6 +4,14 @@ import { Search, Filter, ShieldCheck, AlertCircle, RefreshCw, MapPin } from 'luc
 import { useData } from '../contexts/DataContext';
 import { DonorCard } from '../components/DonorCard';
 import type { BloodGroup } from '../types';
+import {
+  BANGLADESH_DIVISIONS,
+  BANGLADESH_DISTRICTS,
+  getDistrictsByDivision,
+  getUpazilasForDistrict,
+  isDistrictMatch,
+  isUpazilaMatch,
+} from '../data/bangladeshGeoData';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -13,6 +21,7 @@ export const FindBloodPage: React.FC = () => {
 
   // Filters state from URL or default
   const [bloodGroup, setBloodGroup] = useState<string>(searchParams.get('group') || '');
+  const [division, setDivision] = useState<string>(searchParams.get('division') || '');
   const [district, setDistrict] = useState<string>(searchParams.get('district') || '');
   const [upazila, setUpazila] = useState<string>(searchParams.get('upazila') || '');
   const [availableOnly, setAvailableOnly] = useState<boolean>(true);
@@ -29,11 +38,19 @@ export const FindBloodPage: React.FC = () => {
     setSearchParams(searchParams);
   };
 
+  const availableDistricts = useMemo(() => {
+    return getDistrictsByDivision(division);
+  }, [division]);
+
+  const availableUpazilas = useMemo(() => {
+    return district ? getUpazilasForDistrict(district) : [];
+  }, [district]);
+
   const filteredDonors = useMemo(() => {
     return donors.filter((d) => {
       if (bloodGroup && d.bloodGroup !== bloodGroup) return false;
-      if (district && d.district !== district) return false;
-      if (upazila && d.upazila !== upazila) return false;
+      if (district && !isDistrictMatch(d.district, district)) return false;
+      if (upazila && !isUpazilaMatch(d.upazila, upazila)) return false;
       if (availableOnly && !d.availability) return false;
       if (verifiedOnly && d.verificationStatus !== 'verified') return false;
       if (emergencyOnly && !d.emergencyAvailable) return false;
@@ -50,6 +67,7 @@ export const FindBloodPage: React.FC = () => {
 
   const resetFilters = () => {
     setBloodGroup('');
+    setDivision('');
     setDistrict('');
     setUpazila('');
     setAvailableOnly(false);
@@ -68,7 +86,7 @@ export const FindBloodPage: React.FC = () => {
             রক্তদাতা অনুসন্ধান (Smart Donor Search)
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            ধামরাই, সাভার ও মানিকগঞ্জে রক্তদানের জন্য প্রস্তুত স্বেচ্ছাসেবী ডোনার তালিকা
+            সারা বাংলাদেশে (৬৪ জেলা ও সকল উপজেলায়) রক্তদানের জন্য প্রস্তুত স্বেচ্ছাসেবী ডোনার তালিকা
           </p>
         </div>
 
@@ -115,11 +133,33 @@ export const FindBloodPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Dynamic District & Upazila Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+        {/* Dynamic Division, District & Upazila Selectors */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              জেলা
+              বিভাগ (Division)
+            </label>
+            <select
+              value={division}
+              onChange={(e) => {
+                setDivision(e.target.value);
+                setDistrict('');
+                setUpazila('');
+              }}
+              className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
+            >
+              <option value="">সকল বিভাগ (৮ বিভাগ)</option>
+              {BANGLADESH_DIVISIONS.map((div) => (
+                <option key={div.id} value={div.id}>
+                  {div.nameBn} ({div.nameEn})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              জেলা ({availableDistricts.length} জেলা)
             </label>
             <select
               value={district}
@@ -130,36 +170,29 @@ export const FindBloodPage: React.FC = () => {
               className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
             >
               <option value="">সকল জেলা</option>
-              <option value="Dhaka">ঢাকা (ধামরাই ও সাভার)</option>
-              <option value="Manikganj">মানিকগঞ্জ</option>
+              {availableDistricts.map((dist) => (
+                <option key={dist.id} value={dist.nameBn}>
+                  {dist.nameBn} ({dist.nameEn})
+                </option>
+              ))}
             </select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
-              উপজেলা
+              উপজেলা / থানা
             </label>
             <select
               value={upazila}
               onChange={(e) => setUpazila(e.target.value)}
               className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
             >
-              <option value="">সকল উপজেলা</option>
-              {district === 'Dhaka' || !district ? (
-                <>
-                  <option value="Dhamrai">ধামরাই</option>
-                  <option value="Savar">সাভার</option>
-                </>
-              ) : null}
-              {district === 'Manikganj' || !district ? (
-                <>
-                  <option value="Manikganj Sadar">মানিকগঞ্জ সদর</option>
-                  <option value="Singair">সিংগাইর</option>
-                  <option value="Saturia">সাটুরিয়া</option>
-                  <option value="Shivalaya">শিবালয়</option>
-                  <option value="Harirampur">হরিরামপুর</option>
-                </>
-              ) : null}
+              <option value="">{district ? 'সকল উপজেলা' : 'প্রথমে জেলা নির্বাচন করুন'}</option>
+              {availableUpazilas.map((upa) => (
+                <option key={upa} value={upa}>
+                  {upa}
+                </option>
+              ))}
             </select>
           </div>
 

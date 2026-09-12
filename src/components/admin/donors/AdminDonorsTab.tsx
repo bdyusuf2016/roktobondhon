@@ -15,6 +15,7 @@ import {
   Building2,
   HeartHandshake,
   UserX,
+  UserPlus,
   FileSpreadsheet,
   History,
   Upload,
@@ -29,6 +30,7 @@ import { DonorImportWizard } from './import/DonorImportWizard';
 import { DonorImportHistory } from './import/DonorImportHistory';
 import { RecordDonationModal } from '../donations/RecordDonationModal';
 import { PromoteDonorModal } from './PromoteDonorModal';
+import { AdminOnboardDonorModal } from './AdminOnboardDonorModal';
 
 export const AdminDonorsTab: React.FC = () => {
   const {
@@ -52,6 +54,10 @@ export const AdminDonorsTab: React.FC = () => {
   const isSuperAdminOrAdmin =
     currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const canImport = ['super_admin', 'admin', 'moderator'].includes(currentUser?.role || '');
+  const canOnboard = ['super_admin', 'admin', 'moderator', 'volunteer'].includes(currentUser?.role || '');
+
+  // Onboard Donor Modal State
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
 
   // Promote Donor to Staff State (Super Admin Only)
   const [promoteTarget, setPromoteTarget] = useState<Donor | null>(null);
@@ -60,7 +66,6 @@ export const AdminDonorsTab: React.FC = () => {
     targetDonor: Donor,
     targetRole: UserRole,
     staffEmail: string,
-    staffPassword: string,
     targetBranchId: string
   ) => {
     if (!isSuperAdmin) {
@@ -86,28 +91,25 @@ export const AdminDonorsTab: React.FC = () => {
     let assignedUserId = targetDonor.userId;
 
     if (existingUser) {
-      // Update role of existing user
+      // User already onboarded: simply update their role to staff!
       await updateUserRole(existingUser.id, targetRole);
       await updateUser(existingUser.id, {
         branchId: targetBranchId,
-        email: cleanEmail,
+        email: cleanEmail || existingUser.email,
         status: 'active',
       });
       assignedUserId = existingUser.id;
     } else {
-      // Create new user account for this donor
-      const createdUser = await addUser(
-        {
-          fullName: targetDonor.fullName,
-          phone: cleanPhone,
-          email: cleanEmail,
-          role: targetRole,
-          branchId: targetBranchId,
-          organizationId: targetDonor.organizationId || 'org-roktobondon',
-          status: 'active',
-        },
-        staffPassword
-      );
+      // Create user profile for this donor
+      const createdUser = await addUser({
+        fullName: targetDonor.fullName,
+        phone: cleanPhone,
+        email: cleanEmail,
+        role: targetRole,
+        branchId: targetBranchId,
+        organizationId: targetDonor.organizationId || 'org-roktobondon',
+        status: 'active',
+      });
       assignedUserId = createdUser.id;
     }
 
@@ -128,7 +130,7 @@ export const AdminDonorsTab: React.FC = () => {
 
     dialog.alert({
       title: 'স্টাফ অনুমোদন সম্পন্ন!',
-      message: `রক্তদাতা "${targetDonor.fullName}" (${targetDonor.donorId}) সফলভাবে "${ROLE_LABELS[targetRole]?.bn || targetRole}" হিসেবে যুক্ত হয়েছেন। তিনি এখন এই ইমেইল (${cleanEmail}) দিয়ে ড্যাশবোর্ডে লগইন করতে পারবেন।`,
+      message: `রক্তদাতা "${targetDonor.fullName}" (${targetDonor.donorId}) সফলভাবে "${ROLE_LABELS[targetRole]?.bn || targetRole}" হিসেবে উন্নীত হয়েছেন। তিনি তার বিদ্যমান নিজস্ব পাসওয়ার্ড দিয়েই অ্যাডমিন প্যানেলে লগইন করতে পারবেন।`,
       theme: 'success',
     });
   };
@@ -475,6 +477,18 @@ export const AdminDonorsTab: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* Onboard Donor Button */}
+        {canOnboard && (
+          <button
+            type="button"
+            onClick={() => setShowOnboardModal(true)}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ রক্তদাতা অনবোর্ড করুন</span>
+          </button>
+        )}
       </div>
 
       {/* Global Success Notification */}
@@ -1414,6 +1428,18 @@ export const AdminDonorsTab: React.FC = () => {
         donor={promoteTarget}
         onClose={() => setPromoteTarget(null)}
         onPromote={handlePromoteDonor}
+      />
+
+      {/* ========================================================================= */}
+      {/* 6. ADMIN ONBOARD DONOR MODAL */}
+      {/* ========================================================================= */}
+      <AdminOnboardDonorModal
+        isOpen={showOnboardModal}
+        onClose={() => setShowOnboardModal(false)}
+        onSuccess={(name, id, phone) => {
+          setActionSuccess(`রক্তদাতা "${name}" (${id}) সফলভাবে অনবোর্ড ও ভেরিফাই হয়েছে। লগইন পাসওয়ার্ড: ${phone}`);
+          setTimeout(() => setActionSuccess(null), 6000);
+        }}
       />
     </div>
   );

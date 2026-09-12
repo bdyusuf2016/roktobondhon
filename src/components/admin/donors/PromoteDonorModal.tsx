@@ -6,11 +6,10 @@ import {
   Phone,
   Building2,
   Droplets,
-  Eye,
-  EyeOff,
   UserCheck,
   AlertCircle,
   Crown,
+  Sparkles,
 } from 'lucide-react';
 import { BaseModal } from '../../modals/BaseModal';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -25,7 +24,6 @@ interface PromoteDonorModalProps {
     donor: Donor,
     role: UserRole,
     email: string,
-    password: string,
     branchId: string
   ) => Promise<void>;
 }
@@ -42,9 +40,6 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('moderator');
   const [branchId, setBranchId] = useState('br-dhm');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -53,10 +48,7 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
       setEmail(donor.email || '');
       setRole('moderator');
       setBranchId(donor.branchId || 'br-dhm');
-      setPassword('');
-      setConfirmPassword('');
       setErrorMessage('');
-      setShowPassword(false);
     }
   }, [donor, isOpen]);
 
@@ -92,19 +84,9 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
       return;
     }
 
-    if (!password || password.length < 6) {
-      setErrorMessage('অ্যাডমিন প্যানেলে লগইনের জন্য কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন।');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage('পাসওয়ার্ড এবং কনফার্ম পাসওয়ার্ড মিলছে না।');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      await onPromote(donor, role, cleanEmail, password, branchId);
+      await onPromote(donor, role, cleanEmail, branchId);
       onClose();
     } catch (err: any) {
       setErrorMessage(err.message || 'স্টাফ হিসেবে পদোন্নতি সম্পন্ন করা যায়নি।');
@@ -132,7 +114,7 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
           </span>
         </div>
       }
-      subtitle="বিদ্যমান রক্তদাতাকে এডমিন প্যানেলের প্রশাসনিক অ্যাক্সেস ও দায়িত্ব প্রদান করুন।"
+      subtitle="বিদ্যমান অনবোর্ডকৃত রক্তদাতাকে এডমিন প্যানেলের প্রশাসনিক অ্যাক্সেস ও দায়িত্ব প্রদান করুন।"
       footer={
         <div className="flex items-center justify-end gap-3 w-full">
           <button
@@ -149,7 +131,7 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
             disabled={isSubmitting}
             className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
           >
-            <ShieldCheck className="w-4 h-4" />
+            <Sparkles className="w-4 h-4" />
             {isSubmitting ? 'প্রসেস হচ্ছে...' : 'স্টাফ হিসেবে অনুমোদন দিন'}
           </button>
         </div>
@@ -189,6 +171,17 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
           </div>
         </div>
 
+        {/* Passwordless Security Notice */}
+        <div className="p-3 bg-emerald-50/80 border border-emerald-200/90 rounded-xl text-xs text-emerald-900 flex items-start gap-2.5">
+          <Lock className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="font-bold text-emerald-900">রক্তদাতার নিজস্ব পাসওয়ার্ড সুরক্ষিত থাকবে</p>
+            <p className="text-[11px] text-emerald-800 leading-relaxed">
+              রক্তদাতা অনবোর্ডিং বা রেজিস্ট্রেশনের সময় যে নিজস্ব পাসওয়ার্ড সেট করেছেন, সেটি সম্পূর্ণ অপরিবর্তিত থাকবে। সুপার এডমিনকে নতুন কোনো পাসওয়ার্ড তৈরি করতে হবে না। তিনি তার পূর্বের পাসওয়ার্ড দিয়েই এডমিন প্যানেলে লগইন করতে পারবেন।
+            </p>
+          </div>
+        </div>
+
         {/* Form Inputs */}
         <div className="space-y-3">
           {/* Email for login */}
@@ -207,14 +200,14 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono"
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">এডমিন প্যানেলে লগইন করার সময় এই ইমেইলটি ব্যবহার করতে হবে।</p>
+            <p className="text-[10px] text-slate-400 mt-1">রক্তদাতার একাউন্টের সাথে সংযুক্ত ইমেইল।</p>
           </div>
 
-          {/* Role Selection */}
+          {/* Role Selection & Branch */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                নির্ধারিত পদবি (Role) <span className="text-red-500">*</span>
+                নির্ধারিত প্রশাসনিক পদবি (Role) <span className="text-red-500">*</span>
               </label>
               <select
                 value={role}
@@ -245,60 +238,12 @@ export const PromoteDonorModal: React.FC<PromoteDonorModalProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Password */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                লগইন পাসওয়ার্ড <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="কমপক্ষে ৬ অক্ষর"
-                  className="w-full pl-9 pr-9 py-2 border border-slate-200 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                পাসওয়ার্ড নিশ্চিতকরণ <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="পাসওয়ার্ড পুনরায় লিখুন"
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl text-[11px] text-indigo-900 space-y-1">
-          <p className="font-bold flex items-center gap-1.5">
-            <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-            স্বয়ংক্রিয় ডোনার-স্টাফ সিঙ্ক:
-          </p>
+        <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl text-[11px] text-indigo-900 flex items-center gap-2">
+          <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
           <p className="text-indigo-800">
-            এই ফর্মটি সাবমিট করার পর রক্তদাতার আইডি ({donor.donorId}) এবং তার লগইন একাউন্ট স্বয়ংক্রিয়ভাবে সংযুক্ত হবে।
-            তিনি সরাসরি এই ইমেইল ও পাসওয়ার্ড দিয়ে এডমিন প্যানেলে লগইন করতে পারবেন।
+            অনুমোদনের সাথে সাথে তার রোল আপডেট হয়ে যাবে এবং তিনি নির্ধারিত পারমিশন অনুযায়ী পোর্টালের সকল টুলস ব্যবহার করতে পারবেন।
           </p>
         </div>
       </form>

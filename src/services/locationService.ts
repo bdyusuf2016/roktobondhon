@@ -234,3 +234,5 @@ export const INITIAL_BRANCHES = [
     isActive: true,
   },
 ];
+
+export * from '../data/bangladeshGeoData';

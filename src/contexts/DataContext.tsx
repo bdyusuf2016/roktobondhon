@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type {
   AuditLog,
+  BloodGroup,
   BloodRequest,
   Branch,
   Donation,
@@ -110,6 +111,28 @@ interface DataContextType {
   verifyBloodRequest: (id: string, verifierName: string) => Promise<void>;
   deleteBloodRequest: (id: string) => Promise<void>;
   registerDonor: (data: Omit<Donor, 'id' | 'donorId' | 'createdAt' | 'updatedAt' | 'verificationStatus' | 'totalDonations'>) => Promise<Donor>;
+  onboardDonor: (
+    data: {
+      fullName: string;
+      phone: string;
+      email?: string;
+      bloodGroup: BloodGroup;
+      gender?: 'male' | 'female' | 'other';
+      dateOfBirth?: string;
+      weight?: number;
+      district: string;
+      upazila: string;
+      area: string;
+      exactAddress?: string;
+      lastDonationDate?: string;
+      totalDonations?: number;
+      availability?: boolean;
+      emergencyAvailable?: boolean;
+      adminNotes?: string;
+      branchId?: string;
+    },
+    adminUser?: { id: string; fullName: string }
+  ) => Promise<{ donor: Donor; user?: User; tempPassword: string }>;
   updateDonor: (id: string, data: Partial<Donor>) => Promise<void>;
   verifyDonor: (donorId: string, status: VerificationStatus, verifierName: string, notes?: string) => Promise<void>;
   deleteDonor: (donorId: string) => Promise<void>;
@@ -1031,6 +1054,162 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       addAuditLog('Donor Registered', 'Donor', id, { donorId, bloodGroup: newDonor.bloodGroup });
       return newDonor;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onboardDonor = async (
+    data: {
+      fullName: string;
+      phone: string;
+      email?: string;
+      bloodGroup: BloodGroup;
+      gender?: 'male' | 'female' | 'other';
+      dateOfBirth?: string;
+      weight?: number;
+      district: string;
+      upazila: string;
+      area: string;
+      exactAddress?: string;
+      lastDonationDate?: string;
+      totalDonations?: number;
+      availability?: boolean;
+      emergencyAvailable?: boolean;
+      adminNotes?: string;
+      branchId?: string;
+    },
+    adminUser?: { id: string; fullName: string }
+  ): Promise<{ donor: Donor; user?: User; tempPassword: string }> => {
+    setIsLoading(true);
+    try {
+      const cleanPhone = data.phone.trim();
+      const cleanEmail =
+        data.email?.trim().toLowerCase() || `${cleanPhone}@donor.roktobondhon.org`;
+      const tempPassword = cleanPhone; // Phone number as the default password!
+
+      // 1. Check if user already exists
+      let activeUserId: string | undefined;
+      const existingUser = users.find(
+        (u) =>
+          u.phone === cleanPhone ||
+          (u.email && u.email.toLowerCase() === cleanEmail)
+      );
+
+      let createdUser: User | undefined;
+      if (existingUser) {
+        activeUserId = existingUser.id;
+      } else {
+        try {
+          createdUser = await addUser(
+            {
+              fullName: data.fullName.trim(),
+              phone: cleanPhone,
+              email: cleanEmail,
+              role: 'donor',
+              branchId:
+                data.branchId ||
+                (data.district === 'Manikganj'
+                  ? 'br-mnk'
+                  : data.upazila === 'Dhamrai'
+                  ? 'br-dhm'
+                  : 'br-svr'),
+              organizationId: 'org-roktobondon',
+              status: 'active',
+            },
+            tempPassword
+          );
+          activeUserId = createdUser.id;
+        } catch (authErr) {
+          console.warn('[onboardDonor] User account creation fallback:', authErr);
+        }
+      }
+
+      // 2. Generate Donor ID & composite data
+      const id = `donor-${Date.now()}`;
+      const locationCode = getLocationCode(data.upazila, data.district);
+      const donorId = generateDonorId(locationCode, donors.length + 101);
+      const branchId =
+        data.branchId ||
+        (data.district === 'Manikganj'
+          ? 'br-mnk'
+          : data.upazila === 'Dhamrai'
+          ? 'br-dhm'
+          : 'br-svr');
+
+      const publicData: DonorPublic = {
+        id,
+        donorId,
+        fullName: data.fullName.trim(),
+        bloodGroup: data.bloodGroup,
+        division: 'Dhaka',
+        district: data.district,
+        upazila: data.upazila,
+        area: data.area,
+        availability: data.availability ?? true,
+        emergencyAvailable: Boolean(data.emergencyAvailable),
+        lastDonationDate: data.lastDonationDate || undefined,
+        totalDonations:
+          data.totalDonations !== undefined && data.totalDonations !== null
+            ? Number(data.totalDonations)
+            : data.lastDonationDate
+            ? 1
+            : 0,
+        verificationStatus: 'verified', // Directly verified by Admin/Staff!
+        organizationId: 'org-roktobondon',
+        branchId,
+        createdAt: new Date().toISOString(),
+      };
+
+      const privateData: DonorPrivate = {
+        donorId,
+        userId: activeUserId || id,
+        phone: cleanPhone,
+        email: cleanEmail,
+        gender: data.gender || 'male',
+        dateOfBirth: data.dateOfBirth,
+        exactAddress: data.exactAddress || '',
+        adminNotes: data.adminNotes || `Onboarded by ${adminUser?.fullName || 'Admin'}`,
+        privacy: {
+          showPhone: false,
+          showGender: false,
+          showAge: false,
+          allowDirectContact: true,
+        },
+        verifiedBy: adminUser?.fullName || 'এডমিন',
+        verifiedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      let newDonor: Donor;
+      if (isSupabaseConfigured && !isDemoMode) {
+        newDonor = await createDonorRecord(publicData, privateData);
+      } else {
+        newDonor = {
+          ...publicData,
+          ...privateData,
+          updatedAt: new Date().toISOString(),
+        };
+        if (isSupabaseConfigured && supabase) {
+          try {
+            await createDonorRecord(publicData, privateData);
+          } catch (e) {
+            console.warn('Supabase donor onboarding fallback', e);
+          }
+        }
+      }
+
+      setDonors((prev) => [newDonor, ...prev]);
+
+      addAuditLog(
+        `এডমিন (${adminUser?.fullName || 'Admin'}) কর্তৃক রক্তদাতা অনবোর্ড সম্পন্ন: ${newDonor.fullName} (${newDonor.donorId}), প্রাথমিক পাসওয়ার্ড: মোবাইল নম্বর`,
+        'DONOR',
+        newDonor.id,
+        { donorId: newDonor.donorId, phone: cleanPhone, bloodGroup: newDonor.bloodGroup }
+      );
+
+      return { donor: newDonor, user: existingUser || createdUser, tempPassword };
     } finally {
       setIsLoading(false);
     }
@@ -2287,11 +2466,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password?: string
   ): Promise<User> => {
     let newUserId = `user-${Date.now()}`;
-    const cleanEmail = userData.email?.trim().toLowerCase();
     const cleanPhone = userData.phone.trim();
+    const cleanEmail = userData.email?.trim().toLowerCase() || `${cleanPhone}@roktobondhon.org`;
+    const effectivePassword = password?.trim() || cleanPhone;
 
     if (isSupabaseConfigured && supabase) {
-      if (!cleanEmail || !password) {
+      if (!cleanEmail || !effectivePassword) {
         if (!isDemoMode) {
           throw new Error('ব্যবহারকারী অ্যাকাউন্ট তৈরির জন্য ইমেইল ও পাসওয়ার্ড প্রদান আবশ্যক।');
         }
@@ -2303,7 +2483,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fullName: userData.fullName.trim(),
           email: cleanEmail,
           phone: cleanPhone,
-          password: password,
+          password: effectivePassword,
           role: userData.role,
           branchId: userData.branchId,
           organizationId: userData.organizationId || 'org-roktobondon',
@@ -2813,6 +2993,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verifyBloodRequest,
         deleteBloodRequest,
         registerDonor,
+        onboardDonor,
         updateDonor,
         verifyDonor,
         deleteDonor,

@@ -17,6 +17,7 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemConfig } from '../contexts/SystemConfigContext';
 import type { BloodGroup, EmergencyLevel } from '../types';
+import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -37,9 +38,13 @@ export const RequestBloodPage: React.FC = () => {
   );
   const [requiredTime, setRequiredTime] = useState('10:00 AM');
   const [hospital, setHospital] = useState(searchParams.get('hospital') || '');
-  const [district, setDistrict] = useState('Dhaka');
-  const [upazila, setUpazila] = useState('Dhamrai');
+  const [district, setDistrict] = useState('ঢাকা');
+  const [upazila, setUpazila] = useState('ধামরাই');
   const [area, setArea] = useState('');
+
+  const availableUpazilas = useMemo(() => {
+    return getUpazilasForDistrict(district);
+  }, [district]);
   const [contactPerson, setContactPerson] = useState(currentUser?.fullName || '');
   const [contactNumber, setContactNumber] = useState(currentUser?.phone || '');
   const [relationship, setRelationship] = useState('রোগী নিজেই');
@@ -358,51 +363,47 @@ export const RequestBloodPage: React.FC = () => {
               <select
                 value={district}
                 onChange={(e) => {
-                  setDistrict(e.target.value);
-                  setUpazila(e.target.value === 'Dhaka' ? 'Dhamrai' : 'Manikganj Sadar');
+                  const newDist = e.target.value;
+                  setDistrict(newDist);
+                  const upas = getUpazilasForDistrict(newDist);
+                  setUpazila(upas.length > 0 ? upas[0] : '');
                 }}
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
               >
-                <option value="Dhaka">ঢাকা (ধামরাই ও সাভার)</option>
-                <option value="Manikganj">মানিকগঞ্জ</option>
+                {BANGLADESH_DISTRICTS.map((d) => (
+                  <option key={d.id} value={d.nameBn}>
+                    {d.nameBn} ({d.nameEn})
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                উপজেলা *
+                উপজেলা / থানা *
               </label>
               <select
                 value={upazila}
                 onChange={(e) => setUpazila(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
               >
-                {district === 'Dhaka' ? (
-                  <>
-                    <option value="Dhamrai">ধামরাই</option>
-                    <option value="Savar">সাভার</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="Manikganj Sadar">মানিকগঞ্জ সদর</option>
-                    <option value="Singair">সিংগাইর</option>
-                    <option value="Saturia">সাটুরিয়া</option>
-                    <option value="Shivalaya">শিবালয়</option>
-                    <option value="Harirampur">হরিরামপুর</option>
-                  </>
-                )}
+                {availableUpazilas.map((upa) => (
+                  <option key={upa} value={upa}>
+                    {upa}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                নির্দিষ্ট এলাকা / ইউনিয়ন
+                নির্দিষ্ট এলাকা / গ্রাম (ঐচ্ছিক)
               </label>
               <input
                 type="text"
                 value={area}
                 onChange={(e) => setArea(e.target.value)}
-                placeholder="যেমন: ধামরাই সদর, আশুলিয়া"
+                placeholder="যেমন: হাসপাতাল রোড, কলেজ মোড়"
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden"
               />
             </div>

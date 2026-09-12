@@ -32,6 +32,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const [branchId, setBranchId] = useState('br-dhm');
 
   // Password fields for new user creation
+  const [useCustomPassword, setUseCustomPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -64,6 +65,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setBranchId(userToEdit.branchId || 'br-dhm');
       setPassword('');
       setConfirmPassword('');
+      setUseCustomPassword(false);
     } else {
       setFullName('');
       setEmail('');
@@ -72,6 +74,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       setBranchId('br-dhm');
       setPassword('');
       setConfirmPassword('');
+      setUseCustomPassword(false);
     }
     setErrorMessage('');
     setShowPassword(false);
@@ -82,18 +85,27 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     if (isSubmitting) return;
     setErrorMessage('');
 
-    if (!fullName.trim() || !phone.trim()) {
+    const cleanName = fullName.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanName || !cleanPhone) {
       setErrorMessage('অনুগ্রহ করে নাম এবং মোবাইল নম্বর প্রদান করুন।');
       return;
     }
 
-    if (!isEditing) {
-      if (!email.trim() || !email.includes('@')) {
-        setErrorMessage('লগইন ও অথেন্টিকেশনের জন্য সঠিক ইমেইল প্রদান করুন।');
-        return;
-      }
+    if (cleanPhone.length < 6) {
+      setErrorMessage('অনুগ্রহ করে একটি সঠিক মোবাইল নম্বর প্রদান করুন (কমপক্ষে ৬ ডিজিট)।');
+      return;
+    }
+
+    // Default password is the user's phone number unless a custom one is specified
+    const effectivePassword = (!isEditing)
+      ? (useCustomPassword && password.trim() ? password.trim() : cleanPhone)
+      : undefined;
+
+    if (!isEditing && useCustomPassword) {
       if (!password || password.length < 6) {
-        setErrorMessage('পাসওয়ার্ডটি যথেষ্ট শক্তিশালী নয় (কমপক্ষে ৬ অক্ষর প্রয়োজন)।');
+        setErrorMessage('কাস্টম পাসওয়ার্ডটি যথেষ্ট শক্তিশালী নয় (কমপক্ষে ৬ অক্ষর প্রয়োজন)।');
         return;
       }
       if (password !== confirmPassword) {
@@ -102,20 +114,23 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       }
     }
 
+    // If email is not entered, generate standard portal email
+    const finalEmail = email.trim().toLowerCase() || `${cleanPhone}@roktobondhon.org`;
+
     setIsSubmitting(true);
     try {
       if (typeof onSave === 'function') {
         await onSave(
           {
-            fullName: fullName.trim(),
-            email: email.trim().toLowerCase() || undefined,
-            phone: phone.trim(),
+            fullName: cleanName,
+            email: finalEmail,
+            phone: cleanPhone,
             role,
             organizationId: 'org-roktobondon',
             branchId,
-            password: !isEditing ? password : undefined,
+            password: effectivePassword,
           },
-          !isEditing ? password : undefined
+          effectivePassword
         );
       }
       onClose();
@@ -195,11 +210,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              {isEditing ? 'ইমেইল (ঐচ্ছিক)' : 'লগইন ইমেইল *'}
+              ইমেইল (ঐচ্ছিক)
             </label>
             <input
               type="email"
-              required={!isEditing}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
@@ -208,64 +222,82 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
           </div>
         </div>
 
-        {/* Password inputs for new user account */}
+        {/* Default Password Banner: Phone Number is the Password */}
         {!isEditing && (
-          <div className="p-3 bg-red-50/50 rounded-xl border border-red-100 space-y-3">
-            <div className="flex items-center gap-1.5 text-slate-800 font-bold">
-              <KeyRound className="w-3.5 h-3.5 text-red-600" />
-              <span>লগইন একাউন্ট ও পাসওয়ার্ড নির্ধারণ</span>
+          <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-900 font-bold">
+                <KeyRound className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>লগইন পাসওয়ার্ড (ডিফল্ট: মোবাইল নম্বর)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUseCustomPassword(!useCustomPassword)}
+                className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 underline cursor-pointer"
+              >
+                {useCustomPassword ? 'ডিফল্ট ফোন নম্বর ব্যবহার করুন' : 'কাস্টম পাসওয়ার্ড দিন?'}
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  পাসওয়ার্ড * (কমপক্ষে ৬ অক্ষর)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-2 pr-9 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-red-500 focus:outline-hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+            {!useCustomPassword ? (
+              <div className="text-[11px] text-amber-800 leading-relaxed bg-amber-100/50 p-2.5 rounded-lg border border-amber-200/50">
+                নতুন সদস্যের প্রাথমিক লগইন পাসওয়ার্ড হিসেবে স্বয়ংক্রিয়ভাবে তার{' '}
+                <strong className="font-mono font-bold text-amber-950">
+                  মোবাইল নম্বর ({phone.trim() || '01XXXXXXXXX'})
+                </strong>{' '}
+                সেট থাকবে। তিনি পরবর্তীতে নিজের একাউন্ট থেকে ইচ্ছেমতো পাসওয়ার্ড পরিবর্তন করতে পারবেন।
               </div>
+            ) : (
+              <div className="space-y-2 pt-1 border-t border-amber-200/60">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      কাস্টম পাসওয়ার্ড *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required={useCustomPassword}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-3 py-2 pr-9 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-red-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  কনফার্ম পাসওয়ার্ড *
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-2 pr-9 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-red-500 focus:outline-hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      কনফার্ম পাসওয়ার্ড *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required={useCustomPassword}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-3 py-2 pr-9 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-red-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              * নতুন ইউজার এই ইমেইল ও পাসওয়ার্ড দিয়ে সরাসরি সিস্টেমে লগইন করতে পারবেন।
-            </p>
+            )}
           </div>
         )}
 
@@ -299,6 +331,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
               <option value="br-dhm">ধামরাই সেন্ট্রাল শাখা</option>
               <option value="br-svr">সাভার এরিয়া শাখা</option>
               <option value="br-mnk">মানিকগঞ্জ জেলা শাখা</option>
+              <option value="br-all">সেন্ট্রাল / সারা বাংলাদেশ সমন্বয়</option>
             </select>
           </div>
         </div>

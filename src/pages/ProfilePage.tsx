@@ -39,7 +39,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
-import { INITIAL_LOCATIONS } from '../services/locationService';
+import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
 import { printCertificateInStandaloneWindow } from '../services/certificatePrintService';
 import { volunteerForBloodRequest } from '../services/donorRequestService';
 import { DonorSelfReportModal } from '../components/profile/DonorSelfReportModal';
@@ -92,18 +92,10 @@ export const ProfilePage: React.FC = () => {
   const [editShowPhone, setEditShowPhone] = useState(true);
   const [editAllowDirectContact, setEditAllowDirectContact] = useState(true);
 
-  // Dynamic Upazilas and Unions for current selected district
+  // Dynamic Upazilas for current selected district (Bangladesh 64 districts)
   const currentUpazilas = useMemo(() => {
-    const list = INITIAL_LOCATIONS.filter((l) => l.district === editDistrict).map((l) => l.upazila);
-    return list.length > 0 ? list : ['Dhamrai (ধামরাই)', 'Savar (সাভার)'];
+    return getUpazilasForDistrict(editDistrict);
   }, [editDistrict]);
-
-  const currentUnions = useMemo(() => {
-    const matched = INITIAL_LOCATIONS.find(
-      (l) => l.district === editDistrict && l.upazila === editUpazila
-    );
-    return matched?.unions || [];
-  }, [editDistrict, editUpazila]);
 
   // Change Password Form State
   const [newPassword, setNewPassword] = useState('');
@@ -1658,15 +1650,16 @@ export const ProfilePage: React.FC = () => {
                       onChange={(e) => {
                         const dist = e.target.value;
                         setEditDistrict(dist);
-                        if (dist === 'Dhaka') setEditUpazila('Dhamrai (ধামরাই)');
-                        else if (dist === 'Manikganj') setEditUpazila('Manikganj Sadar (মানিকগঞ্জ সদর)');
-                        else setEditUpazila('Gazipur Sadar (গাজীপুর সদর)');
+                        const upas = getUpazilasForDistrict(dist);
+                        setEditUpazila(upas.length > 0 ? upas[0] : '');
                       }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden font-medium"
                     >
-                      <option value="Dhaka">Dhaka (ঢাকা)</option>
-                      <option value="Manikganj">Manikganj (মানিকগঞ্জ)</option>
-                      <option value="Gazipur">Gazipur (গাজীপুর)</option>
+                      {BANGLADESH_DISTRICTS.map((d) => (
+                        <option key={d.id} value={d.nameBn}>
+                          {d.nameBn} ({d.nameEn})
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -1677,7 +1670,7 @@ export const ProfilePage: React.FC = () => {
                     <select
                       value={editUpazila}
                       onChange={(e) => setEditUpazila(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden font-medium"
                     >
                       {currentUpazilas.map((upa) => (
                         <option key={upa} value={upa}>{upa}</option>
@@ -1686,37 +1679,17 @@ export const ProfilePage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      ইউনিয়ন তালিকা
-                    </label>
-                    <select
-                      value={currentUnions.includes(editArea) ? editArea : ''}
-                      onChange={(e) => {
-                        if (e.target.value) setEditArea(e.target.value);
-                      }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                    >
-                      <option value="">-- ইউনিয়ন নির্বাচন করুন --</option>
-                      {currentUnions.map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      ইউনিয়ন / এলাকা / গ্রাম (কাস্টম)
-                    </label>
-                    <input
-                      type="text"
-                      value={editArea}
-                      onChange={(e) => setEditArea(e.target.value)}
-                      placeholder="যেমন: কালামপুর, কুশুরা, ধামরাই সদর"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    গ্রাম / মহল্লা / এলাকা (ঐচ্ছিক)
+                  </label>
+                  <input
+                    type="text"
+                    value={editArea}
+                    onChange={(e) => setEditArea(e.target.value)}
+                    placeholder="যেমন: কালামপুর, কুশুরা, ধামরাই সদর"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
+                  />
                 </div>
 
                 <div>

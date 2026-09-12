@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -19,6 +19,7 @@ import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { BloodRequestCard } from '../components/BloodRequestCard';
 import { DonorCard } from '../components/DonorCard';
 import type { BloodGroup } from '../types';
+import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -30,6 +31,10 @@ export const HomePage: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<string>('');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('');
   const [selectedUpazila, setSelectedUpazila] = useState<string>('');
+
+  const availableUpazilas = useMemo(() => {
+    return selectedDistrict ? getUpazilasForDistrict(selectedDistrict) : [];
+  }, [selectedDistrict]);
 
   const handleQuickSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +64,7 @@ export const HomePage: React.FC = () => {
         <div className="relative max-w-5xl mx-auto text-center space-y-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-900/90 backdrop-blur-md border border-slate-700 text-xs font-semibold tracking-wide text-slate-200">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            ধামরাই • সাভার • মানিকগঞ্জ স্বেচ্ছাসেবী নেটওয়ার্ক
+            ধামরাই • সাভার • মানিকগঞ্জ সহ সারা বাংলাদেশ স্বেচ্ছাসেবী নেটওয়ার্ক
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
@@ -108,9 +113,12 @@ export const HomePage: React.FC = () => {
                   }}
                   className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
                 >
-                  <option value="">সকল জেলা</option>
-                  <option value="Dhaka">ঢাকা (ধামরাই ও সাভার)</option>
-                  <option value="Manikganj">মানিকগঞ্জ</option>
+                  <option value="">সকল জেলা (৬৪ জেলা)</option>
+                  {BANGLADESH_DISTRICTS.map((d) => (
+                    <option key={d.id} value={d.nameBn}>
+                      {d.nameBn} ({d.nameEn})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -124,22 +132,12 @@ export const HomePage: React.FC = () => {
                   onChange={(e) => setSelectedUpazila(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:border-red-600 focus:outline-hidden font-medium"
                 >
-                  <option value="">সকল উপজেলা</option>
-                  {selectedDistrict === 'Dhaka' || !selectedDistrict ? (
-                    <>
-                      <option value="Dhamrai">ধামরাই</option>
-                      <option value="Savar">সাভার</option>
-                    </>
-                  ) : null}
-                  {selectedDistrict === 'Manikganj' || !selectedDistrict ? (
-                    <>
-                      <option value="Manikganj Sadar">মানিকগঞ্জ সদর</option>
-                      <option value="Singair">সিংগাইর</option>
-                      <option value="Saturia">সাটুরিয়া</option>
-                      <option value="Shivalaya">শিবালয়</option>
-                      <option value="Harirampur">হরিরামপুর</option>
-                    </>
-                  ) : null}
+                  <option value="">{selectedDistrict ? 'সকল উপজেলা' : 'প্রথমে জেলা নির্বাচন করুন'}</option>
+                  {availableUpazilas.map((upa) => (
+                    <option key={upa} value={upa}>
+                      {upa}
+                    </option>
+                  ))}
                 </select>
               </div>
 

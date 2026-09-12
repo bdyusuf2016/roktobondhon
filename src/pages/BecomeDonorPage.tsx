@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Heart,
@@ -14,7 +14,14 @@ import {
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import type { BloodGroup, Gender } from '../types';
+import { User, BloodGroup, Gender } from '../types';
+import {
+  BANGLADESH_DIVISIONS,
+  BANGLADESH_DISTRICTS,
+  getDistrictsByDivision,
+  getUpazilasForDistrict,
+  findDistrict,
+} from '../data/bangladeshGeoData';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -24,16 +31,17 @@ export const BecomeDonorPage: React.FC = () => {
   const { currentUser, register, updateCurrentUser } = useAuth();
 
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
-  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('A+');
   const [gender, setGender] = useState<Gender>('male');
-  const [dateOfBirth, setDateOfBirth] = useState('2000-01-01');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [email, setEmail] = useState(currentUser?.email || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [district, setDistrict] = useState('Dhaka');
-  const [upazila, setUpazila] = useState('Dhamrai');
+  const [division, setDivision] = useState('dhaka');
+  const [district, setDistrict] = useState('ঢাকা');
+  const [upazila, setUpazila] = useState('ধামরাই');
   const [area, setArea] = useState('');
   const [hasDonatedBefore, setHasDonatedBefore] = useState(false);
   const [lastDonationDate, setLastDonationDate] = useState('');
@@ -42,6 +50,14 @@ export const BecomeDonorPage: React.FC = () => {
   const [showPhone, setShowPhone] = useState(false);
   const [allowDirectContact, setAllowDirectContact] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(true);
+
+  const availableDistricts = useMemo(() => {
+    return getDistrictsByDivision(division);
+  }, [division]);
+
+  const availableUpazilas = useMemo(() => {
+    return getUpazilasForDistrict(district);
+  }, [district]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -107,7 +123,16 @@ export const BecomeDonorPage: React.FC = () => {
         activeUserId = authProfile.id;
       }
 
-      const branchId = district === 'Manikganj' ? 'br-mnk' : (upazila === 'Dhamrai' ? 'br-dhm' : 'br-svr');
+      const cleanDist = district.toLowerCase();
+      const branchId =
+        cleanDist.includes('manikganj') || cleanDist.includes('মানিকগঞ্জ')
+          ? 'br-mnk'
+          : upazila.toLowerCase().includes('dhamrai') || upazila.includes('ধামরাই')
+          ? 'br-dhm'
+          : 'br-svr';
+
+      const foundDiv = BANGLADESH_DIVISIONS.find((d) => d.id === division);
+      const finalDivision = foundDiv ? foundDiv.nameBn : 'ঢাকা';
 
       // 2. Create public.donors record strictly synchronized with auth user ID
       const donor = await registerDonor({
@@ -118,7 +143,7 @@ export const BecomeDonorPage: React.FC = () => {
         dateOfBirth,
         phone: phone.trim(),
         email: email.trim() || undefined,
-        division: 'Dhaka',
+        division: finalDivision,
         district,
         upazila,
         area: area.trim() || upazila,
@@ -332,7 +357,33 @@ export const BecomeDonorPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                বিভাগ (Division) *
+              </label>
+              <select
+                value={division}
+                onChange={(e) => {
+                  const newDiv = e.target.value;
+                  setDivision(newDiv);
+                  const dists = getDistrictsByDivision(newDiv);
+                  if (dists.length > 0) {
+                    setDistrict(dists[0].nameBn);
+                    const upas = dists[0].upazilas;
+                    setUpazila(upas.length > 0 ? upas[0] : '');
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden font-medium"
+              >
+                {BANGLADESH_DIVISIONS.map((div) => (
+                  <option key={div.id} value={div.id}>
+                    {div.nameBn} ({div.nameEn})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 জেলা *
@@ -340,51 +391,47 @@ export const BecomeDonorPage: React.FC = () => {
               <select
                 value={district}
                 onChange={(e) => {
-                  setDistrict(e.target.value);
-                  setUpazila(e.target.value === 'Dhaka' ? 'Dhamrai' : 'Manikganj Sadar');
+                  const newDist = e.target.value;
+                  setDistrict(newDist);
+                  const upas = getUpazilasForDistrict(newDist);
+                  setUpazila(upas.length > 0 ? upas[0] : '');
                 }}
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden font-medium"
               >
-                <option value="Dhaka">ঢাকা (ধামরাই ও সাভার)</option>
-                <option value="Manikganj">মানিকগঞ্জ</option>
+                {availableDistricts.map((dist) => (
+                  <option key={dist.id} value={dist.nameBn}>
+                    {dist.nameBn} ({dist.nameEn})
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                উপজেলা *
+                উপজেলা / থানা *
               </label>
               <select
                 value={upazila}
                 onChange={(e) => setUpazila(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden font-medium"
               >
-                {district === 'Dhaka' ? (
-                  <>
-                    <option value="Dhamrai">ধামরাই</option>
-                    <option value="Savar">সাভার</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="Manikganj Sadar">মানিকগঞ্জ সদর</option>
-                    <option value="Singair">সিংগাইর</option>
-                    <option value="Saturia">সাটুরিয়া</option>
-                    <option value="Shivalaya">শিবালয়</option>
-                    <option value="Harirampur">হরিরামপুর</option>
-                  </>
-                )}
+                {availableUpazilas.map((upa) => (
+                  <option key={upa} value={upa}>
+                    {upa}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                গ্রাম / মহল্লা / এলাকা
+                গ্রাম / মহল্লা / এলাকা (ঐচ্ছিক)
               </label>
               <input
                 type="text"
                 value={area}
                 onChange={(e) => setArea(e.target.value)}
-                placeholder="যেমন: কুশুরা, আশুলিয়া"
+                placeholder="যেমন: কুশুরা, কালামপুর"
                 className="w-full px-3 py-2 rounded-lg text-xs border border-slate-300 focus:bg-white focus:ring-2 focus:ring-red-600 focus:outline-hidden"
               />
             </div>
