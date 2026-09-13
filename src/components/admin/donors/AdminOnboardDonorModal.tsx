@@ -181,12 +181,12 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
       title="নতুন রক্তদাতা অনবোর্ড করুন (Admin Onboarding)"
       subtitle="ক্যাম্প, ফিল্ড বা ফোনের মাধ্যমে সংগৃহীত রক্তদাতার তথ্য সরাসরি ভেরিফায়েড হিসেবে যুক্ত করুন।"
       footer={
-        <div className="flex items-center justify-end gap-3 w-full">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 w-full">
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl cursor-pointer text-center"
           >
             বাতিল
           </button>
@@ -194,10 +194,10 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md shadow-red-600/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
           >
             <CheckCircle2 className="w-4 h-4" />
-            {isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদাতা অনবোর্ড সম্পন্ন করুন'}
+            <span>{isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদাতা অনবোর্ড সম্পন্ন করুন'}</span>
           </button>
         </div>
       }
@@ -496,6 +496,18 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
               className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-800"
             />
           </div>
+        </div>
+
+        {/* Mobile Inline Submit Button */}
+        <div className="pt-2 sm:hidden">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md shadow-red-600/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদাতা অনবোর্ড সম্পন্ন করুন'}</span>
+          </button>
         </div>
       </form>
     </BaseModal>

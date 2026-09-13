@@ -132,12 +132,31 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-slate-800/90 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>© {new Date().getFullYear()} {config.name}। {config.footerCopyrightText || 'সর্বস্বত্ব সংরক্ষিত।'}</p>
-          <p className="flex items-center gap-1.5">
-            <span>নির্মিত হয়েছে মানবতার কল্যাণে</span>
+        <div className="mt-10 pt-6 border-t border-slate-800/90 text-xs text-slate-500 flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+          <div className="space-y-1">
+            <p className="text-slate-400 font-medium">
+              © {new Date().getFullYear()} {config.name}। {config.footerCopyrightText || 'সর্বস্বত্ব সংরক্ষিত।'}
+            </p>
+            <p className="flex items-center justify-center md:justify-start gap-1.5 text-slate-400">
+              <span>পরিকল্পনা ও কারিগরি সহায়তায়:</span>
+              <a
+                href="https://facebook.com/yusufcomputer1351"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-red-400 hover:text-red-300 font-bold hover:underline transition-colors inline-flex items-center gap-1 cursor-pointer"
+                title="মোঃ ইউসুফ আলী || ইউসুফ আইটি"
+              >
+                <span>মোঃ ইউসুফ আলী</span>
+                <span className="text-slate-600">||</span>
+                <span>ইউসুফ আইটি</span>
+              </a>
+            </p>
+          </div>
+
+          <p className="flex items-center gap-1.5 text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-full border border-slate-800">
+            <span>মানবতার সেবায় নিবেদিত</span>
             <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500 inline" />
-            <span className="text-slate-400">{config.footerTaglineBn || 'ধামরাই, সাভার ও মানিকগঞ্জ'}</span>
+            <span className="text-slate-500 font-medium">{config.footerTaglineBn || 'ধামরাই • সাভার • মানিকগঞ্জ'}</span>
           </p>
         </div>
       </div>

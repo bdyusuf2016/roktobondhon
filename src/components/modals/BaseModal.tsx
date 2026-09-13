@@ -133,7 +133,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto ${currentTheme.overlay} transition-opacity duration-200`}
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 overflow-hidden ${currentTheme.overlay} transition-opacity duration-200`}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -142,21 +142,21 @@ export const BaseModal: React.FC<BaseModalProps> = ({
     >
       <div
         ref={modalRef}
-        className={`w-full ${sizeClasses[size]} overflow-hidden transform transition-all duration-200 scale-100 animate-in fade-in zoom-in-95 ${currentTheme.container} ${className}`}
+        className={`w-full ${sizeClasses[size]} max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col overflow-hidden transform transition-all duration-200 scale-100 animate-in fade-in zoom-in-95 ${currentTheme.container} ${className}`}
       >
-        {/* Header */}
+        {/* Header (Pinned) */}
         {(title || showCloseButton) && (
-          <div className={`p-4 sm:p-5 flex items-start justify-between gap-3 ${currentTheme.headerBorder}`}>
-            <div className="flex items-start gap-3">
+          <div className={`p-3.5 sm:p-5 flex items-start justify-between gap-3 shrink-0 ${currentTheme.headerBorder}`}>
+            <div className="flex items-start gap-2.5 sm:gap-3">
               {icon && <div className="shrink-0 mt-0.5">{icon}</div>}
               <div>
                 {title && (
-                  <h3 className={`text-base sm:text-lg font-bold leading-snug ${currentTheme.titleColor}`}>
+                  <h3 className={`text-sm sm:text-lg font-bold leading-snug ${currentTheme.titleColor}`}>
                     {title}
                   </h3>
                 )}
                 {subtitle && (
-                  <p className={`text-xs sm:text-sm mt-0.5 ${currentTheme.subtitleColor}`}>
+                  <p className={`text-[11px] sm:text-xs mt-0.5 leading-relaxed ${currentTheme.subtitleColor}`}>
                     {subtitle}
                   </p>
                 )}
@@ -168,7 +168,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close modal"
-                className={`p-1.5 rounded-lg transition-colors shrink-0 -mr-1 -mt-1 ${currentTheme.closeBtn}`}
+                className={`p-1.5 rounded-lg transition-colors shrink-0 -mr-1 -mt-1 cursor-pointer ${currentTheme.closeBtn}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -176,14 +176,14 @@ export const BaseModal: React.FC<BaseModalProps> = ({
           </div>
         )}
 
-        {/* Content Body */}
-        <div className="p-4 sm:p-6 max-h-[75vh] overflow-y-auto">
+        {/* Content Body (Scrollable) */}
+        <div className="p-3.5 sm:p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           {children}
         </div>
 
-        {/* Footer */}
+        {/* Footer (Pinned & Visible) */}
         {footer && (
-          <div className={`p-3.5 sm:p-4.5 flex items-center justify-end gap-2.5 ${currentTheme.footerBg}`}>
+          <div className={`p-3 sm:p-4 shrink-0 flex items-center justify-end gap-2.5 pb-safe ${currentTheme.footerBg}`}>
             {footer}
           </div>
         )}
