@@ -13,6 +13,10 @@ import {
   Building2,
   Users,
   Award,
+  LayoutGrid,
+  List,
+  Sparkles,
+  Activity,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
@@ -51,6 +55,40 @@ export const HomePage: React.FC = () => {
   const activeRequests = bloodRequests.filter((r) => r.status === 'active' || r.status === 'matched');
   const criticalRequests = bloodRequests.filter((r) => r.emergencyLevel === 'CRITICAL' && r.status === 'active');
   const recentVerifiedDonors = donors.filter((d) => d.verificationStatus === 'verified').slice(0, 4);
+
+  // Live Blood Group Dashboard State & Computations
+  const [activeDashboardGroup, setActiveDashboardGroup] = useState<BloodGroup | 'all'>('A+');
+  const [summaryViewMode, setSummaryViewMode] = useState<'grid' | 'list'>('grid');
+
+  const bloodGroupStats = useMemo(() => {
+    return BLOOD_GROUPS.map((group) => {
+      const gDonors = donors.filter(
+        (d) => d.bloodGroup.trim().toUpperCase() === group
+      );
+      const availableCount = gDonors.filter((d) => d.availability).length;
+      const requestsCount = bloodRequests.filter(
+        (r) =>
+          r.bloodGroup.trim().toUpperCase() === group &&
+          (r.status === 'active' || r.status === 'matched')
+      ).length;
+      return {
+        group,
+        total: gDonors.length,
+        available: availableCount,
+        requests: requestsCount,
+      };
+    });
+  }, [donors, bloodRequests]);
+
+  const dashboardDonorsList = useMemo(() => {
+    if (!activeDashboardGroup || activeDashboardGroup === 'all') {
+      return donors.filter((d) => d.availability).slice(0, 8);
+    }
+    return donors.filter(
+      (d) =>
+        d.bloodGroup.trim().toUpperCase() === activeDashboardGroup && d.availability
+    );
+  }, [donors, activeDashboardGroup]);
 
   return (
     <div className="space-y-12 pb-16">
@@ -334,38 +372,185 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Our Chapters & Coverage */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-slate-950 text-white rounded-2xl p-6 sm:p-10 relative overflow-hidden border border-slate-850">
-          <div className="max-w-3xl space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-red-500">
-              শাখা ও কার্যক্রম
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-              ধামরাই, সাভার ও মানিকগঞ্জে নিবেদিতপ্রাণ স্বেচ্ছাসেবী টিম
-            </h2>
-            <p className="text-slate-300 text-sm leading-relaxed">
-              প্রতিটি উপজেলায় আমাদের স্থানীয় সমন্বয়ক ও ভলান্টিয়ার টিম কাজ করছেন। হাসপাতালগুলোতে সঠিক সময়ে রক্তদাতার উপস্থিতি নিশ্চিত করতে আমরা সর্বদা প্রস্তুত।
+      {/* Blood Group Summary Live Dashboard & Interactive Filter */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-red-100 text-red-600">
+                <Activity className="w-5 h-5" />
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                রক্তের গ্রুপভিত্তিক লাইভ ড্যাশবোর্ড
+              </h2>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              রক্তদাতাদের তাৎক্ষণিক প্রাপ্যতা ও জরুরি আবেদন — যেকোনো গ্রুপে ক্লিক করে সরাসরি ফিল্টার তালিকা দেখুন
             </p>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
-              {branches.map((b) => (
-                <div
-                  key={b.id}
-                  className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-1 text-xs"
-                >
-                  <p className="font-bold text-white text-sm">{b.nameBn}</p>
-                  <p className="text-slate-400">{b.district} • {b.upazila}</p>
-                  <div className="pt-2 flex items-center justify-between border-t border-slate-800 text-[11px]">
-                    <span className="text-slate-300">{b.coordinatorName}</span>
-                    <a href={`tel:${b.coordinatorPhone}`} className="text-red-400 font-bold hover:underline font-mono">
-                      কল
-                    </a>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveDashboardGroup('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeDashboardGroup === 'all'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              সকল গ্রুপ ({donors.filter((d) => d.availability).length} জন প্রস্তুত)
+            </button>
+
+            <Link
+              to={activeDashboardGroup && activeDashboardGroup !== 'all' ? `/find-blood?group=${encodeURIComponent(activeDashboardGroup)}` : '/find-blood'}
+              className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 shrink-0 ml-1"
+            >
+              <span>সম্পূর্ণ তালিকা</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* 8 Blood Group Summary Cards Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {bloodGroupStats.map((stat) => {
+            const isSelected = activeDashboardGroup === stat.group;
+            return (
+              <button
+                key={stat.group}
+                type="button"
+                onClick={() => setActiveDashboardGroup(isSelected ? 'all' : stat.group)}
+                className={`relative p-3 sm:p-3.5 rounded-2xl border transition-all text-center cursor-pointer group flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-gradient-to-b from-red-50 to-white border-red-500 shadow-md ring-2 ring-red-500/30 scale-102 -translate-y-0.5'
+                    : 'bg-white hover:bg-slate-50/80 border-slate-200/90 shadow-2xs hover:border-red-300 hover:shadow-xs'
+                }`}
+              >
+                {stat.requests > 0 && (
+                  <span className="absolute -top-2 -right-1.5 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-mono font-black animate-pulse shadow-xs">
+                    {stat.requests} জরুরি
+                  </span>
+                )}
+
+                <div>
+                  <span className={`text-xl sm:text-2xl font-black font-mono block transition-transform group-hover:scale-110 ${
+                    isSelected ? 'text-red-600' : 'text-slate-900'
+                  }`}>
+                    {stat.group}
+                  </span>
+
+                  <div className="mt-1 flex items-center justify-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${stat.available > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                    <span className="text-xs font-black text-slate-800 font-mono">
+                      {stat.available} জন
+                    </span>
                   </div>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    প্রস্তুত ডোনার
+                  </span>
                 </div>
-              ))}
+
+                <div className="mt-2.5 pt-2 border-t border-slate-100 text-[10px] flex items-center justify-between text-slate-500">
+                  <span>মোট: {stat.total}</span>
+                  <span className={`font-semibold ${isSelected ? 'text-red-600 font-bold' : 'group-hover:text-red-600'}`}>
+                    {isSelected ? '✓ সক্রিয়' : 'দেখুন →'}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filtered Donors Live Panel */}
+        <div className="bg-slate-50/80 border border-slate-200/90 rounded-2xl p-4 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="w-8 h-8 rounded-lg bg-red-600 text-white font-mono font-black flex items-center justify-center text-sm shadow-xs">
+                {activeDashboardGroup === 'all' ? 'ALL' : activeDashboardGroup}
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>
+                    {activeDashboardGroup === 'all'
+                      ? 'সকল গ্রুপের প্রস্তুত রক্তদাতাবৃন্দ'
+                      : `কাঙ্ক্ষিত ${activeDashboardGroup} গ্রুপের প্রস্তুত রক্তদাতাবৃন্দ`}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">
+                    {dashboardDonorsList.length} জন প্রস্তুত
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  সরাসরি যোগাযোগ বা WhatsApp-এর মাধ্যমে রক্তদানে সহায়তা নিন
+                </p>
+              </div>
+            </div>
+
+            {/* View Mode & Actions */}
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setSummaryViewMode('grid')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    summaryViewMode === 'grid'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">গ্রিড</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSummaryViewMode('list')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                    summaryViewMode === 'list'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">লিস্ট</span>
+                </button>
+              </div>
+
+              <Link
+                to={activeDashboardGroup && activeDashboardGroup !== 'all' ? `/find-blood?group=${encodeURIComponent(activeDashboardGroup)}` : '/find-blood'}
+                className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-bold transition-all shadow-2xs hover:border-red-300 hover:text-red-700 flex items-center gap-1"
+              >
+                <span>অনুসন্ধান ফিল্টারে দেখুন</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
+
+          {/* Donor List */}
+          {dashboardDonorsList.length > 0 ? (
+            <div className={
+              summaryViewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'
+                : 'space-y-3'
+            }>
+              {dashboardDonorsList.map((donor) => (
+                <DonorCard key={donor.id} donor={donor} viewMode={summaryViewMode} />
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-white rounded-xl border border-dashed border-slate-300 space-y-3">
+              <Droplets className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-semibold text-slate-700">
+                এই মুহূর্তে {activeDashboardGroup} গ্রুপের কোনো প্রস্তুত রক্তদাতা পাওয়া যায়নি
+              </p>
+              <Link
+                to="/request-blood"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-xs shadow-xs hover:bg-red-700 transition-colors"
+              >
+                <Droplets className="w-3.5 h-3.5" />
+                জরুরি রক্তের আবেদন সাবমিট করুন
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
@@ -437,6 +622,41 @@ export const HomePage: React.FC = () => {
               <p className="text-slate-600 leading-relaxed">
                 রক্তদানের আগে পর্যাপ্ত পানি পান করুন, পুষ্টিকর খাবার খান এবং ভালো ঘুম নিশ্চিত করুন।
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Our Chapters & Coverage (Relocated to bottom section) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-slate-950 text-white rounded-2xl p-6 sm:p-10 relative overflow-hidden border border-slate-850">
+          <div className="max-w-3xl space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-red-500">
+              শাখা ও কার্যক্রম
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+              ধামরাই, সাভার ও মানিকগঞ্জে নিবেদিতপ্রাণ স্বেচ্ছাসেবী টিম
+            </h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              প্রতিটি উপজেলায় আমাদের স্থানীয় সমন্বয়ক ও ভলান্টিয়ার টিম কাজ করছেন। হাসপাতালগুলোতে সঠিক সময়ে রক্তদাতার উপস্থিতি নিশ্চিত করতে আমরা সর্বদা প্রস্তুত।
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+              {branches.map((b) => (
+                <div
+                  key={b.id}
+                  className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-1 text-xs"
+                >
+                  <p className="font-bold text-white text-sm">{b.nameBn}</p>
+                  <p className="text-slate-400">{b.district} • {b.upazila}</p>
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-800 text-[11px]">
+                    <span className="text-slate-300">{b.coordinatorName}</span>
+                    <a href={`tel:${b.coordinatorPhone}`} className="text-red-400 font-bold hover:underline font-mono">
+                      কল
+                    </a>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
