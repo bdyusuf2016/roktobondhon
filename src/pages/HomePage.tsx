@@ -25,6 +25,7 @@ import { DonorCard } from '../components/DonorCard';
 import { SearchableSelect } from '../components/common/SearchableSelect';
 import type { BloodGroup } from '../types';
 import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
+import { toBengaliNumber } from '../utils/bengali';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -229,19 +230,19 @@ export const HomePage: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-red-600 block">
-              {donors.length}
+              {toBengaliNumber(donors.length)}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               নিবন্ধিত রক্তদাতা
             </span>
             <span className="text-[11px] text-slate-400 block mt-0.5">
-              {verifiedDonorsCount} জন ভেরিফাইড
+              {toBengaliNumber(verifiedDonorsCount)} জন ভেরিফাইড
             </span>
           </div>
 
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-emerald-600 block">
-              {donations.length}
+              {toBengaliNumber(donations.length)}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               সফল রক্তদান
@@ -253,19 +254,19 @@ export const HomePage: React.FC = () => {
 
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-amber-600 block">
-              {activeRequests.length}
+              {toBengaliNumber(activeRequests.length)}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               চলমান রক্তের আবেদন
             </span>
             <span className="text-[11px] text-red-600 font-medium block mt-0.5">
-              {criticalRequests.length} টি জরুরি
+              {toBengaliNumber(criticalRequests.length)} টি জরুরি
             </span>
           </div>
 
           <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
             <span className="text-2xl sm:text-3xl font-mono font-black text-indigo-600 block">
-              {branches.length > 0 ? `${branches.length} টি` : 'সক্রিয়'}
+              {branches.length > 0 ? `${toBengaliNumber(branches.length)} টি` : 'সক্রিয়'}
             </span>
             <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
               সক্রিয় শাখা
@@ -360,7 +361,7 @@ export const HomePage: React.FC = () => {
             to="/find-blood"
             className="text-xs sm:text-sm font-semibold text-red-600 hover:text-red-700 flex items-center gap-1"
           >
-            সব দেখুন ({bloodRequests.length})
+            সব দেখুন ({toBengaliNumber(bloodRequests.length)})
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -399,7 +400,7 @@ export const HomePage: React.FC = () => {
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
               }`}
             >
-              সকল গ্রুপ ({donors.filter((d) => d.availability).length} জন প্রস্তুত)
+              সকল গ্রুপ ({toBengaliNumber(donors.filter((d) => d.availability).length)} জন প্রস্তুত)
             </button>
 
             <Link
@@ -429,7 +430,7 @@ export const HomePage: React.FC = () => {
               >
                 {stat.requests > 0 && (
                   <span className="absolute -top-2 -right-1.5 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-mono font-black animate-pulse shadow-xs">
-                    {stat.requests} জরুরি
+                    {toBengaliNumber(stat.requests)} জরুরি
                   </span>
                 )}
 
@@ -443,7 +444,7 @@ export const HomePage: React.FC = () => {
                   <div className="mt-1 flex items-center justify-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${stat.available > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                     <span className="text-xs font-black text-slate-800 font-mono">
-                      {stat.available} জন
+                      {toBengaliNumber(stat.available)} জন
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -452,7 +453,7 @@ export const HomePage: React.FC = () => {
                 </div>
 
                 <div className="mt-2.5 pt-2 border-t border-slate-100 text-[10px] flex items-center justify-between text-slate-500">
-                  <span>মোট: {stat.total}</span>
+                  <span>মোট: {toBengaliNumber(stat.total)}</span>
                   <span className={`font-semibold ${isSelected ? 'text-red-600 font-bold' : 'group-hover:text-red-600'}`}>
                     {isSelected ? '✓ সক্রিয়' : 'দেখুন →'}
                   </span>
@@ -477,7 +478,7 @@ export const HomePage: React.FC = () => {
                       : `কাঙ্ক্ষিত ${activeDashboardGroup} গ্রুপের প্রস্তুত রক্তদাতাবৃন্দ`}
                   </span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">
-                    {dashboardDonorsList.length} জন প্রস্তুত
+                    {toBengaliNumber(dashboardDonorsList.length)} জন প্রস্তুত
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">

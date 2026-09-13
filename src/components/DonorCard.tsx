@@ -15,6 +15,7 @@ import type { Donor } from '../types';
 import { RequestDonorModal } from './RequestDonorModal';
 import { useAuth } from '../contexts/AuthContext';
 import { getDonorWhatsAppLink } from '../services/whatsappService';
+import { toBengaliNumber } from '../utils/bengali';
 
 interface DonorCardProps {
   donor: Donor;
@@ -49,7 +50,7 @@ export const DonorCard: React.FC<DonorCardProps> = ({
           {/* Match score ribbon */}
           {typeof matchScore === 'number' && (
             <div className="absolute top-0 right-0 bg-slate-900 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-bl-md border-l border-b border-slate-700">
-              ম্যাচ: {matchScore}%
+              ম্যাচ: {toBengaliNumber(matchScore)}%
             </div>
           )}
 
@@ -111,7 +112,7 @@ export const DonorCard: React.FC<DonorCardProps> = ({
 
             {/* Total Donations Count */}
             <div className="text-xs text-slate-600 font-medium">
-              <span className="font-bold text-slate-900 font-mono">{donor.totalDonations || 0}</span> বার রক্তদান
+              <span className="font-bold text-slate-900 font-mono">{toBengaliNumber(donor.totalDonations || 0)}</span> বার রক্তদান
             </div>
           </div>
 
@@ -203,7 +204,7 @@ export const DonorCard: React.FC<DonorCardProps> = ({
         {/* Match score ribbon if provided by smart matching */}
         {typeof matchScore === 'number' && (
           <div className="absolute top-0 right-0 bg-slate-900 text-white text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-bl-md border-l border-b border-slate-700">
-            ম্যাচ: {matchScore}%
+            ম্যাচ: {toBengaliNumber(matchScore)}%
           </div>
         )}
 
@@ -265,7 +266,7 @@ export const DonorCard: React.FC<DonorCardProps> = ({
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
               <span className="text-[10px] text-slate-400 block font-medium">মোট রক্তদান</span>
               <span className="font-semibold text-slate-800 mt-0.5 block font-mono">
-                {donor.totalDonations || 0} বার
+                {toBengaliNumber(donor.totalDonations || 0)} বার
               </span>
             </div>
           </div>

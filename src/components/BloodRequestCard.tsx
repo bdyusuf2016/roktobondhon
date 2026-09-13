@@ -14,6 +14,7 @@ import {
 import type { BloodRequest } from '../types';
 import { useDialog } from '../contexts/DialogContext';
 import { getRequestWhatsAppLink } from '../services/whatsappService';
+import { toBengaliNumber } from '../utils/bengali';
 
 interface BloodRequestCardProps {
   request: BloodRequest;
@@ -73,7 +74,7 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
     e.stopPropagation();
     const patientDisplay = request.patientName ? `রোগী: ${request.patientName}\n` : '';
     const contactDisplay = request.contactNumber ? `যোগাযোগ: ${request.contactNumber}\n` : '';
-    const shareText = `জরুরি রক্তের প্রয়োজন!\n${patientDisplay}রক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${request.requiredUnits} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactDisplay}রক্ত দান পরিবার কালামপুর প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
+    const shareText = `জরুরি রক্তের প্রয়োজন!\n${patientDisplay}রক্তের গ্রুপ: ${request.bloodGroup}\nপ্রয়োজন: ${toBengaliNumber(request.requiredUnits)} ব্যাগ\nহাসপাতাল: ${request.hospital}\nতারিখ: ${request.requiredDate}\n${contactDisplay}রক্ত দান পরিবার কালামপুর প্ল্যাটফর্ম: ${window.location.origin}/request/${request.id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText);
       dialog.alert({
@@ -94,7 +95,7 @@ export const BloodRequestCard: React.FC<BloodRequestCardProps> = ({ request, onS
             {/* Blood Group Icon */}
             <div className="w-12 h-12 rounded-lg bg-red-600 border border-red-700 text-white flex flex-col items-center justify-center font-black shadow-xs">
               <span className="text-xl leading-none font-mono">{request.bloodGroup}</span>
-              <span className="text-[9px] font-semibold uppercase opacity-90 mt-0.5">{request.requiredUnits} ব্যাগ</span>
+              <span className="text-[9px] font-semibold uppercase opacity-90 mt-0.5">{toBengaliNumber(request.requiredUnits)} ব্যাগ</span>
             </div>
 
             <div>
