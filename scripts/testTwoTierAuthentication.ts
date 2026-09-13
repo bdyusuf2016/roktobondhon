@@ -89,9 +89,10 @@ assert(
 );
 
 // Test 6: Donor cannot access public.users
+const normalizedMigration = migrationContent.replace(/\r\n/g, '\n');
 assert(
-  migrationContent.includes('CREATE POLICY "Staff can view users or user view self" ON public.users') &&
-  migrationContent.includes('auth.uid()::text = id \n    OR public.is_staff()'),
+  normalizedMigration.includes('CREATE POLICY "Staff can view users or user view self" ON public.users') &&
+  normalizedMigration.includes('auth.uid()::text = id \n    OR public.is_staff()'),
   'Test 6: public.users RLS policy restricts SELECT to auth.uid = id OR public.is_staff()'
 );
 

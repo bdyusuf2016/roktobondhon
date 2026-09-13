@@ -1,10 +1,16 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Droplets, Heart, Shield, Phone, Mail, MapPin } from 'lucide-react';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
 
 export const Footer: React.FC = () => {
   const { config } = useOrgConfig();
+  const location = useLocation();
+
+  // Omit consumer marketing footer inside admin dashboard for a focused enterprise view
+  if (location.pathname.startsWith('/admin')) {
+    return null;
+  }
 
   return (
     <footer className="bg-slate-950 text-slate-300 pt-12 pb-24 lg:pb-12 border-t border-slate-800/80">

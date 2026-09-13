@@ -149,8 +149,8 @@ export const AdminHospitalsTab: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="min-w-[700px] w-full text-left text-xs">
             <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
               <tr>
                 <th className="py-2.5 px-3 font-semibold">হাসপাতালের নাম</th>

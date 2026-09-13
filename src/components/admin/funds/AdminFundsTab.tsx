@@ -294,8 +294,8 @@ export const AdminFundsTab: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-[720px] w-full text-left text-xs">
                 <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">দাতার নাম ও ফোন</th>
@@ -438,8 +438,8 @@ export const AdminFundsTab: React.FC = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-[720px] w-full text-left text-xs">
                 <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">তারিখ ও ভাউচার</th>

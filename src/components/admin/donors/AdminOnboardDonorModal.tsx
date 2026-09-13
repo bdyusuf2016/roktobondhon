@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UserPlus,
   Droplets,
@@ -23,12 +23,20 @@ interface AdminOnboardDonorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (donorName: string, donorId: string, phone: string) => void;
+  initialUser?: {
+    id: string;
+    fullName: string;
+    phone: string;
+    email?: string;
+    branchId?: string;
+  } | null;
 }
 
 export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  initialUser,
 }) => {
   const { currentUser } = useAuth();
   const { onboardDonor } = useData();
@@ -58,6 +66,28 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
 
   if (!isOpen) return null;
+
+  useEffect(() => {
+    if (initialUser && isOpen) {
+      setFullName(initialUser.fullName || '');
+      setPhone(initialUser.phone || '');
+      setEmail(initialUser.email || '');
+      if (initialUser.branchId === 'br-svr') {
+        setDistrict('ঢাকা');
+        setUpazila('সাভার');
+      } else if (initialUser.branchId === 'br-mnk') {
+        setDistrict('মানিকগঞ্জ');
+        setUpazila('মানিকগঞ্জ সদর');
+      } else {
+        setDistrict('ঢাকা');
+        setUpazila('ধামরাই');
+      }
+    } else if (!initialUser && isOpen) {
+      setFullName('');
+      setPhone('');
+      setEmail('');
+    }
+  }, [initialUser, isOpen]);
 
   const handleDistrictChange = (dist: string) => {
     setDistrict(dist);
@@ -97,18 +127,19 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
     try {
       const result = await onboardDonor(
         {
+          userId: initialUser?.id,
           fullName: cleanName,
           bloodGroup,
           phone: cleanPhone,
           email: email.trim() || undefined,
           gender,
-          dateOfBirth: dateOfBirth || undefined,
+          dateOfBirth: dateOfBirth?.trim() || undefined,
           weight: typeof weight === 'number' ? weight : undefined,
           district,
           upazila,
           area: finalArea,
           exactAddress: exactAddress.trim() || undefined,
-          lastDonationDate: lastDonationDate || undefined,
+          lastDonationDate: lastDonationDate?.trim() || undefined,
           totalDonations: typeof totalDonations === 'number' ? totalDonations : undefined,
           availability,
           emergencyAvailable,

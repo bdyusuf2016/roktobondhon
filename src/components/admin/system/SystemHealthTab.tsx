@@ -241,7 +241,7 @@ export const SystemHealthTab: React.FC = () => {
   const unverifiedDonorsCount = donors.filter((d) => d.verificationStatus === 'pending' || d.verificationStatus === 'unverified').length;
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 w-full">
       {/* Top Header Card */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 relative overflow-hidden">
         <div className="absolute -right-16 -top-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />

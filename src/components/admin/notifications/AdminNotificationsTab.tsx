@@ -33,6 +33,7 @@ import type { NotificationItem, UserRole } from '../../../types';
 export const AdminNotificationsTab: React.FC = () => {
   const {
     notifications,
+    donors,
     addNotification,
     deleteNotification,
     markNotificationRead,
@@ -45,7 +46,9 @@ export const AdminNotificationsTab: React.FC = () => {
   const { config, updateSection } = useSystemConfig();
   const [isSaving, setIsSaving] = useState(false);
 
-  const canManageSettings = hasPermission(currentUser?.role || 'admin', 'manage_settings');
+  const canManageNotifications =
+    hasPermission(currentUser?.role || 'admin', 'manage_sms_notifications') ||
+    hasPermission(currentUser?.role || 'admin', 'manage_settings');
 
   // Sub-tabs: 'broadcast' (Feed & broadcast manager) vs 'channels' (Channel Gateway Config)
   const [activeSubTab, setActiveSubTab] = useState<'feed' | 'channels'>('feed');
@@ -81,6 +84,14 @@ export const AdminNotificationsTab: React.FC = () => {
 
   const handleSaveChannels = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageNotifications) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'নোটিফিকেশন চ্যানেল সেটিংস পরিবর্তন করার পারমিশন আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       await updateSection('notifications', {
@@ -104,6 +115,14 @@ export const AdminNotificationsTab: React.FC = () => {
 
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageNotifications) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'নতুন ব্রডকাস্ট নোটিফিকেশন পাঠানোর পারমিশন আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     if (!newTitle.trim() || !newMessage.trim()) {
       dialog.alert({
         title: 'অসম্পূর্ণ বার্তা',
@@ -172,6 +191,23 @@ export const AdminNotificationsTab: React.FC = () => {
     if (typeFilter !== 'all' && n.type !== typeFilter) return false;
     if (statusFilter === 'unread' && n.isRead) return false;
     if (statusFilter === 'read' && !n.isRead) return false;
+
+    // Auto-vanish resolved pending verification alerts
+    if (n.type === 'verification' && (n.title.includes('অপেক্ষমাণ') || n.link?.includes('/admin'))) {
+      const isAlreadyResolved = donors.some(
+        (d) =>
+          d.verificationStatus !== 'pending' &&
+          (
+            (d.donorId && n.message.includes(d.donorId)) ||
+            (d.id && n.message.includes(d.id)) ||
+            (d.id && n.link?.includes(d.id)) ||
+            (d.donorId && n.link?.includes(d.donorId)) ||
+            (d.fullName && n.message.includes(d.fullName))
+          )
+      );
+      if (isAlreadyResolved) return false;
+    }
+
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       return (
@@ -303,7 +339,7 @@ export const AdminNotificationsTab: React.FC = () => {
                     সব পঠিত করুন
                   </button>
                 )}
-                {canManageSettings && (
+                {canManageNotifications && (
                   <button
                     type="button"
                     onClick={() => setShowBroadcastModal(true)}
@@ -418,7 +454,7 @@ export const AdminNotificationsTab: React.FC = () => {
                           পঠিত
                         </button>
                       )}
-                      {canManageSettings && (
+                      {canManageNotifications && (
                         <button
                           type="button"
                           onClick={() => handleDeleteNotif(n.id, n.title)}
@@ -607,7 +643,7 @@ export const AdminNotificationsTab: React.FC = () => {
               </div>
             </div>
 
-            {canManageSettings && (
+            {canManageNotifications && (
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"

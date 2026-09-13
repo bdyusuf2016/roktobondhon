@@ -28,7 +28,7 @@ import { scrollToTop } from './ScrollToTop';
 export const Navbar: React.FC = () => {
   const { config } = useOrgConfig();
   const { currentUser, switchDemoRole, logout, isDemoMode } = useAuth();
-  const { notifications } = useData();
+  const { notifications, donors } = useData();
   const location = useLocation();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -38,9 +38,36 @@ export const Navbar: React.FC = () => {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const roleMenuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter(
-    (n) => !n.isRead && (n.userId === currentUser?.id || n.userId === 'all')
-  ).length;
+  const isStaff = Boolean(
+    currentUser?.role && ['super_admin', 'admin', 'moderator'].includes(currentUser.role)
+  );
+
+  const unreadCount = notifications.filter((n) => {
+    if (n.isRead) return false;
+    const isTarget =
+      n.userId === currentUser?.id ||
+      n.userId === 'all' ||
+      (isStaff && (n.userId === 'staff' || (n.type === 'verification' && n.link?.includes('/admin'))));
+    if (!isTarget) return false;
+
+    // Auto-vanish resolved pending verification alerts
+    if (n.type === 'verification' && (n.title.includes('অপেক্ষমাণ') || n.link?.includes('/admin'))) {
+      const isAlreadyResolved = donors.some(
+        (d) =>
+          d.verificationStatus !== 'pending' &&
+          (
+            (d.donorId && n.message.includes(d.donorId)) ||
+            (d.id && n.message.includes(d.id)) ||
+            (d.id && n.link?.includes(d.id)) ||
+            (d.donorId && n.link?.includes(d.donorId)) ||
+            (d.fullName && n.message.includes(d.fullName))
+          )
+      );
+      if (isAlreadyResolved) return false;
+    }
+
+    return true;
+  }).length;
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -115,7 +142,13 @@ export const Navbar: React.FC = () => {
       )}
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8">
+      <div
+        className={
+          location.pathname.startsWith('/admin')
+            ? 'w-full px-3 sm:px-6 lg:px-8'
+            : 'max-w-7xl mx-auto px-3 sm:px-5 lg:px-8'
+        }
+      >
         <div className="flex items-center justify-between h-16 sm:h-17 gap-2 sm:gap-4">
           {/* Logo & Brand Identity */}
           <Link to="/" onClick={() => scrollToTop(true)} className="flex items-center gap-2 sm:gap-2.5 shrink-0 group">

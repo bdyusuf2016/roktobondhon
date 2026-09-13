@@ -538,8 +538,8 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
             activeFilter.type === 'donors_pending' ||
             activeFilter.type === 'blood_group' ||
             activeFilter.type === 'branch') && (
-            <div className="overflow-x-auto no-scrollbar border border-slate-200/80 rounded-xl">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+              <table className="min-w-[700px] w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-3">ডোনার আইডি</th>
@@ -599,8 +599,8 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
 
           {/* Blood Requests Table */}
           {(activeFilter.type === 'requests_active' || activeFilter.type === 'requests_critical') && (
-            <div className="overflow-x-auto no-scrollbar border border-slate-200/80 rounded-xl">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+              <table className="min-w-[700px] w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-3">আইডি</th>
@@ -672,8 +672,8 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
 
           {/* Donations Table */}
           {activeFilter.type === 'donations_all' && (
-            <div className="overflow-x-auto no-scrollbar border border-slate-200/80 rounded-xl">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+              <table className="min-w-[700px] w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-3">ডোনেশন আইডি</th>

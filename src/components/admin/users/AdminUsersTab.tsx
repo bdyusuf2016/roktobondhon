@@ -21,6 +21,7 @@ import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useDialog } from '../../../contexts/DialogContext';
 import { UserFormModal } from '../../modals';
+import { AdminOnboardDonorModal } from '../donors/AdminOnboardDonorModal';
 import { PERMISSION_DEFINITIONS } from '../../../data/seedData';
 import { validateRoleAssignment, canManageRole, ROLE_LABELS } from '../../../services/permissionService';
 import type { User, UserRole, Donor } from '../../../types';
@@ -47,8 +48,10 @@ export const AdminUsersTab: React.FC = () => {
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
   const [selectedDonorForPreview, setSelectedDonorForPreview] = useState<Donor | null>(null);
   const [userTabMode, setUserTabMode] = useState<'users' | 'matrix'>('users');
-  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<'all' | 'blood' | 'directory' | 'funds' | 'system'>('all');
+  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState<'all' | 'blood' | 'directory' | 'funds' | 'communications' | 'system'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showOnboardDonorModal, setShowOnboardDonorModal] = useState(false);
+  const [selectedUserForDonor, setSelectedUserForDonor] = useState<User | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -282,8 +285,8 @@ export const AdminUsersTab: React.FC = () => {
           </div>
 
           {/* Users Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-[760px] w-full text-left text-xs">
               <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
                 <tr>
                   <th className="py-2.5 px-3 font-semibold">সদস্যের নাম</th>
@@ -345,33 +348,55 @@ export const AdminUsersTab: React.FC = () => {
                         </td>
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-2">
-                            <select
-                              value={u.role}
-                              disabled={!canManageRole(currentUser?.role, u.role)}
-                              onChange={(e) => handleRoleChange(u, e.target.value as UserRole)}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                                u.role === 'super_admin'
-                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                  : u.role === 'admin'
-                                  ? 'bg-red-50 text-red-800 border-red-200'
-                                  : u.role === 'moderator'
-                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              }`}
-                            >
-                              {/* Only show roles that the actor is allowed to assign */}
-                              {isSuperAdmin && <option value="super_admin">সুপার এডমিন</option>}
-                              {isSuperAdmin && <option value="admin">এডমিন</option>}
-                              {(isSuperAdmin || currentUser?.role === 'admin') && (
-                                <>
-                                  <option value="moderator">মডারেটর</option>
-                                  <option value="volunteer">স্বেচ্ছাসেবক</option>
-                                </>
-                              )}
-                              {!isSuperAdmin && currentUser?.role !== 'admin' && (
-                                <option value={u.role}>{ROLE_LABELS[u.role]?.bn || u.role}</option>
-                              )}
-                            </select>
+                            {!canManageRole(currentUser?.role, u.role) ? (
+                              <span
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 ${
+                                  u.role === 'super_admin'
+                                    ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                    : u.role === 'admin'
+                                    ? 'bg-red-50 text-red-800 border-red-200'
+                                    : u.role === 'moderator'
+                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}
+                                title="সংরক্ষিত রোল - পরিবর্তনের অনুমতি নেই"
+                              >
+                                <Lock className="w-3 h-3 opacity-60" />
+                                {ROLE_LABELS[u.role]?.bn || u.role}
+                              </span>
+                            ) : (
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleRoleChange(u, e.target.value as UserRole)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                                  u.role === 'super_admin'
+                                    ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                    : u.role === 'admin'
+                                    ? 'bg-red-50 text-red-800 border-red-200'
+                                    : u.role === 'moderator'
+                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}
+                              >
+                                {/* If current role is unassignable by this actor, keep it so select displays correctly */}
+                                {!isSuperAdmin && (u.role === 'super_admin' || u.role === 'admin') && (
+                                  <option value={u.role} disabled>
+                                    {ROLE_LABELS[u.role]?.bn || u.role}
+                                  </option>
+                                )}
+                                {isSuperAdmin && <option value="super_admin">সুপার এডমিন</option>}
+                                {isSuperAdmin && <option value="admin">এডমিন</option>}
+                                {(isSuperAdmin || currentUser?.role === 'admin') && (
+                                  <>
+                                    <option value="moderator">মডারেটর</option>
+                                    <option value="volunteer">স্বেচ্ছাসেবক</option>
+                                  </>
+                                )}
+                                {!isSuperAdmin && currentUser?.role !== 'admin' && (
+                                  <option value={u.role}>{ROLE_LABELS[u.role]?.bn || u.role}</option>
+                                )}
+                              </select>
+                            )}
 
                             {u.status === 'suspended' ? (
                               <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold text-[10px]">
@@ -387,15 +412,48 @@ export const AdminUsersTab: React.FC = () => {
                         <td className="py-3 px-3">
                           {matchingDonor ? (
                             <div className="flex flex-col items-start gap-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
-                                🌱 ডোনার প্রোফাইল বিদ্যমান
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                                  🌱 ডোনার প্রোফাইল বিদ্যমান
+                                </span>
+                                {matchingDonor.userId !== u.id && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await updateDonor(matchingDonor.id, { userId: u.id });
+                                      dialog.alert({
+                                        title: 'লিঙ্ক সফল',
+                                        message: `ডোনার প্রোফাইল (${matchingDonor.donorId}) ইউজারের সাথে সফলভাবে লিঙ্ক করা হয়েছে।`,
+                                        theme: 'success',
+                                      });
+                                    }}
+                                    className="text-[10px] text-blue-600 hover:text-blue-800 underline font-semibold cursor-pointer"
+                                    title="আইডি সিঙ্ক করে প্রোফাইলটি এই অ্যাকাউন্টের সাথে স্থায়ীভাবে লিঙ্ক করুন"
+                                  >
+                                    সিঙ্ক
+                                  </button>
+                                )}
+                              </div>
                               <span className="text-[10px] text-slate-500 font-mono">
                                 ID: {matchingDonor.donorId} ({matchingDonor.bloodGroup})
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[11px] text-slate-400 italic">প্রোফাইল নেই</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] text-slate-400 italic">প্রোফাইল নেই</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedUserForDonor(u);
+                                  setShowOnboardDonorModal(true);
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                title="এই ইউজারের জন্য রক্তদাতা প্রোফাইল তৈরি বা পুনরুদ্ধার করুন"
+                              >
+                                <Plus className="w-2.5 h-2.5" />
+                                প্রোফাইল যুক্ত করুন
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-700">{u.phone}</td>
@@ -488,48 +546,66 @@ export const AdminUsersTab: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600 flex-wrap">
               <button
                 type="button"
                 onClick={() => setMatrixCategoryFilter('all')}
-                className={`px-3 py-1 rounded-lg transition-all ${
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                   matrixCategoryFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
                 }`}
               >
-                সকল
+                সকল ({PERMISSION_DEFINITIONS.length})
               </button>
               <button
                 type="button"
                 onClick={() => setMatrixCategoryFilter('blood')}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  matrixCategoryFilter === 'blood' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  matrixCategoryFilter === 'blood' ? 'bg-white text-rose-700 shadow-2xs font-bold' : 'hover:text-slate-900'
                 }`}
               >
-                রক্ত ও সেবা
+                রক্ত ও ফিল্ড
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('directory')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  matrixCategoryFilter === 'directory' ? 'bg-white text-indigo-700 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                ডিরেক্টরি ও শাখা
               </button>
               <button
                 type="button"
                 onClick={() => setMatrixCategoryFilter('funds')}
-                className={`px-3 py-1 rounded-lg transition-all ${
-                  matrixCategoryFilter === 'funds' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  matrixCategoryFilter === 'funds' ? 'bg-white text-emerald-700 shadow-2xs font-bold' : 'hover:text-slate-900'
                 }`}
               >
-                অর্থায়ন
+                অর্থায়ন ও তহবিল
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixCategoryFilter('communications')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  matrixCategoryFilter === 'communications' ? 'bg-white text-sky-700 shadow-2xs font-bold' : 'hover:text-slate-900'
+                }`}
+              >
+                যোগাযোগ ও এনালিটিক্স
               </button>
               <button
                 type="button"
                 onClick={() => setMatrixCategoryFilter('system')}
-                className={`px-3 py-1 rounded-lg transition-all ${
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                   matrixCategoryFilter === 'system' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'hover:text-slate-900'
                 }`}
               >
-                সিস্টেম
+                সিস্টেম ও নিরাপত্তা
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-[640px] w-full text-left text-xs">
               <thead className="bg-slate-50 border-y border-slate-200 text-slate-700">
                 <tr>
                   <th className="py-2.5 px-3 font-semibold w-1/3">মডিউল পারমিশন</th>
@@ -544,11 +620,26 @@ export const AdminUsersTab: React.FC = () => {
                   .filter((p) => matrixCategoryFilter === 'all' || p.category === matrixCategoryFilter)
                   .map((p) => {
                     const roles: UserRole[] = ['super_admin', 'admin', 'moderator', 'volunteer'];
+                    const categoryBadge = {
+                      blood: { label: 'রক্ত ও ফিল্ড', style: 'bg-rose-50 text-rose-700 border-rose-200' },
+                      directory: { label: 'ডিরেক্টরি', style: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                      funds: { label: 'অর্থায়ন', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      communications: { label: 'যোগাযোগ', style: 'bg-sky-50 text-sky-700 border-sky-200' },
+                      system: { label: 'সিস্টেম', style: 'bg-slate-100 text-slate-700 border-slate-200' },
+                    }[p.category];
+
                     return (
                       <tr key={p.key} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900">{p.labelBn}</div>
-                          <div className="text-[11px] text-slate-500">{p.descriptionBn}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{p.labelBn}</span>
+                            {categoryBadge && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${categoryBadge.style}`}>
+                                {categoryBadge.label}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{p.descriptionBn}</div>
                         </td>
                         {roles.map((role) => {
                           const isAllowed = permissionMatrix[role]?.[p.key] ?? false;
@@ -626,6 +717,27 @@ export const AdminUsersTab: React.FC = () => {
                 theme: 'success',
               });
             }
+          }}
+        />
+      )}
+
+      {/* Onboard / Restore Donor Profile Modal for User */}
+      {showOnboardDonorModal && (
+        <AdminOnboardDonorModal
+          isOpen={showOnboardDonorModal}
+          onClose={() => {
+            setShowOnboardDonorModal(false);
+            setSelectedUserForDonor(null);
+          }}
+          initialUser={selectedUserForDonor}
+          onSuccess={(donorName, donorId) => {
+            setShowOnboardDonorModal(false);
+            setSelectedUserForDonor(null);
+            dialog.alert({
+              title: 'রক্তদাতা প্রোফাইল তৈরি সম্পন্ন!',
+              message: `ব্যবহারকারী "${donorName}"-এর রক্তদাতা প্রোফাইল (${donorId}) সফলভাবে তৈরি ও একাউন্টের সাথে লিঙ্ক করা হয়েছে।`,
+              theme: 'success',
+            });
           }}
         />
       )}

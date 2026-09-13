@@ -25,3 +25,22 @@ export function getLocationCode(upazila?: string, district?: string): string {
   if (name.includes('dhaka') || name.includes('ঢাকা')) return 'DHK';
   return 'BD';
 }
+
+/**
+ * Extracts the highest numeric sequence from a list of donors to prevent ID collisions.
+ */
+export function getNextSequenceFromDonors(donors: Array<{ donorId?: string }>): number {
+  let maxSeq = 100;
+  for (const d of donors) {
+    if (!d.donorId) continue;
+    const match = d.donorId.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+  return maxSeq + 1;
+}
+

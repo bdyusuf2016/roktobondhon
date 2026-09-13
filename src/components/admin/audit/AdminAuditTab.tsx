@@ -238,8 +238,8 @@ export const AdminAuditTab: React.FC = () => {
         </div>
 
         {/* Audit Logs Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="min-w-[700px] w-full text-left text-xs font-mono">
             <thead className="bg-slate-50 border-y border-slate-200 text-slate-600 font-sans">
               <tr>
                 <th className="py-2.5 px-3 font-semibold">টাইমস্ট্যাম্প</th>

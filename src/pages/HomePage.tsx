@@ -17,6 +17,9 @@ import {
   List,
   Sparkles,
   Activity,
+  ChevronDown,
+  Calendar,
+  CheckCircle2,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useOrgConfig } from '../contexts/OrgConfigContext';
@@ -28,6 +31,24 @@ import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladesh
 import { toBengaliNumber } from '../utils/bengali';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
+function formatDonationDateBn(dateStr?: string): string {
+  if (!dateStr) return 'তারিখ উল্লেখ নেই';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = toBengaliNumber(d.getDate());
+    const monthsBn = [
+      'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+      'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+    ];
+    const month = monthsBn[d.getMonth()];
+    const year = toBengaliNumber(d.getFullYear());
+    return `${day} ${month}, ${year}`;
+  } catch {
+    return dateStr;
+  }
+}
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -52,10 +73,39 @@ export const HomePage: React.FC = () => {
   };
 
   // Metrics
+  const [visibleVerifiedCount, setVisibleVerifiedCount] = useState(8);
   const verifiedDonorsCount = donors.filter((d) => d.verificationStatus === 'verified').length;
   const activeRequests = bloodRequests.filter((r) => r.status === 'active' || r.status === 'matched');
   const criticalRequests = bloodRequests.filter((r) => r.emergencyLevel === 'CRITICAL' && r.status === 'active');
-  const recentVerifiedDonors = donors.filter((d) => d.verificationStatus === 'verified').slice(0, 4);
+  const recentVerifiedDonors = donors.filter((d) => d.verificationStatus === 'verified').slice(0, visibleVerifiedCount);
+
+  // Successful Donations Section State
+  const [visibleDonationsCount, setVisibleDonationsCount] = useState(6);
+  const [donationGroupFilter, setDonationGroupFilter] = useState<string>('all');
+
+  const filteredDonations = useMemo(() => {
+    return donations.filter((don) => {
+      if (donationGroupFilter !== 'all' && don.bloodGroup !== donationGroupFilter) return false;
+      return true;
+    });
+  }, [donations, donationGroupFilter]);
+
+  const recentDonations = useMemo(() => {
+    return filteredDonations.slice(0, visibleDonationsCount);
+  }, [filteredDonations, visibleDonationsCount]);
+
+  // Smooth Interactive Section Scroll with subtle highlight pulse
+  const scrollToSection = (sectionId: string, pulseClass: string = 'ring-4 ring-red-500/40') => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const classes = pulseClass.split(' ');
+      el.classList.add(...classes, 'transition-all', 'duration-700', 'rounded-3xl');
+      setTimeout(() => {
+        el.classList.remove(...classes);
+      }, 2500);
+    }
+  };
 
   // Live Blood Group Dashboard State & Computations
   const [activeDashboardGroup, setActiveDashboardGroup] = useState<BloodGroup | 'all'>('A+');
@@ -225,56 +275,116 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Impact Statistics */}
+      {/* Impact Statistics - Interactive Clickable Quick Cards */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
-            <span className="text-2xl sm:text-3xl font-mono font-black text-red-600 block">
-              {toBengaliNumber(donors.length)}
+          {/* 1. নিবন্ধিত রক্তদাতা */}
+          <button
+            type="button"
+            onClick={() => scrollToSection('donors-section', 'ring-4 ring-red-500/40')}
+            title="নিবন্ধিত রক্তদাতাদের লাইভ ড্যাশবোর্ড দেখুন"
+            className="group bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md hover:border-red-400 hover:-translate-y-1 transition-all text-center cursor-pointer active:scale-98 relative overflow-hidden flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1 text-red-500">
+              <Users className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-red-600 transition-colors">ডোনার ডিরেক্টরি</span>
+            </div>
+            <div>
+              <span className="text-2xl sm:text-3xl font-mono font-black text-red-600 block group-hover:scale-105 transition-transform">
+                {toBengaliNumber(donors.length)}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-slate-800 mt-1 block group-hover:text-red-700 transition-colors">
+                নিবন্ধিত রক্তদাতা
+              </span>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
+                {toBengaliNumber(verifiedDonorsCount)} জন ভেরিফাইড
+              </span>
+            </div>
+            <span className="inline-flex items-center justify-center gap-1 text-[11px] font-bold text-red-600 opacity-85 group-hover:opacity-100 mt-2.5 bg-red-50 py-0.5 px-2 rounded-md">
+              তালিকা দেখুন ↓
             </span>
-            <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
-              নিবন্ধিত রক্তদাতা
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">
-              {toBengaliNumber(verifiedDonorsCount)} জন ভেরিফাইড
-            </span>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
-            <span className="text-2xl sm:text-3xl font-mono font-black text-emerald-600 block">
-              {toBengaliNumber(donations.length)}
+          {/* 2. সফল রক্তদান */}
+          <button
+            type="button"
+            onClick={() => scrollToSection('successful-donations', 'ring-4 ring-emerald-500/40')}
+            title="সফল রক্তদানের ইতিহাস ও তালিকা দেখুন"
+            className="group bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md hover:border-emerald-400 hover:-translate-y-1 transition-all text-center cursor-pointer active:scale-98 relative overflow-hidden flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1 text-emerald-500">
+              <Award className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-emerald-600 transition-colors">রক্তদান ইতিহাস</span>
+            </div>
+            <div>
+              <span className="text-2xl sm:text-3xl font-mono font-black text-emerald-600 block group-hover:scale-105 transition-transform">
+                {toBengaliNumber(donations.length)}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-slate-800 mt-1 block group-hover:text-emerald-700 transition-colors">
+                সফল রক্তদান
+              </span>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
+                জীবনের প্রয়োজনে পাশে
+              </span>
+            </div>
+            <span className="inline-flex items-center justify-center gap-1 text-[11px] font-bold text-emerald-600 opacity-85 group-hover:opacity-100 mt-2.5 bg-emerald-50 py-0.5 px-2 rounded-md">
+              ইতিহাস দেখুন ↓
             </span>
-            <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
-              সফল রক্তদান
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">
-              জীবনের প্রয়োজনে পাশে
-            </span>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
-            <span className="text-2xl sm:text-3xl font-mono font-black text-amber-600 block">
-              {toBengaliNumber(activeRequests.length)}
+          {/* 3. চলমান রক্তের আবেদন */}
+          <button
+            type="button"
+            onClick={() => scrollToSection('urgent-requests', 'ring-4 ring-amber-500/40')}
+            title="চলমান জরুরি রক্তের আবেদনসমূহ দেখুন"
+            className="group bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md hover:border-amber-400 hover:-translate-y-1 transition-all text-center cursor-pointer active:scale-98 relative overflow-hidden flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1 text-amber-500">
+              <Droplets className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-amber-600 transition-colors">লাইভ ফিড</span>
+            </div>
+            <div>
+              <span className="text-2xl sm:text-3xl font-mono font-black text-amber-600 block group-hover:scale-105 transition-transform">
+                {toBengaliNumber(activeRequests.length)}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-slate-800 mt-1 block group-hover:text-amber-700 transition-colors">
+                চলমান রক্তের আবেদন
+              </span>
+              <span className="text-[11px] text-red-600 font-medium block mt-0.5">
+                {toBengaliNumber(criticalRequests.length)} টি জরুরি
+              </span>
+            </div>
+            <span className="inline-flex items-center justify-center gap-1 text-[11px] font-bold text-amber-700 opacity-85 group-hover:opacity-100 mt-2.5 bg-amber-50 py-0.5 px-2 rounded-md">
+              আবেদন দেখুন ↓
             </span>
-            <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
-              চলমান রক্তের আবেদন
-            </span>
-            <span className="text-[11px] text-red-600 font-medium block mt-0.5">
-              {toBengaliNumber(criticalRequests.length)} টি জরুরি
-            </span>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs text-center">
-            <span className="text-2xl sm:text-3xl font-mono font-black text-indigo-600 block">
-              {branches.length > 0 ? `${toBengaliNumber(branches.length)} টি` : 'সক্রিয়'}
+          {/* 4. সক্রিয় শাখা */}
+          <button
+            type="button"
+            onClick={() => scrollToSection('branches-section', 'ring-4 ring-indigo-500/40')}
+            title="শাখা ও সমন্বয়ক টিমের বিবরণ দেখুন"
+            className="group bg-white rounded-xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:shadow-md hover:border-indigo-400 hover:-translate-y-1 transition-all text-center cursor-pointer active:scale-98 relative overflow-hidden flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1 text-indigo-500">
+              <MapPin className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-indigo-600 transition-colors">শাখা কার্যালয়</span>
+            </div>
+            <div>
+              <span className="text-2xl sm:text-3xl font-mono font-black text-indigo-600 block group-hover:scale-105 transition-transform">
+                {branches.length > 0 ? `${toBengaliNumber(branches.length)} টি` : 'সক্রিয়'}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-slate-800 mt-1 block group-hover:text-indigo-700 transition-colors">
+                সক্রিয় শাখা
+              </span>
+              <span className="text-[11px] text-slate-400 block mt-0.5">
+                কালামপুর • ধামরাই • সাভার • মানিকগঞ্জ
+              </span>
+            </div>
+            <span className="inline-flex items-center justify-center gap-1 text-[11px] font-bold text-indigo-600 opacity-85 group-hover:opacity-100 mt-2.5 bg-indigo-50 py-0.5 px-2 rounded-md">
+              সমন্বয়ক টিম ↓
             </span>
-            <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-1 block">
-              সক্রিয় শাখা
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">
-              কালামপুর • ধামরাই • সাভার • মানিকগঞ্জ
-            </span>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -344,7 +454,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* Live Blood Requests Stream */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="urgent-requests" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-2">
@@ -374,7 +484,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* Blood Group Summary Live Dashboard & Interactive Filter */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      <section id="donors-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 scroll-mt-24">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -557,29 +667,196 @@ export const HomePage: React.FC = () => {
 
       {/* Recent Verified Donors */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 sm:mb-6">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              নিকটবর্তী ভেরিফাইড রক্তদাতা
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                নিকটবর্তী ভেরিফাইড রক্তদাতা
+              </h2>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                {toBengaliNumber(recentVerifiedDonors.length)} জন প্রদর্শিত
+              </span>
+            </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               নিরাপত্তা রক্ষার্থে পূর্ণ ঠিকানা ও ব্যক্তিগত তথ্য সুরক্ষিত
             </p>
           </div>
           <Link
             to="/find-blood"
-            className="text-xs sm:text-sm font-semibold text-red-600 hover:text-red-700 flex items-center gap-1"
+            className="text-xs sm:text-sm font-semibold text-red-600 hover:text-red-700 flex items-center gap-1 self-start sm:self-auto shrink-0"
           >
-            ডোনার ডিরেক্টরি
+            সব রক্তদাতা দেখুন ({toBengaliNumber(verifiedDonorsCount)})
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {recentVerifiedDonors.map((donor) => (
-            <DonorCard key={donor.id} donor={donor} />
+            <DonorCard key={donor.id} donor={donor} compact />
           ))}
         </div>
+
+        {verifiedDonorsCount > visibleVerifiedCount && (
+          <div className="text-center mt-5">
+            <button
+              type="button"
+              onClick={() => setVisibleVerifiedCount((prev) => prev + 4)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              আরও রক্তদাতা দেখুন (+৪)
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Successful Blood Donations Showcase */}
+      <section id="successful-donations" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 scroll-mt-24">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-200 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
+                <Award className="w-5 h-5" />
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                সফল রক্তদান ও বীর রক্তদাতাদের কার্যক্রম
+              </h2>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              মুমূর্ষু রোগীর জীবন বাঁচাতে আমাদের নিবন্ধিত রক্তদাতাদের সফল অনুদান ও সেবার গল্প
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              মোট {toBengaliNumber(donations.length)} টি সফল রক্তদান সম্পন্ন
+            </span>
+
+            <Link
+              to="/certificate"
+              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 ml-1"
+            >
+              <span>ডিজিটাল সনদপত্র</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Quick Blood Group Filter Chips for Donations */}
+        <div className="flex items-center gap-1.5 flex-wrap overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setDonationGroupFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              donationGroupFilter === 'all'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+            }`}
+          >
+            সকল গ্রুপ ({toBengaliNumber(donations.length)})
+          </button>
+          {BLOOD_GROUPS.map((g) => {
+            const count = donations.filter((d) => d.bloodGroup === g).length;
+            if (count === 0 && donationGroupFilter !== g) return null;
+            return (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setDonationGroupFilter(donationGroupFilter === g ? 'all' : g)}
+                className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                  donationGroupFilter === g
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                {g} ({toBengaliNumber(count)})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Donations Cards Grid */}
+        {recentDonations.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentDonations.map((don) => (
+              <div
+                key={don.id}
+                className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all flex flex-col justify-between space-y-3 group"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center font-mono font-black text-sm shadow-2xs">
+                      {don.bloodGroup}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                        {don.donorName}
+                      </h4>
+                      <span className="text-[11px] text-slate-400 block font-mono">
+                        {don.donorId ? `আইডি: ${don.donorId}` : 'ভেরিফাইড ডোনার'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                    সফল দান
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-slate-700">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate">{don.hospital || 'ধামরাই রক্তদান কেন্দ্র'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
+                      <span>{formatDonationDateBn(don.donationDate)}</span>
+                    </div>
+                    <span className="font-mono font-semibold text-slate-700">
+                      {toBengaliNumber(don.units || 1)} ব্যাগ ({don.donationType || 'Whole Blood'})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 text-[11px]">
+                  <span className="text-slate-400">
+                    যাচাইকারী: <strong className="text-slate-600 font-semibold">{don.verifiedBy || 'এডমিন'}</strong>
+                  </span>
+                  <Link
+                    to="/certificate"
+                    className="text-emerald-600 hover:text-emerald-700 font-bold hover:underline inline-flex items-center gap-0.5"
+                  >
+                    <span>সনদপত্র দেখুন</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center bg-white rounded-xl border border-dashed border-slate-300 space-y-2">
+            <Award className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-700">
+              এই মুহূর্তে নির্বাচিত গ্রুপে কোনো রক্তদানের তথ্য প্রদর্শিত নেই
+            </p>
+          </div>
+        )}
+
+        {/* Expand / Show More Donations Button */}
+        {filteredDonations.length > visibleDonationsCount && (
+          <div className="text-center pt-2">
+            <button
+              type="button"
+              onClick={() => setVisibleDonationsCount((prev) => prev + 6)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              আরও সফল রক্তদান দেখুন (+৬)
+              <ChevronDown className="w-3.5 h-3.5 text-emerald-600" />
+            </button>
+          </div>
+        )}
       </section>
 
       {/* Safe Blood Donation Educational Guidance */}
@@ -629,7 +906,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* Our Chapters & Coverage (Relocated to bottom section) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="branches-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div className="bg-slate-950 text-white rounded-2xl p-6 sm:p-10 relative overflow-hidden border border-slate-850">
           <div className="max-w-3xl space-y-4">
             <span className="text-xs font-bold uppercase tracking-wider text-red-500">

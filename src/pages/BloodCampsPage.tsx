@@ -59,12 +59,7 @@ export const BloodCampsPage: React.FC = () => {
     status: 'upcoming' as const,
   });
 
-  const canCreateCamp =
-    currentUser &&
-    (currentUser.role === 'super_admin' ||
-      currentUser.role === 'admin' ||
-      currentUser.role === 'volunteer' ||
-      currentUser.role === 'moderator');
+  const canCreateCamp = hasPermission(currentUser?.role || 'donor', 'manage_camps');
 
   const filteredCamps = bloodCamps.filter((camp) => {
     if (filterDistrict !== 'all' && camp.district !== filterDistrict) return false;

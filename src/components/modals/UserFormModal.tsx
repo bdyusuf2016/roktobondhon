@@ -45,13 +45,16 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   // Calculate assignable roles based on actor privileges (Portal Staff roles)
   const getAssignableRoles = (): UserRole[] => {
-    if (isSuperAdmin) {
-      return ['super_admin', 'admin', 'moderator', 'volunteer'];
+    const roles: UserRole[] = isSuperAdmin
+      ? ['super_admin', 'admin', 'moderator', 'volunteer']
+      : isAdmin
+      ? ['moderator', 'volunteer']
+      : ['volunteer'];
+
+    if (userToEdit && !roles.includes(userToEdit.role)) {
+      roles.unshift(userToEdit.role);
     }
-    if (isAdmin) {
-      return ['moderator', 'volunteer'];
-    }
-    return ['volunteer'];
+    return roles;
   };
 
   const assignableRoles = getAssignableRoles();

@@ -6,14 +6,20 @@ export type PermissionKey =
   | 'manage_donors'
   | 'manage_requests'
   | 'record_donation'
+  | 'manage_camps'
+  | 'emergency_broadcast'
+  | 'manage_donor_import'
   | 'manage_hospitals'
+  | 'manage_branches'
   | 'manage_funds'
   | 'manage_disbursements'
   | 'manage_payment_methods'
-  | 'manage_branches'
+  | 'view_analytics'
+  | 'manage_sms_notifications'
   | 'manage_users'
   | 'manage_roles_matrix'
   | 'manage_settings'
+  | 'view_system_health'
   | 'manage_backup'
   | 'view_audit_logs';
 
@@ -23,7 +29,7 @@ export interface PermissionDefinition {
   key: PermissionKey;
   labelBn: string;
   descriptionBn: string;
-  category: 'blood' | 'directory' | 'funds' | 'system';
+  category: 'blood' | 'directory' | 'funds' | 'communications' | 'system';
 }
 
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';

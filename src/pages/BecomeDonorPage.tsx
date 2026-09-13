@@ -140,7 +140,7 @@ export const BecomeDonorPage: React.FC = () => {
         fullName: fullName.trim(),
         bloodGroup,
         gender,
-        dateOfBirth,
+        dateOfBirth: dateOfBirth?.trim() || undefined,
         phone: phone.trim(),
         email: email.trim() || undefined,
         division: finalDivision,
@@ -149,7 +149,7 @@ export const BecomeDonorPage: React.FC = () => {
         area: area.trim() || upazila,
         availability,
         emergencyAvailable,
-        lastDonationDate: hasDonatedBefore && lastDonationDate ? lastDonationDate : undefined,
+        lastDonationDate: hasDonatedBefore && lastDonationDate && lastDonationDate.trim() ? lastDonationDate.trim() : undefined,
         organizationId: 'org-roktobondon',
         branchId,
         privacy: {

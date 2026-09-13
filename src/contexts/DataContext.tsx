@@ -42,7 +42,7 @@ import {
 } from '../data/seedData';
 import { HOSPITALS_DATA } from '../data/hospitalsData';
 import { INITIAL_LOCATIONS, INITIAL_BRANCHES } from '../services/locationService';
-import { generateBloodRequestId, generateDonorId, getLocationCode } from '../services/idGenerator';
+import { generateBloodRequestId, generateDonorId, getLocationCode, getNextSequenceFromDonors } from '../services/idGenerator';
 import { supabase, isSupabaseConfigured, isDemoMode, createIsolatedSupabaseClient } from '../supabase/config';
 import { mapUserRow } from '../services/userService';
 import {
@@ -51,6 +51,7 @@ import {
   verifyDonorStatus,
   deleteDonorAccount,
   mapDonorRow,
+  fetchHighestDonorSequence,
 } from '../services/donorService';
 import {
   createBloodRequestRecord,
@@ -117,6 +118,7 @@ interface DataContextType {
   registerDonor: (data: Omit<Donor, 'id' | 'donorId' | 'createdAt' | 'updatedAt' | 'verificationStatus' | 'totalDonations'>) => Promise<Donor>;
   onboardDonor: (
     data: {
+      userId?: string;
       fullName: string;
       phone: string;
       email?: string;
@@ -485,7 +487,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = readCachedValue(STORAGE_KEYS.PERMISSION_MATRIX);
     if (saved) {
       try {
-        return { ...DEFAULT_PERMISSION_MATRIX, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        const merged: RolePermissionMatrix = { ...DEFAULT_PERMISSION_MATRIX };
+        (Object.keys(DEFAULT_PERMISSION_MATRIX) as UserRole[]).forEach((role) => {
+          merged[role] = { ...DEFAULT_PERMISSION_MATRIX[role], ...(parsed[role] || {}) };
+        });
+        return merged;
       } catch (e) {
         console.error(e);
       }
@@ -1032,7 +1039,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const id = `donor-${Date.now()}`;
       const locationCode = getLocationCode(data.upazila, data.district);
-      const donorId = generateDonorId(locationCode, donors.length + 101);
+      const dbHighest = await fetchHighestDonorSequence();
+      const localHighest = getNextSequenceFromDonors(donors);
+      const nextSeq = Math.max(dbHighest + 1, localHighest);
+      const donorId = generateDonorId(locationCode, nextSeq);
 
       const publicData: DonorPublic = {
         id,
@@ -1113,29 +1123,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: nowIso,
       };
 
-      const reviewerNotifs: NotificationItem[] = users
-        .filter(
-          (u) =>
-            ['super_admin', 'admin', 'moderator'].includes(u.role) &&
-            u.status === 'active' &&
-            u.id !== newDonor.userId
-        )
-        .map((u, idx) => ({
-          id: `notif-${Date.now()}-rev-${idx}`,
-          userId: u.id,
-          title: 'নতুন রক্তদাতা যাচাইয়ের জন্য অপেক্ষমাণ',
-          message: `নতুন রক্তদাতা ${newDonor.fullName || 'নামহীন'} (আইডি: ${newDonor.donorId}) নিবন্ধিত হয়েছেন। অনুগ্রহ করে প্রোফাইলটি যাচাই করুন।`,
-          type: 'verification',
-          link: '/admin?tab=donors&subtab=pending',
-          isRead: false,
-          createdAt: nowIso,
-        }));
+      // Unified Staff Review Notification (Single notification for staff review queue, avoiding 3 duplicate cards)
+      const staffReviewNotif: NotificationItem = {
+        id: `notif-${Date.now()}-rev-staff`,
+        userId: 'staff',
+        title: 'নতুন রক্তদাতা যাচাইয়ের জন্য অপেক্ষমাণ',
+        message: `নতুন রক্তদাতা ${newDonor.fullName || 'নামহীন'} (আইডি: ${newDonor.donorId}) নিবন্ধিত হয়েছেন। অনুগ্রহ করে প্রোফাইলটি যাচাই করুন।`,
+        type: 'verification',
+        link: `/admin?tab=donors&subtab=pending&donorId=${newDonor.id}`,
+        isRead: false,
+        createdAt: nowIso,
+      };
 
-      setNotifications((prev) => [donorNotif, ...reviewerNotifs, ...prev]);
+      setNotifications((prev) => [donorNotif, staffReviewNotif, ...prev]);
 
-      if (isSupabaseConfigured && donorNotif.userId) {
-        sendNotificationToSupabase(donorNotif).catch((e) => {
-          console.warn('Could not persist donor registration notification', e);
+      if (isSupabaseConfigured) {
+        if (donorNotif.userId) {
+          sendNotificationToSupabase(donorNotif).catch((e) => {
+            console.warn('Could not persist donor registration notification', e);
+          });
+        }
+        sendNotificationToSupabase(staffReviewNotif).catch((e) => {
+          console.warn('Could not persist staff review notification', e);
         });
       }
 
@@ -1148,6 +1157,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const onboardDonor = async (
     data: {
+      userId?: string;
       fullName: string;
       phone: string;
       email?: string;
@@ -1176,9 +1186,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const tempPassword = cleanPhone; // Phone number as the default password!
 
       // 1. Check if user already exists
-      let activeUserId: string | undefined;
+      let activeUserId: string | undefined = data.userId;
       const existingUser = users.find(
         (u) =>
+          (data.userId && u.id === data.userId) ||
           u.phone === cleanPhone ||
           (u.email && u.email.toLowerCase() === cleanEmail)
       );
@@ -1186,7 +1197,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let createdUser: User | undefined;
       if (existingUser) {
         activeUserId = existingUser.id;
-      } else {
+      } else if (!activeUserId) {
         try {
           createdUser = await addUser(
             {
@@ -1215,7 +1226,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 2. Generate Donor ID & composite data
       const id = `donor-${Date.now()}`;
       const locationCode = getLocationCode(data.upazila, data.district);
-      const donorId = generateDonorId(locationCode, donors.length + 101);
+      const dbHighest = await fetchHighestDonorSequence();
+      const localHighest = getNextSequenceFromDonors(donors);
+      const nextSeq = Math.max(dbHighest + 1, localHighest);
+      const donorId = generateDonorId(locationCode, nextSeq);
       const branchId =
         data.branchId ||
         (data.district === 'Manikganj'
@@ -1380,6 +1394,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         };
         setNotifications((prev) => [donorOutcomeNotif, ...prev]);
+        if (isSupabaseConfigured) {
+          sendNotificationToSupabase(donorOutcomeNotif).catch((e) => {
+            console.warn('[DataContext] Could not persist donor outcome notification:', e);
+          });
+        }
+      }
+
+      // 5. Auto-Vanish pending reviewer verification alerts for this resolved donor
+      const targetDonorHumanId = currentDonor?.donorId || result.humanId || donorId;
+      const targetDonorDbId = currentDonor?.id || result.donorId || donorId;
+      const targetFullName = currentDonor?.fullName || '';
+
+      setNotifications((prev) =>
+        prev.filter((n) => {
+          // Keep the outcome notification just generated for the donor
+          if (targetUserId && n.userId === targetUserId && n.id.includes('outcome')) {
+            return true;
+          }
+          // Vanish any pending reviewer alert regarding this donor
+          if (n.type === 'verification') {
+            const isReviewerNotif =
+              n.userId === 'staff' ||
+              n.link?.includes('/admin') ||
+              n.title.includes('অপেক্ষমাণ') ||
+              n.title.includes('যাচাই');
+            const matchesDonor =
+              (targetDonorHumanId && n.message.includes(targetDonorHumanId)) ||
+              (targetDonorDbId && n.message.includes(targetDonorDbId)) ||
+              (targetFullName && n.message.includes(targetFullName)) ||
+              (n.link && (n.link.includes(targetDonorHumanId) || n.link.includes(targetDonorDbId)));
+
+            if (isReviewerNotif && matchesDonor) {
+              return false; // AUTO-VANISH!
+            }
+          }
+          return true;
+        })
+      );
+
+      // Also delete from Supabase if connected
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase
+            .from('notifications')
+            .delete()
+            .eq('type', 'verification')
+            .or(
+              `message.ilike.%${targetDonorHumanId}%,message.ilike.%${targetDonorDbId}%,link.ilike.%${targetDonorDbId}%`
+            );
+        } catch (delErr) {
+          console.warn('[DataContext] Could not auto-vanish verification notification from Supabase:', delErr);
+        }
       }
 
       addAuditLog(`Donor Verification: ${status}`, 'Donor', result.donorId, {

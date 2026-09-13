@@ -90,14 +90,13 @@ export async function recordDonationInSupabase(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { error } = await supabase.from('donations').insert({
+      const payload: Record<string, any> = {
         id: newDonation.id,
         donor_id: newDonation.donorId,
         donor_user_id: newDonation.donorUserId || null,
         donor_name: newDonation.donorName,
         blood_group: newDonation.bloodGroup,
         request_id: newDonation.requestId || newDonation.bloodRequestId || null,
-        blood_request_id: newDonation.bloodRequestId || newDonation.requestId || null,
         camp_id: newDonation.campId || null,
         location: newDonation.location || newDonation.hospital || 'ধামরাই রক্তদান কেন্দ্র',
         donation_date: newDonation.donationDate || null,
@@ -110,7 +109,32 @@ export async function recordDonationInSupabase(
         notes: newDonation.notes || null,
         created_at: nowIso,
         updated_at: nowIso,
-      });
+      };
+
+      let { error } = await supabase.from('donations').insert(payload);
+
+      // Resilient fallback: If any extended column is missing in older remote schema cache, retry with core canonical columns
+      if (error && (error.message?.includes('column') || error.code === '42703' || error.message?.includes('schema cache'))) {
+        console.warn('Retrying donation insert with core schema columns due to:', error.message);
+        const corePayload: Record<string, any> = {
+          id: newDonation.id,
+          donor_id: newDonation.donorId,
+          donor_user_id: newDonation.donorUserId || null,
+          donor_name: newDonation.donorName,
+          blood_group: newDonation.bloodGroup,
+          request_id: newDonation.requestId || newDonation.bloodRequestId || null,
+          donation_date: newDonation.donationDate || new Date().toISOString().split('T')[0],
+          hospital: newDonation.hospital || newDonation.location || 'ধামরাই রক্তদান কেন্দ্র',
+          units: newDonation.units || 1,
+          donation_type: newDonation.donationType || 'Whole Blood',
+          verified_by: newDonation.verifiedBy || 'এডমিন',
+          verification_date: newDonation.verificationDate || new Date().toISOString().split('T')[0],
+          notes: newDonation.notes || null,
+          created_at: nowIso,
+        };
+        const retryResult = await supabase.from('donations').insert(corePayload);
+        error = retryResult.error;
+      }
 
       if (error) {
         console.error('Error inserting donation in Supabase:', error);
@@ -145,14 +169,36 @@ export async function updateDonationInSupabase(
     if (updates.donationType !== undefined) payload.donation_type = updates.donationType;
     if (updates.source !== undefined) payload.source = updates.source;
     if (updates.notes !== undefined) payload.notes = updates.notes;
-    if (updates.bloodRequestId !== undefined) payload.blood_request_id = updates.bloodRequestId;
+    if (updates.requestId !== undefined || updates.bloodRequestId !== undefined) {
+      payload.request_id = updates.requestId || updates.bloodRequestId || null;
+    }
     if (updates.campId !== undefined) payload.camp_id = updates.campId;
     if (updates.verifiedBy !== undefined) payload.verified_by = updates.verifiedBy;
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('donations')
       .update(payload)
       .eq('id', donationId);
+
+    // Fallback if extended fields fail
+    if (error && (error.message?.includes('column') || error.code === '42703' || error.message?.includes('schema cache'))) {
+      const corePayload: Record<string, any> = {};
+      if (updates.donationDate !== undefined) corePayload.donation_date = updates.donationDate;
+      if (updates.hospital !== undefined) corePayload.hospital = updates.hospital;
+      if (updates.units !== undefined) corePayload.units = updates.units;
+      if (updates.donationType !== undefined) corePayload.donation_type = updates.donationType;
+      if (updates.notes !== undefined) corePayload.notes = updates.notes;
+      if (updates.requestId !== undefined || updates.bloodRequestId !== undefined) {
+        corePayload.request_id = updates.requestId || updates.bloodRequestId || null;
+      }
+      if (updates.verifiedBy !== undefined) corePayload.verified_by = updates.verifiedBy;
+
+      const retryResult = await supabase
+        .from('donations')
+        .update(corePayload)
+        .eq('id', donationId);
+      error = retryResult.error;
+    }
 
     if (error) {
       console.error('Error updating donation in Supabase:', error);

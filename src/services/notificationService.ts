@@ -15,15 +15,19 @@ function mapNotificationRow(row: any): NotificationItem {
 }
 
 /**
- * Fetch notifications for a user (or broadcast 'all')
+ * Fetch notifications for a user (or broadcast 'all' / 'staff')
  */
-export async function getUserNotificationsFromSupabase(userId: string): Promise<NotificationItem[]> {
+export async function getUserNotificationsFromSupabase(
+  userId: string,
+  isStaff: boolean = false
+): Promise<NotificationItem[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
+    const targetUserIds = isStaff ? [userId, 'all', 'staff'] : [userId, 'all'];
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
-      .in('user_id', [userId, 'all'])
+      .in('user_id', targetUserIds)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -88,12 +92,16 @@ export async function markNotificationAsReadInSupabase(id: string): Promise<void
 /**
  * Mark all notifications as read for a user
  */
-export async function markAllNotificationsAsReadInSupabase(userId: string): Promise<void> {
+export async function markAllNotificationsAsReadInSupabase(
+  userId: string,
+  isStaff: boolean = false
+): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
+  const targetUserIds = isStaff ? [userId, 'all', 'staff'] : [userId, 'all'];
   const { error } = await supabase
     .from('notifications')
     .update({ is_read: true })
-    .in('user_id', [userId, 'all']);
+    .in('user_id', targetUserIds);
 
   if (error) {
     console.error('Error marking all notifications read in Supabase:', error);
@@ -120,10 +128,12 @@ export async function deleteNotificationInSupabase(id: string): Promise<void> {
  */
 export function subscribeToRealtimeNotifications(
   userId: string,
-  onNewNotification: (notif: NotificationItem) => void
+  onNewNotification: (notif: NotificationItem) => void,
+  isStaff: boolean = false
 ): () => void {
   if (!isSupabaseConfigured || !supabase) return () => {};
 
+  const targetUserIds = isStaff ? [userId, 'all', 'staff'] : [userId, 'all'];
   const channel = supabase
     .channel(`notifications-${userId}`)
     .on(
@@ -135,7 +145,7 @@ export function subscribeToRealtimeNotifications(
       },
       (payload) => {
         const row = payload.new;
-        if (row && (row.user_id === userId || row.user_id === 'all')) {
+        if (row && targetUserIds.includes(row.user_id)) {
           onNewNotification(mapNotificationRow(row));
         }
       }

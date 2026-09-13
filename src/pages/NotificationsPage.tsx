@@ -9,6 +9,7 @@ import {
   Building2,
   ShieldCheck,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,7 +17,14 @@ import type { DonorRequest } from '../types';
 
 export const NotificationsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { notifications, donorRequests, respondDonorRequest, markNotificationRead } = useData();
+  const {
+    notifications,
+    donorRequests,
+    donors,
+    respondDonorRequest,
+    markNotificationRead,
+    deleteNotification,
+  } = useData();
   const { currentUser } = useAuth();
 
   const [declineModalItem, setDeclineModalItem] = useState<DonorRequest | null>(null);
@@ -33,13 +41,37 @@ export const NotificationsPage: React.FC = () => {
     setDeclineModalItem(null);
   };
 
-  // Filter notifications matching current user or broadcast
-  const userNotifications = notifications.filter(
-    (n) =>
+  const isStaff = Boolean(
+    currentUser?.role && ['super_admin', 'admin', 'moderator'].includes(currentUser.role)
+  );
+
+  // Filter notifications matching current user, broadcast, or staff alerts (auto-vanishing already-resolved alerts)
+  const userNotifications = notifications.filter((n) => {
+    const isTarget =
       n.userId === currentUser?.id ||
       n.userId === 'all' ||
-      (currentUser?.role && ['super_admin', 'admin'].includes(currentUser.role))
-  );
+      (isStaff && (n.userId === 'staff' || (n.type === 'verification' && n.link?.includes('/admin'))));
+
+    if (!isTarget) return false;
+
+    // Auto-Vanish: If this is a pending verification reviewer alert, suppress it if the donor has already been verified/rejected/suspended
+    if (n.type === 'verification' && (n.title.includes('অপেক্ষমাণ') || n.link?.includes('/admin'))) {
+      const isAlreadyResolved = donors.some(
+        (d) =>
+          d.verificationStatus !== 'pending' &&
+          (
+            (d.donorId && n.message.includes(d.donorId)) ||
+            (d.id && n.message.includes(d.id)) ||
+            (d.id && n.link?.includes(d.id)) ||
+            (d.donorId && n.link?.includes(d.donorId)) ||
+            (d.fullName && n.message.includes(d.fullName))
+          )
+      );
+      if (isAlreadyResolved) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -192,9 +224,23 @@ export const NotificationsPage: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <h4 className="font-bold text-slate-900 text-sm">{n.title}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNotification(n.id);
+                        }}
+                        title="মুছে ফেলুন"
+                        aria-label="মুছে ফেলুন"
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-slate-600 mt-1">{n.message}</p>
                   {targetLink && (

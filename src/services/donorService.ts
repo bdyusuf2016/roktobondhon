@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../supabase/config';
+import { generateDonorId, getLocationCode } from './idGenerator';
 import type {
   Donor,
   DonorPublic,
@@ -148,12 +149,44 @@ export async function getDonorById(donorId: string): Promise<Donor | null> {
 /**
  * Create/Register a donor record in Supabase
  */
+/**
+ * Query the database to find the absolute highest numeric donor ID suffix.
+ */
+export async function fetchHighestDonorSequence(): Promise<number> {
+  if (!isSupabaseConfigured || !supabase) return 100;
+  try {
+    const { data } = await supabase
+      .from('donors')
+      .select('donor_id');
+    if (data && data.length > 0) {
+      let maxNum = 100;
+      for (const row of data) {
+        if (!row.donor_id) continue;
+        const match = row.donor_id.match(/(\d+)$/);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+      return maxNum;
+    }
+  } catch (err) {
+    console.warn('Could not fetch highest donor sequence from Supabase:', err);
+  }
+  return 100;
+}
+
+/**
+ * Create/Register a donor record in Supabase
+ */
 export async function createDonorRecord(
   publicData: DonorPublic,
   privateData: DonorPrivate
 ): Promise<Donor> {
+  let targetDonorId = publicData.donorId;
   const composite: Donor = {
     ...publicData,
+    donorId: targetDonorId,
     userId: privateData.userId,
     phone: privateData.phone,
     gender: privateData.gender,
@@ -169,48 +202,66 @@ export async function createDonorRecord(
   };
 
   if (isSupabaseConfigured && supabase) {
-    try {
-      const { error } = await supabase.from('donors').insert({
-        id: composite.id,
-        donor_id: composite.donorId,
-        user_id: composite.userId,
-        full_name: composite.fullName,
-        photo_url: composite.photoUrl || null,
-        blood_group: composite.bloodGroup,
-        division: composite.division || 'Dhaka',
-        district_id: composite.districtId || 'dist-dhaka',
-        district: composite.district,
-        upazila_id: composite.upazilaId || 'upa-dhamrai',
-        upazila: composite.upazila,
-        area_id: composite.areaId || null,
-        area: composite.area,
-        location_label: composite.locationLabel || null,
-        availability: composite.availability,
-        emergency_available: composite.emergencyAvailable,
-        last_donation_date: composite.lastDonationDate || null,
-        first_donation_date: composite.firstDonationDate || null,
-        total_donations: composite.totalDonations,
-        verification_status: composite.verificationStatus,
-        organization_id: composite.organizationId,
-        branch_id: composite.branchId,
-        phone: composite.phone,
-        email: composite.email || null,
-        gender: composite.gender || null,
-        date_of_birth: composite.dateOfBirth || null,
-        exact_address: composite.exactAddress || null,
-        emergency_contact: composite.emergencyContact || null,
-        admin_notes: composite.adminNotes || null,
-        nid_or_id_number: composite.nidOrIdNumber || null,
-        privacy: composite.privacy,
-        created_at: composite.createdAt,
-        updated_at: composite.updatedAt,
-      });
+    const buildRow = (dId: string) => ({
+      id: composite.id,
+      donor_id: dId,
+      user_id: composite.userId,
+      full_name: composite.fullName,
+      photo_url: composite.photoUrl || null,
+      blood_group: composite.bloodGroup,
+      division: composite.division || 'Dhaka',
+      district_id: composite.districtId || 'dist-dhaka',
+      district: composite.district || 'ঢাকা',
+      upazila_id: composite.upazilaId || 'upa-dhamrai',
+      upazila: composite.upazila || 'ধামরাই',
+      area_id: composite.areaId || null,
+      area: composite.area || 'ধামরাই সদর',
+      location_label: composite.locationLabel || null,
+      availability: composite.availability ?? true,
+      emergency_available: composite.emergencyAvailable ?? true,
+      last_donation_date: (composite.lastDonationDate && composite.lastDonationDate.trim() !== '') ? composite.lastDonationDate.trim() : null,
+      first_donation_date: (composite.firstDonationDate && composite.firstDonationDate.trim() !== '') ? composite.firstDonationDate.trim() : null,
+      total_donations: composite.totalDonations || 0,
+      verification_status: composite.verificationStatus || 'pending',
+      organization_id: composite.organizationId || 'org-roktobondon',
+      branch_id: composite.branchId || 'br-dhm',
+      phone: composite.phone,
+      email: composite.email?.trim() || null,
+      gender: composite.gender || null,
+      date_of_birth: (composite.dateOfBirth && composite.dateOfBirth.trim() !== '') ? composite.dateOfBirth.trim() : null,
+      exact_address: composite.exactAddress?.trim() || null,
+      emergency_contact: composite.emergencyContact?.trim() || null,
+      admin_notes: composite.adminNotes?.trim() || null,
+      nid_or_id_number: composite.nidOrIdNumber?.trim() || null,
+      privacy: composite.privacy || {
+        showPhone: false,
+        showGender: false,
+        showAge: false,
+        allowDirectContact: true,
+      },
+      verified_by: composite.verifiedBy || null,
+      verified_at: composite.verifiedAt || null,
+      created_at: composite.createdAt || new Date().toISOString(),
+      updated_at: composite.updatedAt || new Date().toISOString(),
+    });
 
-      if (error) {
-        console.error('Error inserting donor in Supabase:', error);
-      }
-    } catch (err) {
-      console.error('Exception creating donor record:', err);
+    let { error } = await supabase.from('donors').insert(buildRow(targetDonorId));
+
+    // If duplicate key on donor_id or id, auto-resolve with fresh next sequence and retry
+    if (error && (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate') || error.message.includes('donor_id'))) {
+      console.warn(`[createDonorRecord] Unique collision on donor_id "${targetDonorId}", resolving next sequence...`);
+      const highestSeq = await fetchHighestDonorSequence();
+      const locCode = getLocationCode(composite.upazila, composite.district);
+      targetDonorId = generateDonorId(locCode, highestSeq + 1);
+      composite.donorId = targetDonorId;
+
+      const retryRes = await supabase.from('donors').insert(buildRow(targetDonorId));
+      error = retryRes.error;
+    }
+
+    if (error) {
+      console.error('Error inserting donor in Supabase:', error);
+      throw new Error(error.message || 'রক্তদাতা তথ্য ডাটাবেজে সংরক্ষণ করা যায়নি।');
     }
   }
 
@@ -240,13 +291,17 @@ export async function updateDonorRecord(
   if (updates.locationLabel !== undefined) dbUpdates.location_label = updates.locationLabel;
   if (updates.availability !== undefined) dbUpdates.availability = updates.availability;
   if (updates.emergencyAvailable !== undefined) dbUpdates.emergency_available = updates.emergencyAvailable;
-  if (updates.lastDonationDate !== undefined) dbUpdates.last_donation_date = updates.lastDonationDate;
+  if (updates.lastDonationDate !== undefined) {
+    dbUpdates.last_donation_date = (updates.lastDonationDate && updates.lastDonationDate.trim() !== '') ? updates.lastDonationDate.trim() : null;
+  }
   if (updates.totalDonations !== undefined) dbUpdates.total_donations = updates.totalDonations;
   if (updates.verificationStatus !== undefined) dbUpdates.verification_status = updates.verificationStatus;
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
-  if (updates.email !== undefined) dbUpdates.email = updates.email;
+  if (updates.email !== undefined) dbUpdates.email = updates.email?.trim() || null;
   if (updates.gender !== undefined) dbUpdates.gender = updates.gender;
-  if (updates.dateOfBirth !== undefined) dbUpdates.date_of_birth = updates.dateOfBirth;
+  if (updates.dateOfBirth !== undefined) {
+    dbUpdates.date_of_birth = (updates.dateOfBirth && updates.dateOfBirth.trim() !== '') ? updates.dateOfBirth.trim() : null;
+  }
   if (updates.exactAddress !== undefined) dbUpdates.exact_address = updates.exactAddress;
   if (updates.emergencyContact !== undefined) dbUpdates.emergency_contact = updates.emergencyContact;
   if (updates.adminNotes !== undefined) dbUpdates.admin_notes = updates.adminNotes;
@@ -258,6 +313,7 @@ export async function updateDonorRecord(
   const { error } = await supabase.from('donors').update(dbUpdates).eq('id', donorId);
   if (error) {
     console.error('Error updating donor in Supabase:', error);
+    throw new Error(error.message || 'রক্তদাতা তথ্য আপডেট করতে সমস্যা হয়েছে।');
   }
 }
 

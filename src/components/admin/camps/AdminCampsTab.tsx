@@ -28,13 +28,17 @@ import {
   validateCampPayload,
 } from '../../../services/campService';
 import { convertCollectionToCsv, downloadFile } from '../../../services/backupService';
+import { usePermission } from '../../../hooks/usePermission';
 import type { BloodCamp } from '../../../types';
 import { toBengaliNumber } from '../../../utils/bengali';
 
 export const AdminCampsTab: React.FC = () => {
   const { bloodCamps, addBloodCamp, updateBloodCamp, deleteBloodCamp, addAuditLog } = useData();
   const { currentUser } = useAuth();
+  const { can, isSuperAdmin } = usePermission();
   const dialog = useDialog();
+
+  const canManageCamps = isSuperAdmin || can('manage_camps');
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'upcoming' | 'ongoing' | 'completed' | 'cancelled'>('all');
   const [districtFilter, setDistrictFilter] = useState<string>('all');
@@ -82,6 +86,14 @@ export const AdminCampsTab: React.FC = () => {
   }, [bloodCamps, statusFilter, districtFilter, searchQuery]);
 
   const openCreateModal = () => {
+    if (!canManageCamps) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'রক্তদান ক্যাম্প তৈরি করার অনুমতি আপনার অ্যাকাউন্টে নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     setEditingCamp(null);
     setForm({
       titleBn: '',
@@ -107,6 +119,14 @@ export const AdminCampsTab: React.FC = () => {
   };
 
   const openEditModal = (camp: BloodCamp) => {
+    if (!canManageCamps) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'রক্তদান ক্যাম্পের তথ্য পরিবর্তন করার অনুমতি আপনার অ্যাকাউন্টে নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     setEditingCamp(camp);
     setForm({ ...camp });
     setIsModalOpen(true);
@@ -166,6 +186,14 @@ export const AdminCampsTab: React.FC = () => {
   };
 
   const handleDeleteCamp = async (camp: BloodCamp) => {
+    if (!canManageCamps) {
+      dialog.alert({
+        title: 'অননুমোদিত অনুরোধ',
+        message: 'ক্যাম্প মুছে ফেলার প্রশাসনিক অনুমতি আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     const confirmed = await dialog.confirm({
       title: 'ক্যাম্প মুছে ফেলা নিশ্চিতকরণ',
       message: `আপনি কি নিশ্চিত যে "${camp.titleBn}" ক্যাম্পটি স্থায়ীভাবে মুছে ফেলতে চান?`,
@@ -197,6 +225,14 @@ export const AdminCampsTab: React.FC = () => {
   };
 
   const handleUpdateStatus = async (camp: BloodCamp, newStatus: BloodCamp['status']) => {
+    if (!canManageCamps) {
+      dialog.alert({
+        title: 'অননুমোদিত অনুরোধ',
+        message: 'ক্যাম্প স্ট্যাটাস পরিবর্তন করার অনুমতি আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     try {
       await updateBloodCamp(camp.id, { status: newStatus });
       addAuditLog(
@@ -216,6 +252,14 @@ export const AdminCampsTab: React.FC = () => {
 
   const handleSaveCollectedUnits = async () => {
     if (!collectedUnitsModalCamp) return;
+    if (!canManageCamps) {
+      dialog.alert({
+        title: 'অননুমোদিত অনুরোধ',
+        message: 'রক্ত সংগ্রহ রেকর্ড করার অনুমতি আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
     try {
       await updateBloodCamp(collectedUnitsModalCamp.id, {
         collectedUnits: Number(collectedUnitsInput) || 0,
@@ -273,7 +317,7 @@ export const AdminCampsTab: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl pb-12">
+    <div className="space-y-6 w-full pb-12">
       {/* Top Header Card */}
       <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -300,14 +344,16 @@ export const AdminCampsTab: React.FC = () => {
               <Download className="w-3.5 h-3.5" />
               <span>এক্সপোর্ট (CSV)</span>
             </button>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>নতুন ক্যাম্প যুক্ত করুন</span>
-            </button>
+            {canManageCamps && (
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>নতুন ক্যাম্প যুক্ত করুন</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -427,24 +473,26 @@ export const AdminCampsTab: React.FC = () => {
                     >
                       {statusLabels[camp.status]}
                     </span>
-                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(camp)}
-                        className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="সম্পাদনা করুন"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCamp(camp)}
-                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="মুছে ফেলুন"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {canManageCamps && (
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(camp)}
+                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="সম্পাদনা করুন"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCamp(camp)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="মুছে ফেলুন"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -497,30 +545,32 @@ export const AdminCampsTab: React.FC = () => {
                     <span>{camp.registeredCount || 0} জন নিবন্ধিত</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {camp.status === 'upcoming' && (
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateStatus(camp, 'ongoing')}
-                        className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-[11px] font-bold border border-emerald-200 transition-colors"
-                      >
-                        শুরু করুন
-                      </button>
-                    )}
+                  {canManageCamps && (
+                    <div className="flex items-center gap-1.5">
+                      {camp.status === 'upcoming' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStatus(camp, 'ongoing')}
+                          className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-[11px] font-bold border border-emerald-200 transition-colors"
+                        >
+                          শুরু করুন
+                        </button>
+                      )}
 
-                    {camp.status !== 'completed' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCollectedUnitsModalCamp(camp);
-                          setCollectedUnitsInput(camp.collectedUnits || 0);
-                        }}
-                        className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-[11px] font-bold border border-purple-200 transition-colors"
-                      >
-                        রক্ত সংগ্রহ রেকর্ড
-                      </button>
-                    )}
-                  </div>
+                      {camp.status !== 'completed' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCollectedUnitsModalCamp(camp);
+                            setCollectedUnitsInput(camp.collectedUnits || 0);
+                          }}
+                          className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-[11px] font-bold border border-purple-200 transition-colors"
+                        >
+                          রক্ত সংগ্রহ রেকর্ড
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -533,14 +583,16 @@ export const AdminCampsTab: React.FC = () => {
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             নির্বাচিত ফিল্টারের আওতায় কোনো ক্যাম্প নেই অথবা নতুন ক্যাম্প তৈরি করা হয়নি।
           </p>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>নতুন ক্যাম্প তৈরি করুন</span>
-          </button>
+          {canManageCamps && (
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>নতুন ক্যাম্প তৈরি করুন</span>
+            </button>
+          )}
         </div>
       )}
 

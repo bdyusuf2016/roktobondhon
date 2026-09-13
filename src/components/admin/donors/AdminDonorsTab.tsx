@@ -25,7 +25,7 @@ import { useData } from '../../../contexts/DataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useDialog } from '../../../contexts/DialogContext';
 import { ROLE_LABELS } from '../../../services/permissionService';
-import type { Donor, BloodGroup, Donation, UserRole } from '../../../types';
+import type { Donor, BloodGroup, Donation, UserRole, User } from '../../../types';
 import { DonorImportWizard } from './import/DonorImportWizard';
 import { DonorImportHistory } from './import/DonorImportHistory';
 import { RecordDonationModal } from '../donations/RecordDonationModal';
@@ -33,6 +33,8 @@ import { PromoteDonorModal } from './PromoteDonorModal';
 import { AdminOnboardDonorModal } from './AdminOnboardDonorModal';
 import { supabase, isSupabaseConfigured } from '../../../supabase/config';
 import { mapUserRow } from '../../../services/userService';
+
+import { usePermission } from '../../../hooks/usePermission';
 
 export const AdminDonorsTab: React.FC = () => {
   const {
@@ -50,13 +52,13 @@ export const AdminDonorsTab: React.FC = () => {
     addAuditLog,
   } = useData();
   const { currentUser } = useAuth();
+  const { can, isSuperAdmin } = usePermission();
   const dialog = useDialog();
 
-  const isSuperAdmin = currentUser?.role === 'super_admin';
   const isSuperAdminOrAdmin =
     currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
-  const canImport = ['super_admin', 'admin', 'moderator'].includes(currentUser?.role || '');
-  const canOnboard = ['super_admin', 'admin', 'moderator', 'volunteer'].includes(currentUser?.role || '');
+  const canImport = isSuperAdmin || can('manage_donor_import');
+  const canOnboard = isSuperAdmin || can('manage_donors');
 
   // Helper to find associated staff user (if donor is also a staff member)
   const getDonorStaffUser = (donor: Donor): User | null => {
@@ -811,8 +813,8 @@ export const AdminDonorsTab: React.FC = () => {
           </div>
 
           {/* Donors Table */}
-          <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+            <table className="min-w-[780px] w-full text-left text-xs">
               <thead className="bg-slate-50 border-y border-slate-200 text-slate-600">
                 <tr>
                   <th className="py-2.5 px-3 font-semibold">ডোনার আইডি</th>

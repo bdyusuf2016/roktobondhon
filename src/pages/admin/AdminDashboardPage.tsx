@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { usePermission } from '../../hooks/usePermission';
+import { isDemoMode } from '../../supabase/config';
 import { AdminGuard } from '../../components/admin/AdminGuard';
-import { AdminHeader } from '../../components/admin/AdminHeader';
 import {
   AdminSidebar,
   getModuleMetadata,
+  isTabPermitted,
   type AdminTabKey,
 } from '../../components/admin/AdminSidebar';
-import { Sliders, Menu, Pin, PinOff } from 'lucide-react';
+import { Sliders, Menu, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { toBengaliNumber } from '../../utils/bengali';
 
 // Subcomponents
@@ -50,43 +52,42 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   initialTab = 'overview',
 }) => {
   const [searchParams] = useSearchParams();
+  const dialog = useDialog();
   const queryTab = searchParams.get('tab') as AdminTabKey | null;
   const [activeTab, setActiveTab] = useState<AdminTabKey>(queryTab || initialTab);
   const { can, currentRole, isSuperAdmin } = usePermission();
 
-  // Sidebar Drawer & Pin State
-  const [isSidebarPinned, setIsSidebarPinned] = useState<boolean>(() => {
+  // Collapsible Sidebar & Mobile Drawer State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem('roktobondhon_admin_sidebar_pinned');
-      if (saved !== null) return saved === 'true';
-      return typeof window !== 'undefined' ? window.innerWidth >= 1280 : true;
+      const saved = localStorage.getItem('roktobondhon_admin_sidebar_collapsed');
+      return saved === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
-  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
 
-  const togglePin = () => {
-    setIsSidebarPinned((prev) => {
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem('roktobondhon_admin_sidebar_pinned', String(next));
+        localStorage.setItem('roktobondhon_admin_sidebar_collapsed', String(next));
       } catch (e) {
         console.error(e);
       }
-      if (next) setIsDrawerOpen(false);
       return next;
     });
   };
 
-  // Keyboard shortcut: Ctrl+B or Escape
+  // Keyboard shortcut: Ctrl+B to toggle sidebar, Escape to close mobile drawer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setIsDrawerOpen((prev) => !prev);
+        toggleSidebarCollapse();
       } else if (e.key === 'Escape') {
-        setIsDrawerOpen(false);
+        setIsMobileDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -109,41 +110,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     branches,
     notifications,
     auditLogs,
+    resetDemoData,
   } = useData();
 
-  // Validate activeTab when role changes or when navigating
+// Dynamically validate activeTab based on permission matrix and role rank
   useEffect(() => {
     if (isSuperAdmin) return;
 
-    // Check specific tab restrictions for lower roles
-    const adminOnlyTabs: AdminTabKey[] = [
-      'health',
-      'blood_groups',
-      'matching',
-      'eligibility',
-      'request_rules',
-      'branches',
-      'users',
-      'notifications',
-      'organization',
-      'branding',
-      'website',
-      'seo',
-      'gamification',
-      'pwa',
-      'backup',
-      'audit',
-      'settings',
-    ];
-
-    const isRestrictedForCurrent =
-      (currentRole === 'volunteer' && (adminOnlyTabs.includes(activeTab) || activeTab === 'donors' || activeTab === 'emergency' || activeTab === 'hospitals' || activeTab === 'funds' || activeTab === 'analytics')) ||
-      (currentRole === 'moderator' && adminOnlyTabs.includes(activeTab));
-
-    if (isRestrictedForCurrent) {
+    if (!isTabPermitted(activeTab, currentRole, isSuperAdmin, can)) {
       setActiveTab('overview');
     }
-  }, [currentRole, activeTab, isSuperAdmin]);
+  }, [currentRole, activeTab, isSuperAdmin, can]);
 
   const counts = {
     donors: donors.length,
@@ -163,38 +140,38 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   return (
     <AdminGuard>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <AdminHeader />
+      <div className="w-full px-3 sm:px-6 lg:px-8 pt-3 sm:pt-5 pb-24 lg:pb-12 space-y-4 sm:space-y-6">
+        <div className="flex flex-col lg:flex-row items-start gap-5 lg:gap-6">
+          {/* Collapsible Sticky/Fixed Sidebar (Desktop) - Safely positioned below Navbar */}
+          <div
+            className={`hidden lg:block shrink-0 sticky top-24 z-20 h-[calc(100vh-7.5rem)] min-h-[580px] transition-all duration-300 ease-in-out ${
+              isSidebarCollapsed ? 'w-20' : 'w-72'
+            }`}
+          >
+            <AdminSidebar
+              activeTab={activeTab}
+              onSelectTab={setActiveTab}
+              counts={counts}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={toggleSidebarCollapse}
+            />
+          </div>
 
-        <div className="flex flex-col lg:flex-row items-start gap-6">
-          {/* Docked Left Sidebar (Rendered on lg+ only when pinned) */}
-          {isSidebarPinned && (
-            <div className="hidden lg:block shrink-0">
-              <AdminSidebar
-                activeTab={activeTab}
-                onSelectTab={setActiveTab}
-                counts={counts}
-                isPinned={true}
-                onTogglePin={togglePin}
-              />
-            </div>
-          )}
-
-          {/* Main Content Panel (Spans full width when unpinned or on mobile) */}
-          <main className="flex-1 min-w-0 w-full space-y-5">
+          {/* Main Content Panel */}
+          <main className="flex-1 min-w-0 w-full space-y-4 sm:space-y-5">
             {/* Active Module Header Context Banner */}
             {currentMeta && (
-              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 relative overflow-hidden">
                 {/* Subtle top accent gradient */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-rose-500 to-amber-500" />
 
-                <div className="flex items-start sm:items-center gap-3.5">
+                <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs border ${currentMeta.group.accentColor.bg} ${currentMeta.group.accentColor.text} ${currentMeta.group.accentColor.border}`}
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs border ${currentMeta.group.accentColor.bg} ${currentMeta.group.accentColor.text} ${currentMeta.group.accentColor.border}`}
                   >
                     <ActiveIcon className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span
                         className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${currentMeta.group.accentColor.bg} ${currentMeta.group.accentColor.text} ${currentMeta.group.accentColor.border}`}
@@ -202,67 +179,75 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         {currentMeta.group.title}
                       </span>
                       <span className="text-[11px] text-slate-300">/</span>
-                      <span className="text-xs font-semibold text-slate-500">
+                      <span className="text-xs font-semibold text-slate-500 truncate">
                         {currentMeta.item.label}
                       </span>
                     </div>
-                    <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-0.5">
+                    <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-0.5 truncate">
                       {currentMeta.item.label}
                     </h1>
                     {currentMeta.item.description && (
-                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium line-clamp-1 sm:line-clamp-none">
                         {currentMeta.item.description}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Live Module Badge, Drawer Trigger & Security Indicator */}
-                <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap">
-                  {/* Drawer Open Trigger Button */}
+                {/* Right side status indicator & quick actions */}
+                <div className="flex items-center gap-2 self-stretch sm:self-center justify-between sm:justify-end shrink-0 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex-wrap">
+                  {/* Mobile Menu Trigger Button */}
                   <button
                     type="button"
-                    onClick={() => setIsDrawerOpen(true)}
-                    className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer border border-slate-700 active:scale-95"
-                    title="কন্ট্রোল মডিউল ড্রয়ার মেনু খুলুন (Ctrl+B)"
+                    onClick={() => setIsMobileDrawerOpen(true)}
+                    className="lg:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer border border-slate-700 active:scale-95"
+                    title="কন্ট্রোল মেনু খুলুন"
                   >
                     <Menu className="w-4 h-4 text-red-400" />
-                    <span>কন্ট্রোল ড্রয়ার</span>
+                    <span>কন্ট্রোল মেনু</span>
                   </button>
 
-                  {/* Pin / Unpin Docked Sidebar Toggle Button (Desktop) */}
-                  <button
-                    type="button"
-                    onClick={togglePin}
-                    className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
-                    title={
-                      isSidebarPinned
-                        ? 'সাইডবার ড্রয়ার মোডে রূপান্তর করুন (ফুল-স্ক্রিন ভিউ)'
-                        : 'সাইডবার স্ক্রিনের পাশে স্থায়ীভাবে পিন/ডক করুন'
-                    }
-                  >
-                    {isSidebarPinned ? (
-                      <>
-                        <PinOff className="w-3.5 h-3.5 text-slate-500" />
-                        <span>ড্রয়ার মোড</span>
-                      </>
-                    ) : (
-                      <>
-                        <Pin className="w-3.5 h-3.5 text-red-600" />
-                        <span>সাইডবার পিন</span>
-                      </>
-                    )}
-                  </button>
-
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    সক্রিয় মডিউল
-                  </span>
-                  {isSuperAdmin && (
-                    <span className="px-2 py-1 rounded-full text-[10px] font-mono font-bold bg-slate-900 text-amber-300 border border-slate-700">
-                      SUPER ADMIN
-                    </span>
+                  {/* Demo Reset (Visible only in demo mode for Super Admin) */}
+                  {isDemoMode && isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const confirmed = await dialog.confirm({
+                          title: 'টেস্ট ডেটাবেজ রিসেট',
+                          message:
+                            'আপনি কি টেস্ট ডেটাবেজ রিসেট করতে চান? (১০০ ডোনার, ২০ রিকোয়েস্ট, ৫০ রক্তদান তৈরি হবে)',
+                          type: 'danger',
+                          confirmText: 'হ্যাঁ, রিসেট করুন',
+                          cancelText: 'বাতিল',
+                        });
+                        if (confirmed) {
+                          resetDemoData();
+                          dialog.alert({
+                            title: 'রিসেট সম্পন্ন!',
+                            message: 'ডেটাবেজ সফলভাবে রিসেট ও সিড করা হয়েছে!',
+                            type: 'success',
+                          });
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1 border border-slate-200 cursor-pointer transition-colors shadow-2xs"
+                      title="১০০ জন ডোনার, ২০ আবেদন এবং ৫০ রক্তদান পুনঃলোড করুন"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-red-500" />
+                      <span className="hidden sm:inline text-[11px]">ডেমো রিসেট</span>
+                    </button>
                   )}
+
+                  <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      সক্রিয়
+                    </span>
+                    {isSuperAdmin && (
+                      <span className="px-2 py-1 rounded-full text-[10px] font-mono font-bold bg-slate-900 text-amber-300 border border-slate-700">
+                        SUPER ADMIN
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -284,22 +269,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               {/* Blood System Policies */}
               {activeTab === 'blood_groups' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <BloodSystemSettings />
                 </div>
               )}
               {activeTab === 'matching' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <MatchingSettings />
                 </div>
               )}
               {activeTab === 'eligibility' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <DonorEligibilitySettings />
                 </div>
               )}
               {activeTab === 'request_rules' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <BloodRequestSettings />
                 </div>
               )}
@@ -319,32 +304,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               {/* Content & Branding */}
               {activeTab === 'organization' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <OrganizationSettings />
                 </div>
               )}
               {activeTab === 'branding' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <BrandingSettings />
                 </div>
               )}
               {activeTab === 'website' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <WebsiteSettings />
                 </div>
               )}
               {activeTab === 'seo' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <SeoSettings />
                 </div>
               )}
               {activeTab === 'gamification' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <GamificationSettings />
                 </div>
               )}
               {activeTab === 'pwa' && (
-                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm max-w-4xl hover:border-slate-300 transition-colors">
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm w-full hover:border-slate-300 transition-colors">
                   <PwaSettings />
                 </div>
               )}
@@ -359,40 +344,31 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           </main>
         </div>
 
-        {/* Slide-In Sidebar Drawer for Mobile & Unpinned Desktop View */}
-        {isDrawerOpen && (
-          <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+        {/* Mobile Slide-In Sidebar (Only for Mobile Screens) */}
+        {isMobileDrawerOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
             <div
               className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity cursor-pointer"
-              onClick={() => setIsDrawerOpen(false)}
+              onClick={() => setIsMobileDrawerOpen(false)}
               aria-hidden="true"
             />
             <div className="absolute inset-y-0 left-0 max-w-full flex">
-              <div className="w-80 sm:w-88 max-w-[88vw] h-full shadow-2xl bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-300 ease-out animate-in slide-in-from-left">
+              <div className="w-80 max-w-[88vw] h-full shadow-2xl bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-300 ease-out animate-in slide-in-from-left">
                 <AdminSidebar
                   activeTab={activeTab}
-                  onSelectTab={setActiveTab}
+                  onSelectTab={(tab) => {
+                    setActiveTab(tab);
+                    setIsMobileDrawerOpen(false);
+                  }}
                   counts={counts}
-                  isDrawerMode={true}
-                  onCloseDrawer={() => setIsDrawerOpen(false)}
-                  isPinned={isSidebarPinned}
-                  onTogglePin={togglePin}
+                  isMobileDrawer={true}
+                  onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
                 />
               </div>
             </div>
           </div>
         )}
 
-        {/* Floating Action Button for Instant Drawer Access on Mobile */}
-        <button
-          type="button"
-          onClick={() => setIsDrawerOpen(true)}
-          className="lg:hidden fixed bottom-6 right-6 z-40 p-3.5 rounded-full bg-red-600 text-white shadow-xl hover:bg-red-700 active:scale-95 transition-all flex items-center gap-1.5 border-2 border-white cursor-pointer"
-          title="কন্ট্রোল মেনু ড্রয়ার খুলুন"
-        >
-          <Menu className="w-5 h-5" />
-          <span className="text-xs font-bold pr-1">মেনু ড্রয়ার</span>
-        </button>
       </div>
     </AdminGuard>
   );

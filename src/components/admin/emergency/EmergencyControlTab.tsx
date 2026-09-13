@@ -20,6 +20,7 @@ import {
 import { useData } from '../../../contexts/DataContext';
 import { useSystemConfig } from '../../../contexts/SystemConfigContext';
 import { useDialog } from '../../../contexts/DialogContext';
+import { usePermission } from '../../../hooks/usePermission';
 import { EmergencyBroadcastModal } from '../../EmergencyBroadcastModal';
 import { EmergencyControlSettings } from './EmergencyControlSettings';
 import type { BloodRequest } from '../../../types';
@@ -28,7 +29,11 @@ import { toBengaliNumber } from '../../../utils/bengali';
 export const EmergencyControlTab: React.FC = () => {
   const { bloodRequests, donors, verifyBloodRequest } = useData();
   const { config, updateSection } = useSystemConfig();
+  const { can, isSuperAdmin } = usePermission();
   const dialog = useDialog();
+
+  const canBroadcast = isSuperAdmin || can('emergency_broadcast');
+  const canManageSettings = isSuperAdmin || can('manage_settings');
 
   const [activeSubtab, setActiveSubtab] = useState<'board' | 'settings'>('board');
   const [selectedBroadcastRequest, setSelectedBroadcastRequest] = useState<BloodRequest | null>(null);
@@ -53,6 +58,15 @@ export const EmergencyControlTab: React.FC = () => {
   }, [donors]);
 
   const handleToggleEmergencyMode = async () => {
+    if (!canBroadcast) {
+      dialog.alert({
+        title: 'অননুমোদিত অ্যাকশন',
+        message: 'প্ল্যাটফর্মের সেন্ট্রাল রেড অ্যালার্ট চালু বা বন্ধ করার পারমিশন আপনার নেই।',
+        theme: 'danger',
+      });
+      return;
+    }
+
     const nextState = !isEmergencyMode;
     const confirmed = await dialog.confirm({
       title: nextState ? '🚨 রেড অ্যালার্ট মোড সক্রিয়করণ' : 'রেড অ্যালার্ট মোড বন্ধকরণ',
@@ -105,21 +119,23 @@ export const EmergencyControlTab: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={handleToggleEmergencyMode}
-              disabled={isTogglingMode}
-              className={`px-5 py-3 rounded-2xl font-black text-xs flex items-center gap-2 transition-all shadow-md cursor-pointer ${
-                isEmergencyMode
-                  ? 'bg-white text-red-700 hover:bg-rose-50 hover:shadow-lg'
-                  : 'bg-red-600 hover:bg-red-700 text-white border border-red-700/60'
-              }`}
-            >
-              <AlertOctagon className="w-4 h-4" />
-              <span>{isEmergencyMode ? 'রেড অ্যালার্ট বন্ধ করুন' : 'রেড অ্যালার্ট চালু করুন (ACTIVATE)'}</span>
-            </button>
-          </div>
+          {canBroadcast && (
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleEmergencyMode}
+                disabled={isTogglingMode}
+                className={`px-5 py-3 rounded-2xl font-black text-xs flex items-center gap-2 transition-all shadow-md cursor-pointer ${
+                  isEmergencyMode
+                    ? 'bg-white text-red-700 hover:bg-rose-50 hover:shadow-lg'
+                    : 'bg-red-600 hover:bg-red-700 text-white border border-red-700/60'
+                }`}
+              >
+                <AlertOctagon className="w-4 h-4" />
+                <span>{isEmergencyMode ? 'রেড অ্যালার্ট বন্ধ করুন' : 'রেড অ্যালার্ট চালু করুন (ACTIVATE)'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -138,18 +154,20 @@ export const EmergencyControlTab: React.FC = () => {
           <span>লাইভ ক্রাইসিস বোর্ড ({toBengaliNumber(emergencyRequests.length)})</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveSubtab('settings')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-            activeSubtab === 'settings'
-              ? 'bg-red-600 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <Settings className="w-3.5 h-3.5" />
-          <span>জরুরি ও ব্রডকাস্ট নীতিমালা</span>
-        </button>
+        {canManageSettings && (
+          <button
+            type="button"
+            onClick={() => setActiveSubtab('settings')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+              activeSubtab === 'settings'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>জরুরি ও ব্রডকাস্ট নীতিমালা</span>
+          </button>
+        )}
       </div>
 
       {activeSubtab === 'settings' ? (
@@ -274,14 +292,16 @@ export const EmergencyControlTab: React.FC = () => {
                           <span>ম্যাচড ডোনার</span>
                         </Link>
 
-                        <button
-                          type="button"
-                          onClick={() => setSelectedBroadcastRequest(req)}
-                          className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>১-ক্লিক ব্রডকাস্ট পাঠান</span>
-                        </button>
+                        {canBroadcast && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBroadcastRequest(req)}
+                            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>১-ক্লিক ব্রডকাস্ট পাঠান</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

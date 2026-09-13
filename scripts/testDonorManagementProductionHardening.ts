@@ -71,7 +71,7 @@ const createUserEdgePath = path.join(rootDir, 'supabase', 'functions', 'admin-cr
 const createUserEdgeContent = fs.readFileSync(createUserEdgePath, 'utf-8');
 
 const migrationPath = path.join(rootDir, 'supabase', 'migrations', '20260909_two_tier_auth_architecture.sql');
-const migrationContent = fs.readFileSync(migrationPath, 'utf-8');
+const migrationContent = fs.readFileSync(migrationPath, 'utf-8').replace(/\r\n/g, '\n');
 
 // ==============================================================================
 // 1. AUTHENTICATION TESTS (Tests 1-9)

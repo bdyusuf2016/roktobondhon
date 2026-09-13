@@ -18,6 +18,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   SlidersHorizontal,
   UserCheck,
   Globe,
@@ -26,11 +27,11 @@ import {
   Smartphone,
   Building,
   X,
-  Pin,
-  PinOff,
+  Menu,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
-import type { PermissionKey } from '../../types';
+import type { PermissionKey, UserRole } from '../../types';
 import { toBengaliNumber } from '../../utils/bengali';
 
 export type AdminTabKey =
@@ -65,18 +66,18 @@ export interface NavItem {
   id: AdminTabKey;
   label: string;
   description?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badgeVariant?: 'red' | 'emerald' | 'indigo' | 'slate';
   badgeCount?: number;
-  badgeVariant?: 'red' | 'amber' | 'emerald' | 'indigo' | 'slate';
-  icon: React.FC<{ className?: string }>;
   keywords: string;
+  minRole?: UserRole;
   requiredPermission?: PermissionKey;
-  minRole?: 'super_admin' | 'admin' | 'moderator' | 'volunteer';
 }
 
 export interface NavGroup {
   id: string;
   title: string;
-  icon: React.FC<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string }>;
   accentColor: {
     bg: string;
     text: string;
@@ -85,7 +86,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-interface AdminSidebarProps {
+export interface AdminSidebarProps {
   activeTab: AdminTabKey;
   onSelectTab: (tab: AdminTabKey) => void;
   counts: {
@@ -100,19 +101,41 @@ interface AdminSidebarProps {
     notifications?: number;
     audit: number;
   };
-  isDrawerMode?: boolean;
-  onCloseDrawer?: () => void;
-  isPinned?: boolean;
-  onTogglePin?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMobileDrawer?: boolean;
+  onCloseMobileDrawer?: () => void;
 }
 
-const ROLE_RANK: Record<string, number> = {
+export const ROLE_RANK: Record<string, number> = {
   super_admin: 100,
   admin: 80,
   moderator: 60,
   volunteer: 40,
   donor: 20,
   recipient: 10,
+};
+
+export const isTabPermitted = (
+  tabId: AdminTabKey,
+  currentRole: UserRole | undefined,
+  isSuperAdmin: boolean,
+  can: (permission: PermissionKey) => boolean
+): boolean => {
+  if (isSuperAdmin) return true;
+  if (tabId === 'overview') return true;
+
+  const meta = getModuleMetadata(tabId);
+  if (!meta || !meta.item) return true;
+
+  const userRank = currentRole ? ROLE_RANK[currentRole] || 0 : 0;
+  if (meta.item.minRole && userRank < (ROLE_RANK[meta.item.minRole] || 0)) {
+    return false;
+  }
+  if (meta.item.requiredPermission && !can(meta.item.requiredPermission)) {
+    return false;
+  }
+  return true;
 };
 
 export const navGroupsConfig: NavGroup[] = [
@@ -127,8 +150,8 @@ export const navGroupsConfig: NavGroup[] = [
     },
     items: [
       { id: 'overview', label: 'ওভারভিউ ড্যাশবোর্ড', description: 'সিস্টেমের সামগ্রিক স্ট্যাটাস ও কেপিআই রিপোর্ট', icon: Sliders, keywords: 'overview dashboard summary kpi', minRole: 'volunteer' },
-      { id: 'analytics', label: 'এনালিটিক্স ও রিপোর্ট', description: 'রক্তদান প্রবণতা, অগ্রগতি ও ভৌগোলিক পরিসংখ্যান', icon: BarChart3, keywords: 'analytics report charts stats', minRole: 'moderator' },
-      { id: 'health', label: 'সিস্টেম হেলথ ও মনিটরিং', description: 'ডাটাবেজ কানেক্টিভিটি, স্টোরেজ ও পারফরম্যান্স মেট্রিক্স', icon: Activity, keywords: 'health system status db latency pwa storage', minRole: 'admin' },
+      { id: 'analytics', label: 'এনালিটিক্স ও রিপোর্ট', description: 'রক্তদান প্রবণতা, অগ্রগতি ও ভৌগোলিক পরিসংখ্যান', icon: BarChart3, keywords: 'analytics report charts stats', requiredPermission: 'view_analytics' },
+      { id: 'health', label: 'সিস্টেম হেলথ ও মনিটরিং', description: 'ডাটাবেজ কানেক্টিভিটি, স্টোরেজ ও পারফরম্যান্স মেট্রিক্স', icon: Activity, keywords: 'health system status db latency pwa storage', requiredPermission: 'view_system_health' },
     ],
   },
   {
@@ -143,9 +166,9 @@ export const navGroupsConfig: NavGroup[] = [
     items: [
       { id: 'donors', label: 'রক্তদাতা তালিকা', description: 'রক্তদাতাদের বিস্তারিত প্রোফাইল ও যাচাইকরণ কন্ট্রোল', badgeVariant: 'slate', icon: Users, keywords: 'donors list verification blood group', requiredPermission: 'manage_donors' },
       { id: 'requests', label: 'রক্তের আবেদন ট্র্যাকার', description: 'জরুরি রক্তের চাহিদা, রিয়েল-টাইম ট্র্যাকিং ও আপডেট', badgeVariant: 'red', icon: Droplets, keywords: 'requests blood urgent patient hospital', requiredPermission: 'manage_requests' },
-      { id: 'emergency', label: 'জরুরি রেসপন্স ও ব্রডকাস্ট', description: 'হোয়াটসঅ্যাপ, এসএমএস ও পুশ অ্যালার্ট ব্রডকাস্ট সেন্টার', icon: Flame, badgeVariant: 'red', keywords: 'emergency response broadcast alerts whatsapp', requiredPermission: 'manage_requests', minRole: 'moderator' },
+      { id: 'emergency', label: 'জরুরি রেসপন্স ও ব্রডকাস্ট', description: 'হোয়াটসঅ্যাপ, এসএমএস ও পুশ অ্যালার্ট ব্রডকাস্ট সেন্টার', icon: Flame, badgeVariant: 'red', keywords: 'emergency response broadcast alerts whatsapp', requiredPermission: 'emergency_broadcast' },
       { id: 'donations', label: 'রক্তদান হিস্ট্রি ও লগ', description: 'রক্তদানের অফিশিয়াল রেকর্ড ও ডিজিটাল সার্টিফিকেট প্রস্তুত', badgeVariant: 'emerald', icon: Award, keywords: 'donations history logs units certificate', requiredPermission: 'record_donation' },
-      { id: 'camps', label: 'রক্তদান ক্যাম্প ও ড্রাইভ', description: 'ক্যাম্পেইন শিডিউলিং, স্থান নির্ধারণ ও প্রি-রেজিস্ট্রেশন', badgeVariant: 'indigo', icon: Calendar, keywords: 'camps drives events pre-registration', minRole: 'volunteer' },
+      { id: 'camps', label: 'রক্তদান ক্যাম্প ও ড্রাইভ', description: 'ক্যাম্পেইন শিডিউলিং, স্থান নির্ধারণ ও প্রি-রেজিস্ট্রেশন', badgeVariant: 'indigo', icon: Calendar, keywords: 'camps drives events pre-registration', requiredPermission: 'manage_camps' },
     ],
   },
   {
@@ -214,7 +237,7 @@ export const navGroupsConfig: NavGroup[] = [
       border: 'border-pink-200',
     },
     items: [
-      { id: 'notifications', label: 'এসএমএস, গেটওয়ে ও টেমপ্লেট', description: 'এসএমএস ব্যালেন্স, স্বয়ংক্রিয় মেসেজ টেমপ্লেট ও ওয়েব পুশ', badgeVariant: 'slate', icon: Bell, keywords: 'notifications sms whatsapp push templates logs', minRole: 'admin', requiredPermission: 'manage_settings' },
+      { id: 'notifications', label: 'এসএমএস, গেটওয়ে ও টেমপ্লেট', description: 'এসএমএস ব্যালেন্স, স্বয়ংক্রিয় মেসেজ টেমপ্লেট ও ওয়েব পুশ', badgeVariant: 'slate', icon: Bell, keywords: 'notifications sms whatsapp push templates logs', requiredPermission: 'manage_sms_notifications' },
     ],
   },
   {
@@ -268,19 +291,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   activeTab,
   onSelectTab,
   counts,
-  isDrawerMode = false,
-  onCloseDrawer,
-  isPinned = true,
-  onTogglePin,
+  isCollapsed = false,
+  onToggleCollapse,
+  isMobileDrawer = false,
+  onCloseMobileDrawer,
 }) => {
+  const { currentUser } = useAuth();
   const { can, currentRole, isSuperAdmin } = usePermission();
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const handleItemSelect = (tabId: AdminTabKey) => {
     onSelectTab(tabId);
-    if (isDrawerMode && onCloseDrawer) {
-      onCloseDrawer();
+    if (isMobileDrawer && onCloseMobileDrawer) {
+      onCloseMobileDrawer();
     }
   };
 
@@ -288,17 +312,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     setCollapsedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
   };
 
-  const userRank = currentRole ? ROLE_RANK[currentRole] || 0 : 0;
-
   const isItemPermitted = (item: NavItem): boolean => {
-    if (isSuperAdmin) return true;
-    if (item.minRole && userRank < (ROLE_RANK[item.minRole] || 0)) {
-      return false;
-    }
-    if (item.requiredPermission && !can(item.requiredPermission)) {
-      return false;
-    }
-    return true;
+    return isTabPermitted(item.id, currentRole, isSuperAdmin, can);
   };
 
   // Populate dynamic badge counts
@@ -354,81 +369,107 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   return (
     <aside
       className={
-        isDrawerMode
-          ? 'w-full h-full flex flex-col bg-white p-3.5 sm:p-4 space-y-3.5 overflow-hidden'
-          : 'w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 space-y-3.5 lg:sticky lg:top-20 z-20'
+        isMobileDrawer
+          ? 'w-full h-full flex flex-col bg-white p-3.5 sm:p-4 space-y-3 overflow-hidden'
+          : isCollapsed
+          ? 'w-full h-[calc(100vh-7.5rem)] min-h-[580px] bg-white rounded-2xl border border-slate-200/90 shadow-sm p-2.5 flex flex-col items-center justify-between transition-all duration-300'
+          : 'w-full h-[calc(100vh-7.5rem)] min-h-[580px] bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-300'
       }
     >
-      {/* Sidebar Header & Counter */}
-      <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-        <div className="flex items-center gap-2">
+      {/* Sidebar Header */}
+      {isCollapsed && !isMobileDrawer ? (
+        <div className="flex flex-col items-center gap-2 pb-2.5 border-b border-slate-100 w-full shrink-0">
           <img
             src={`${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}logo.png`}
             alt="Logo"
-            className="w-7 h-7 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
+            className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
           />
-          <div>
-            <h3 className="text-xs font-black text-slate-800 tracking-tight">কন্ট্রোল মডিউল</h3>
-            <p className="text-[10px] text-slate-400 font-medium">সিস্টেম নেভিগেশন</p>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              title="মেনু সুইচ: সাইডবার প্রসারিত করুন (Ctrl+B)"
+              className="p-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <Menu className="w-4 h-4 text-red-400" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 w-full shrink-0">
+          <div className="flex items-center gap-2">
+            <img
+              src={`${(typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/roktobondhon/'}logo.png`}
+              alt="Logo"
+              className="w-7 h-7 rounded-full object-cover border border-slate-200 shadow-xs shrink-0"
+            />
+            <div>
+              <h3 className="text-xs font-black text-slate-800 tracking-tight">কন্ট্রোল মডিউল</h3>
+              <p className="text-[10px] text-slate-400 font-medium">সিস্টেম নেভিগেশন</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200/60">
+              {toBengaliNumber(totalPermittedCount)}টি
+            </span>
+
+            {onToggleCollapse && !isMobileDrawer && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                title="সাইডবার সংকুচিত করুন (Collapse Sidebar)"
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+
+            {isMobileDrawer && onCloseMobileDrawer && (
+              <button
+                type="button"
+                onClick={onCloseMobileDrawer}
+                title="বন্ধ করুন"
+                className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-1.5">
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200/60">
-            {toBengaliNumber(totalPermittedCount)}টি
-          </span>
-
-          {onTogglePin && (
+      {/* Quick Filter Search Bar (hidden in collapsed mode) */}
+      {(!isCollapsed || isMobileDrawer) && (
+        <div className="relative w-full">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="মডিউল খুঁজুন..."
+            className="w-full pl-8.5 pr-7 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:outline-none transition-all placeholder:text-slate-400 font-medium shadow-2xs"
+          />
+          {searchQuery && (
             <button
               type="button"
-              onClick={onTogglePin}
-              title={isPinned ? 'সাইডবার ড্রয়ার মোডে রূপান্তর করুন (ফুল-স্ক্রিন)' : 'সাইডবার স্ক্রিনে ডক/পিন করুন'}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
             >
-              {isPinned ? <PinOff className="w-3.5 h-3.5 text-slate-500" /> : <Pin className="w-3.5 h-3.5 text-red-600" />}
-            </button>
-          )}
-
-          {isDrawerMode && onCloseDrawer && (
-            <button
-              type="button"
-              onClick={onCloseDrawer}
-              title="ড্রয়ার মেনু বন্ধ করুন (Esc)"
-              className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
+              ✕
             </button>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Quick Filter Search Bar */}
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="মডিউল খুঁজুন..."
-          className="w-full pl-8.5 pr-7 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 focus:outline-none transition-all placeholder:text-slate-400 font-medium shadow-2xs"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      {/* Navigation Accordion Sections */}
+      {/* Navigation Sections */}
       <div
         className={
-          isDrawerMode
-            ? 'flex-1 overflow-y-auto pr-1 space-y-3 no-scrollbar'
-            : 'space-y-3 max-h-[75vh] overflow-y-auto pr-1 no-scrollbar'
+          isMobileDrawer
+            ? 'flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar min-h-0 w-full'
+            : isCollapsed
+            ? 'flex-1 overflow-y-auto pr-0.5 space-y-2 custom-scrollbar min-h-0 w-full py-1'
+            : 'flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar min-h-0 w-full py-1'
         }
       >
         {visibleGroups.length === 0 ? (
@@ -436,11 +477,50 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             কোনো অনুমোদিত মডিউল পাওয়া যায়নি।
           </div>
         ) : (
-          visibleGroups.map((group) => {
+          visibleGroups.map((group, groupIdx) => {
             const GroupIcon = group.icon;
-            const isCollapsed = !query && collapsedGroups[group.id];
+            const isGroupCollapsed = !query && collapsedGroups[group.id];
             const hasActiveItem = group.items.some((item) => item.id === activeTab);
 
+            // Collapsed View: Slim Icon Column with tooltips
+            if (isCollapsed && !isMobileDrawer) {
+              return (
+                <div key={group.id} className="space-y-1 w-full">
+                  {groupIdx > 0 && <div className="w-8 h-px bg-slate-100 mx-auto my-1.5" />}
+                  <div className="flex flex-col items-center space-y-1">
+                    {group.items.map((item) => {
+                      const ItemIcon = item.icon;
+                      const isActive = activeTab === item.id;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleItemSelect(item.id)}
+                          title={`${item.label} (${group.title})`}
+                          className={`group relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${
+                            isActive
+                              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-md shadow-red-500/30'
+                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          <ItemIcon
+                            className={`w-4 h-4 shrink-0 transition-transform ${
+                              isActive ? 'text-white scale-110' : 'text-slate-500 group-hover:scale-110 group-hover:text-slate-900'
+                            }`}
+                          />
+                          {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            // Expanded View: Full Accordion Sections
             return (
               <div key={group.id} className="space-y-1">
                 <button
@@ -466,7 +546,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     )}
                     {!query && (
                       <span className="p-0.5 rounded-md hover:bg-slate-200/50 text-slate-400">
-                        {isCollapsed ? (
+                        {isGroupCollapsed ? (
                           <ChevronRight className="w-3.5 h-3.5" />
                         ) : (
                           <ChevronDown className="w-3.5 h-3.5" />
@@ -476,7 +556,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   </div>
                 </button>
 
-                {!isCollapsed && (
+                {!isGroupCollapsed && (
                   <div className="space-y-1 pl-1 pt-0.5">
                     {group.items.map((item) => {
                       const ItemIcon = item.icon;
@@ -538,6 +618,65 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           })
         )}
       </div>
+
+      {/* Pinned Sidebar Footer: Admin User & System Status */}
+      {isMobileDrawer ? (
+        <div className="pt-3 pb-safe border-t border-slate-100 mt-auto w-full shrink-0 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 truncate">
+            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+              {currentUser?.fullName?.slice(0, 1) || 'A'}
+            </div>
+            <div className="min-w-0 truncate">
+              <p className="text-xs font-bold text-slate-800 truncate leading-tight">
+                {currentUser?.fullName || 'অ্যাডমিন'}
+              </p>
+              <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {currentUser?.role === 'super_admin' ? 'সুপার এডমিন' : currentUser?.role === 'admin' ? 'এডমিন' : 'অনলাইন'}
+              </span>
+            </div>
+          </div>
+          {onCloseMobileDrawer && (
+            <button
+              type="button"
+              onClick={onCloseMobileDrawer}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-semibold transition-colors cursor-pointer"
+            >
+              বন্ধ করুন
+            </button>
+          )}
+        </div>
+      ) : isCollapsed ? (
+        <div className="pt-2.5 border-t border-slate-100 mt-2 w-full shrink-0 flex flex-col items-center gap-1.5">
+          <div
+            className="w-8 h-8 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center shadow-xs"
+            title={currentUser?.fullName || 'অ্যাডমিন'}
+          >
+            {currentUser?.fullName?.slice(0, 1) || 'A'}
+          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="অনলাইন" />
+        </div>
+      ) : (
+        <div className="pt-3 border-t border-slate-100 mt-2 w-full shrink-0 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 truncate">
+            <div className="w-8 h-8 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
+              {currentUser?.fullName?.slice(0, 1) || 'A'}
+            </div>
+            <div className="min-w-0 truncate">
+              <p className="text-xs font-bold text-slate-800 truncate leading-tight">
+                {currentUser?.fullName || 'অ্যাডমিন'}
+              </p>
+              <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {currentUser?.role === 'super_admin' ? 'সুপার এডমিন' : currentUser?.role === 'admin' ? 'এডমিন' : 'অনলাইন'}
+              </span>
+            </div>
+          </div>
+          <kbd className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+            Ctrl+B
+          </kbd>
+        </div>
+      )}
     </aside>
   );
 };

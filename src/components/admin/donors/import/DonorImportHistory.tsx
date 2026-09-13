@@ -21,8 +21,11 @@ import type { DonorImportBatchSummary } from '../../../../types/donorImport';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useData } from '../../../../contexts/DataContext';
 
+import { usePermission } from '../../../../hooks/usePermission';
+
 export const DonorImportHistory: React.FC = () => {
   const { currentUser } = useAuth();
+  const { can, isSuperAdmin } = usePermission();
   const { addAuditLog } = useData();
 
   const [batches, setBatches] = useState<DonorImportBatchSummary[]>([]);
@@ -33,8 +36,7 @@ export const DonorImportHistory: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  const isSuperAdminOrAdmin =
-    currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const canManageImport = isSuperAdmin || can('manage_donor_import');
 
   const loadBatches = async () => {
     setIsLoading(true);
@@ -215,7 +217,7 @@ export const DonorImportHistory: React.FC = () => {
                         বিস্তারিত
                       </button>
 
-                      {isSuperAdminOrAdmin && b.status !== 'rolled_back' && (
+                      {canManageImport && b.status !== 'rolled_back' && (
                         <button
                           type="button"
                           onClick={() => setRollbackTarget(b)}
