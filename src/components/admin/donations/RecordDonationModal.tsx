@@ -79,12 +79,17 @@ export const RecordDonationModal: React.FC<RecordDonationModalProps> = ({
   const matchingDonors = donors
     .filter((d) => {
       if (!donorSearchTerm.trim()) return true;
-      const q = donorSearchTerm.toLowerCase();
+      const q = donorSearchTerm.toLowerCase().trim();
+      const qGroup = q.replace(/\s+/g, '+').toUpperCase();
+      const matchesBloodGroup = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].includes(qGroup)
+        ? d.bloodGroup.toUpperCase() === qGroup
+        : false;
+
       return (
         d.fullName.toLowerCase().includes(q) ||
         d.donorId.toLowerCase().includes(q) ||
         d.phone.includes(q) ||
-        d.bloodGroup.toLowerCase().includes(q)
+        matchesBloodGroup
       );
     })
     .slice(0, 8);

@@ -22,7 +22,11 @@ export const FindBloodPage: React.FC = () => {
   const { donors } = useData();
 
   // Filters state from URL or default
-  const [bloodGroup, setBloodGroup] = useState<string>(searchParams.get('group') || '');
+  const [bloodGroup, setBloodGroup] = useState<string>(() => {
+    const raw = searchParams.get('group');
+    const clean = raw ? raw.trim().replace(/\s+/g, '+').toUpperCase() : '';
+    return BLOOD_GROUPS.includes(clean as BloodGroup) ? clean : '';
+  });
   const [division, setDivision] = useState<string>(searchParams.get('division') || '');
   const [district, setDistrict] = useState<string>(searchParams.get('district') || '');
   const [upazila, setUpazila] = useState<string>(searchParams.get('upazila') || '');
@@ -50,12 +54,18 @@ export const FindBloodPage: React.FC = () => {
 
   // Keep state synchronized with incoming query parameters
   useEffect(() => {
-    const groupParam = searchParams.get('group');
+    const rawGroup = searchParams.get('group');
+    const cleanGroup = rawGroup ? rawGroup.trim().replace(/\s+/g, '+').toUpperCase() : '';
     const distParam = searchParams.get('district');
     const upaParam = searchParams.get('upazila');
     const divParam = searchParams.get('division');
 
-    if (groupParam !== null) setBloodGroup(groupParam);
+    if (cleanGroup && BLOOD_GROUPS.includes(cleanGroup as BloodGroup)) {
+      setBloodGroup(cleanGroup);
+    } else if (rawGroup === '' || rawGroup === null) {
+      setBloodGroup('');
+    }
+
     if (distParam !== null) {
       setDistrict(distParam);
       if (!divParam) {
@@ -71,9 +81,10 @@ export const FindBloodPage: React.FC = () => {
   const handleGroupSelect = (group: string) => {
     const next = group === bloodGroup ? '' : group;
     setBloodGroup(next);
-    if (next) searchParams.set('group', next);
-    else searchParams.delete('group');
-    setSearchParams(searchParams);
+    const nextParams = new URLSearchParams(searchParams);
+    if (next) nextParams.set('group', next);
+    else nextParams.delete('group');
+    setSearchParams(nextParams);
   };
 
   const availableDistricts = useMemo(() => {
@@ -85,19 +96,28 @@ export const FindBloodPage: React.FC = () => {
   }, [district]);
 
   const filteredDonors = useMemo(() => {
+    const cleanFilterGroup = bloodGroup.trim().toUpperCase();
+
     return donors.filter((d) => {
-      if (bloodGroup && d.bloodGroup !== bloodGroup) return false;
+      const donorGroup = (d.bloodGroup || '').trim().toUpperCase();
+      if (cleanFilterGroup && donorGroup !== cleanFilterGroup) return false;
       if (district && !isDistrictMatch(d.district, district)) return false;
       if (upazila && !isUpazilaMatch(d.upazila, upazila)) return false;
       if (availableOnly && !d.availability) return false;
       if (verifiedOnly && d.verificationStatus !== 'verified') return false;
       if (emergencyOnly && !d.emergencyAvailable) return false;
       if (searchTerm) {
-        const term = searchTerm.toLowerCase();
+        const term = searchTerm.toLowerCase().trim();
         const matchesName = d.fullName.toLowerCase().includes(term);
         const matchesArea = d.area.toLowerCase().includes(term);
         const matchesDonorId = d.donorId.toLowerCase().includes(term);
-        if (!matchesName && !matchesArea && !matchesDonorId) return false;
+        // Clean exact blood group match so 'A+' doesn't match 'AB+' in search box
+        const termGroup = term.replace(/\s+/g, '+').toUpperCase();
+        const matchesBloodGroup = BLOOD_GROUPS.includes(termGroup as BloodGroup)
+          ? donorGroup === termGroup
+          : false;
+
+        if (!matchesName && !matchesArea && !matchesDonorId && !matchesBloodGroup) return false;
       }
       return true;
     });

@@ -504,13 +504,18 @@ export const AdminDonorsTab: React.FC = () => {
     if (emergencyFilter === 'emergency_only' && !d.emergencyAvailable) return false;
 
     if (donorSearch) {
-      const q = donorSearch.toLowerCase();
+      const q = donorSearch.toLowerCase().trim();
+      const qGroup = q.replace(/\s+/g, '+').toUpperCase();
+      const matchesBloodGroup = bloodGroups.includes(qGroup as BloodGroup)
+        ? d.bloodGroup.toUpperCase() === qGroup
+        : false;
+
       return (
         d.fullName.toLowerCase().includes(q) ||
         d.donorId.toLowerCase().includes(q) ||
         d.phone.includes(q) ||
         d.area.toLowerCase().includes(q) ||
-        d.bloodGroup.toLowerCase().includes(q)
+        matchesBloodGroup
       );
     }
     return true;

@@ -15,6 +15,7 @@ import {
   BellRing,
   ExternalLink,
   X,
+  Info,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -70,7 +71,7 @@ export const RequestBloodPage: React.FC = () => {
   const exactNearbyDonors = useMemo(() => {
     return donors.filter((d) => {
       if (!d.availability) return false;
-      if (d.bloodGroup !== bloodGroup) return false;
+      if (d.bloodGroup.trim().toUpperCase() !== bloodGroup.trim().toUpperCase()) return false;
 
       const sameDist = isDistrictMatch(d.district, district);
       const sameUpa = isUpazilaMatch(d.upazila, upazila);
@@ -87,10 +88,12 @@ export const RequestBloodPage: React.FC = () => {
     });
   }, [donors, bloodGroup, district, upazila, notifyDistrictDonors, notifyUpazilaDonors]);
 
-  // 2. Array of ready nearby compatible donors (medically compatible alternative groups)
-  const compatibleNearbyDonors = useMemo(() => {
+  // 2. Array of ready nearby alternative compatible donors (strictly EXCLUDING exact requested group)
+  const alternativeNearbyDonors = useMemo(() => {
     return donors.filter((d) => {
       if (!d.availability) return false;
+      // Strictly alternative groups only, never mix with exact group
+      if (d.bloodGroup.trim().toUpperCase() === bloodGroup.trim().toUpperCase()) return false;
       if (!isBloodCompatible(bloodGroup, d.bloodGroup)) return false;
 
       const sameDist = isDistrictMatch(d.district, district);
@@ -109,8 +112,8 @@ export const RequestBloodPage: React.FC = () => {
   }, [donors, bloodGroup, district, upazila, notifyDistrictDonors, notifyUpazilaDonors]);
 
   const exactNearbyDonorsCount = exactNearbyDonors.length;
-  const compatibleNearbyDonorsCount = compatibleNearbyDonors.length;
-  const displayedModalDonors = modalViewType === 'exact' ? exactNearbyDonors : compatibleNearbyDonors;
+  const alternativeNearbyDonorsCount = alternativeNearbyDonors.length;
+  const displayedModalDonors = modalViewType === 'exact' ? exactNearbyDonors : alternativeNearbyDonors;
 
   // Generate direct search URLs for FindBloodPage
   const exactDonorsListUrl = useMemo(() => {
@@ -636,7 +639,7 @@ export const RequestBloodPage: React.FC = () => {
                           <ExternalLink className="w-3 h-3 text-red-600 group-hover:scale-110 transition-transform" />
                         </button>{' '}
                         প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন
-                        {compatibleNearbyDonorsCount > exactNearbyDonorsCount && (
+                        {alternativeNearbyDonorsCount > 0 && (
                           <span className="text-slate-600 font-normal">
                             {' '}(এবং জরুরি প্রয়োজনে বিকল্প সামঞ্জস্যপূর্ণ গ্রুপের আরও{' '}
                             <button
@@ -648,7 +651,7 @@ export const RequestBloodPage: React.FC = () => {
                               title="এলাকার বিকল্প সামঞ্জস্যপূর্ণ রক্তদাতাদের তালিকা দেখুন"
                               className="inline-flex items-center gap-0.5 text-slate-800 hover:text-red-700 font-mono text-xs font-semibold underline decoration-slate-400 underline-offset-2 hover:bg-red-100/60 px-1 py-0.2 rounded transition-all cursor-pointer"
                             >
-                              <span>{compatibleNearbyDonorsCount - exactNearbyDonorsCount} জন</span>
+                              <span>{alternativeNearbyDonorsCount} জন</span>
                               <ExternalLink className="w-2.5 h-2.5 opacity-70" />
                             </button>{' '}
                             সক্রিয়)
@@ -656,7 +659,7 @@ export const RequestBloodPage: React.FC = () => {
                         )}
                         ।
                       </>
-                    ) : compatibleNearbyDonorsCount > 0 ? (
+                    ) : alternativeNearbyDonorsCount > 0 ? (
                       <>
                         নির্বাচিত এলাকায় সরাসরি <strong>{bloodGroup}</strong> গ্রুপের কোনো রক্তদাতা এই মুহূর্তে না থাকলেও জরুরি প্রয়োজনে বিকল্প সামঞ্জস্যপূর্ণ গ্রুপের প্রায়{' '}
                         <button
@@ -668,7 +671,7 @@ export const RequestBloodPage: React.FC = () => {
                           title="এলাকার প্রস্তুত রক্তদাতাদের তালিকা দেখুন"
                           className="inline-flex items-center gap-1 text-red-700 hover:text-red-900 font-mono text-xs font-bold underline decoration-red-400 decoration-2 underline-offset-3 hover:bg-red-100/90 px-1.5 py-0.5 rounded transition-all cursor-pointer group shadow-2xs border border-red-200/70"
                         >
-                          <span>{compatibleNearbyDonorsCount} জন</span>
+                          <span>{alternativeNearbyDonorsCount} জন</span>
                           <ExternalLink className="w-3 h-3 text-red-600 group-hover:scale-110 transition-transform" />
                         </button>{' '}
                         প্রস্তুত রক্তদাতা সক্রিয় রয়েছেন।
@@ -681,7 +684,7 @@ export const RequestBloodPage: React.FC = () => {
                   </div>
                 </div>
 
-                {(exactNearbyDonorsCount > 0 || compatibleNearbyDonorsCount > 0) && (
+                {(exactNearbyDonorsCount > 0 || alternativeNearbyDonorsCount > 0) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -757,17 +760,17 @@ export const RequestBloodPage: React.FC = () => {
                   >
                     কাঙ্ক্ষিত {bloodGroup} ডোনার ({exactNearbyDonorsCount} জন)
                   </button>
-                  {compatibleNearbyDonorsCount > exactNearbyDonorsCount && (
+                  {alternativeNearbyDonorsCount > 0 && (
                     <button
                       type="button"
                       onClick={() => setModalViewType('compatible')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         modalViewType === 'compatible'
-                          ? 'bg-red-600 text-white shadow-xs'
+                          ? 'bg-indigo-600 text-white shadow-xs'
                           : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                       }`}
                     >
-                      বিকল্প সামঞ্জস্যপূর্ণ ডোনার ({compatibleNearbyDonorsCount} জন)
+                      বিকল্প সামঞ্জস্যপূর্ণ ডোনার ({alternativeNearbyDonorsCount} জন)
                     </button>
                   )}
                 </div>
@@ -785,6 +788,26 @@ export const RequestBloodPage: React.FC = () => {
 
             {/* Modal Body: Donors Grid */}
             <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-50/50">
+              {/* Medical Compatibility Clarification Banner */}
+              {modalViewType === 'compatible' && (
+                <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-950 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold block text-blue-900">
+                      {bloodGroup === 'AB+'
+                        ? 'চিকিৎসাগত সামঞ্জস্যতা তথ্য: AB+ রোগী হলো সার্বজনীন গ্রহীতা (Universal Recipient)'
+                        : `চিকিৎসাগত সামঞ্জস্যতা তথ্য: ${bloodGroup} রোগীর বিকল্প গ্রুপের ডোনার`}
+                    </span>
+                    <p className="text-[11px] text-blue-800 leading-relaxed">
+                      {bloodGroup === 'AB+'
+                        ? 'রক্তবিজ্ঞানের নিয়ম অনুযায়ী AB+ রোগী জরুরি প্রয়োজনে A+, B+, O+, AB+ যেকোনো গ্রুপের রক্ত নিরাপদে গ্রহণ করতে পারেন। কাঙ্ক্ষিত AB+ রক্তের ঘাটতি থাকলে নিচে তালিকাভুক্ত সামঞ্জস্যপূর্ণ রক্তদাতাদের সাথে যোগাযোগ করা যেতে পারে।'
+                        : `কাঙ্ক্ষিত ${bloodGroup} রক্ত সময়মতো না পাওয়া গেলে চিকিৎসকের পরামর্শ ও ক্রস-ম্যাচিং সাপেক্ষে সামঞ্জস্যপূর্ণ বিকল্প গ্রুপের রক্ত গ্রহণ করা যায়।`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+
               {displayedModalDonors.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                   {displayedModalDonors.map((donor) => (
