@@ -3,6 +3,7 @@ import type { SystemConfig, SystemConfigSection } from '../types/config';
 import {
   DEFAULT_SYSTEM_CONFIG,
   getAllConfig,
+  getCachedSystemConfigSync,
   updateConfig as updateConfigService,
   migrateLegacySettings,
 } from '../services/configService';
@@ -23,7 +24,7 @@ const SystemConfigContext = createContext<SystemConfigContextType | undefined>(u
 
 export const SystemConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
-  const [config, setConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
+  const [config, setConfig] = useState<SystemConfig>(() => getCachedSystemConfigSync());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 

@@ -43,7 +43,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('roktobondon_current_user');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (!isDemoMode && parsed && typeof parsed === 'object') {
+        const demoUserIds = ['user-superadmin', 'user-mod-dhm', 'user-donor-me', 'user-recipient-me'];
+        if (demoUserIds.includes(parsed.id) || (typeof parsed.id === 'string' && parsed.id.startsWith('user-demo'))) {
+          localStorage.removeItem('roktobondon_current_user');
+          return null;
+        }
+      }
+      return parsed;
     } catch {
       return null;
     }

@@ -333,6 +333,47 @@ export async function getConfig<K extends SystemConfigSection>(
 }
 
 /**
+ * Synchronously reads cached configuration sections from localStorage.
+ * Used for instant first paint without any layout shifts or default data flash.
+ */
+export function getCachedSystemConfigSync(): SystemConfig {
+  const sections: SystemConfigSection[] = [
+    'organization',
+    'branding',
+    'website',
+    'seo',
+    'gamification',
+    'pwa',
+    'bloodSystem',
+    'matching',
+    'donorEligibility',
+    'bloodRequests',
+    'emergency',
+    'notifications',
+    'privacy',
+    'maintenance',
+    'security',
+  ];
+
+  let resolvedConfig: SystemConfig = { ...DEFAULT_SYSTEM_CONFIG };
+
+  try {
+    for (const section of sections) {
+      const key = `${CONFIG_STORAGE_PREFIX}${section}`;
+      const saved = safeStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        resolvedConfig[section] = { ...DEFAULT_SYSTEM_CONFIG[section], ...parsed };
+      }
+    }
+  } catch (err) {
+    console.warn('[ConfigService] Error reading cached config synchronously:', err);
+  }
+
+  return resolvedConfig;
+}
+
+/**
  * Get the full system configuration object with all sections resolved.
  * Fetches from Supabase system_config table when available, falling back to local cache & defaults.
  */

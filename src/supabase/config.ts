@@ -9,6 +9,9 @@ type RuntimeEnv = {
 };
 
 export function resolveDemoMode(env: RuntimeEnv = {}): boolean {
+  if (env.VITE_DEMO_MODE === 'false') {
+    return false;
+  }
   if (env.VITE_DEMO_MODE === 'true') {
     return true;
   }

@@ -35,7 +35,7 @@ jobs:
 
       - name: Build Application with Environment Variables
         env:
-          VITE_DEMO_MODE: ${{ secrets.VITE_DEMO_MODE || 'true' }}
+          VITE_DEMO_MODE: ${{ secrets.VITE_DEMO_MODE || 'false' }}
           VITE_BASE_PATH: ${{ secrets.VITE_BASE_PATH || '/roktobondhon/' }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
