@@ -12,6 +12,18 @@ export const LoginPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading, loginWithEmail, switchDemoRole, isDemoMode } = useAuth();
   const { config } = useOrgConfig();
 
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
+  const [forgotStatus, setForgotStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   // If already logged in, immediately redirect away from /login
   if (currentUser) {
     const redirectParam = searchParams.get('redirect');
@@ -32,18 +44,6 @@ export const LoginPage: React.FC = () => {
       </div>
     );
   }
-
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // Forgot Password Modal State
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [isForgotLoading, setIsForgotLoading] = useState(false);
-  const [forgotStatus, setForgotStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -109,50 +109,19 @@ export const ProfilePage: React.FC = () => {
 
   const hasCachedSession = Boolean(localStorage.getItem('roktobondon_current_user'));
 
-  if (!currentUser) {
-    if (hasCachedSession) {
-      return (
-        <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
-          <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
-          <span>প্রোফাইল লোড হচ্ছে...</span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
-        <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-200">
-          <UserIcon className="w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900">
-          প্রোফাইল দেখতে প্রথমে লগইন করুন
-        </h2>
-        <p className="text-xs text-slate-500">
-          রক্তদাতা প্রোফাইল ব্যবস্থাপনা এবং স্বাস্থ্য তথ্য দেখতে লগইন আবশ্যক
-        </p>
-        <Link
-          to="/login"
-          className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold inline-block border border-red-700/60 shadow-xs"
-        >
-          লগইন পাতায় যান
-        </Link>
-      </div>
-    );
-  }
-
   // Find linked donor record if any
-  const myDonor = donors.find((d) => d.userId === currentUser.id || (d.email && currentUser.email && d.email.toLowerCase() === currentUser.email.toLowerCase()) || d.phone === currentUser.phone);
+  const myDonor = currentUser ? donors.find((d) => d.userId === currentUser.id || (d.email && currentUser.email && d.email.toLowerCase() === currentUser.email.toLowerCase()) || d.phone === currentUser.phone) : undefined;
   // User's blood requests
-  const myRequests = bloodRequests.filter((r) => r.userId === currentUser.id);
+  const myRequests = currentUser ? bloodRequests.filter((r) => r.userId === currentUser.id) : [];
   // User's donations
-  const myDonations = donations.filter(
+  const myDonations = currentUser ? donations.filter(
     (d) => d.donorUserId === currentUser.id || (myDonor && d.donorId === myDonor.donorId)
-  );
+  ) : [];
 
   // User's self-reported donation submissions
-  const mySubmissions = donationSubmissions.filter(
+  const mySubmissions = currentUser ? donationSubmissions.filter(
     (s) => s.donorUserId === currentUser.id || (myDonor && s.donorId === myDonor.donorId)
-  );
+  ) : [];
   const pendingSubmissions = mySubmissions.filter(
     (s) => s.status === 'pending' || s.status === 'needs_info'
   );
@@ -222,6 +191,7 @@ export const ProfilePage: React.FC = () => {
 
   // Profile completion percentage calculation
   const profileCompleteness = useMemo(() => {
+    if (!currentUser) return 0;
     let score = 0;
     if (currentUser.fullName) score += 15;
     if (currentUser.phone) score += 15;
@@ -232,6 +202,37 @@ export const ProfilePage: React.FC = () => {
     if (myDonor?.dateOfBirth) score += 15;
     return Math.min(score, 100);
   }, [currentUser, myDonor]);
+
+  if (!currentUser) {
+    if (hasCachedSession) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+          <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+          <span>প্রোফাইল লোড হচ্ছে...</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-200">
+          <UserIcon className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">
+          প্রোফাইল দেখতে প্রথমে লগইন করুন
+        </h2>
+        <p className="text-xs text-slate-500">
+          রক্তদাতা প্রোফাইল ব্যবস্থাপনা এবং স্বাস্থ্য তথ্য দেখতে লগইন আবশ্যক
+        </p>
+        <Link
+          to="/login"
+          className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold inline-block border border-red-700/60 shadow-xs"
+        >
+          লগইন পাতায় যান
+        </Link>
+      </div>
+    );
+  }
 
   const handleCopyDonorId = () => {
     if (myDonor?.donorId) {
