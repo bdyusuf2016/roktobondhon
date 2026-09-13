@@ -497,18 +497,6 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
             />
           </div>
         </div>
-
-        {/* Mobile Inline Submit Button */}
-        <div className="pt-2 sm:hidden">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-2.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md shadow-red-600/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>{isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদাতা অনবোর্ড সম্পন্ন করুন'}</span>
-          </button>
-        </div>
       </form>
     </BaseModal>
   );
