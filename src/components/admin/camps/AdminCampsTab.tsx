@@ -29,6 +29,7 @@ import {
 } from '../../../services/campService';
 import { convertCollectionToCsv, downloadFile } from '../../../services/backupService';
 import type { BloodCamp } from '../../../types';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 export const AdminCampsTab: React.FC = () => {
   const { bloodCamps, addBloodCamp, updateBloodCamp, deleteBloodCamp, addAuditLog } = useData();
@@ -314,27 +315,27 @@ export const AdminCampsTab: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-slate-100">
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">সর্বমোট ক্যাম্প</p>
-            <p className="text-base font-extrabold text-slate-900 mt-0.5">{metrics.totalCamps}</p>
+            <p className="text-base font-extrabold text-slate-900 mt-0.5">{toBengaliNumber(metrics.totalCamps)}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">আসন্ন ক্যাম্প</p>
-            <p className="text-base font-extrabold text-blue-600 mt-0.5">{metrics.upcomingCamps}</p>
+            <p className="text-base font-extrabold text-blue-600 mt-0.5">{toBengaliNumber(metrics.upcomingCamps)}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">চলমান ক্যাম্প</p>
-            <p className="text-base font-extrabold text-emerald-600 mt-0.5">{metrics.ongoingCamps}</p>
+            <p className="text-base font-extrabold text-emerald-600 mt-0.5">{toBengaliNumber(metrics.ongoingCamps)}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">লক্ষ্যমাত্রা (ব্যাগ)</p>
-            <p className="text-base font-extrabold text-amber-600 mt-0.5">{metrics.totalTargetUnits}</p>
+            <p className="text-base font-extrabold text-amber-600 mt-0.5">{toBengaliNumber(metrics.totalTargetUnits)}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">সংগৃহীত রক্ত (ব্যাগ)</p>
-            <p className="text-base font-extrabold text-red-600 mt-0.5">{metrics.totalCollectedUnits}</p>
+            <p className="text-base font-extrabold text-red-600 mt-0.5">{toBengaliNumber(metrics.totalCollectedUnits)}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium">মোট ডোনার রেজিস্ট্রেশন</p>
-            <p className="text-base font-extrabold text-purple-600 mt-0.5">{metrics.totalRegistrations}</p>
+            <p className="text-base font-extrabold text-purple-600 mt-0.5">{toBengaliNumber(metrics.totalRegistrations)}</p>
           </div>
         </div>
       </div>

@@ -23,6 +23,7 @@ import { useDialog } from '../../../contexts/DialogContext';
 import { EmergencyBroadcastModal } from '../../EmergencyBroadcastModal';
 import { EmergencyControlSettings } from './EmergencyControlSettings';
 import type { BloodRequest } from '../../../types';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 export const EmergencyControlTab: React.FC = () => {
   const { bloodRequests, donors, verifyBloodRequest } = useData();
@@ -134,7 +135,7 @@ export const EmergencyControlTab: React.FC = () => {
           }`}
         >
           <Activity className="w-3.5 h-3.5" />
-          <span>লাইভ ক্রাইসিস বোর্ড ({emergencyRequests.length})</span>
+          <span>লাইভ ক্রাইসিস বোর্ড ({toBengaliNumber(emergencyRequests.length)})</span>
         </button>
 
         <button
@@ -164,7 +165,7 @@ export const EmergencyControlTab: React.FC = () => {
                 <span className="text-xs text-red-700 font-bold">সক্রিয় জরুরি আবেদন</span>
                 <Flame className="w-4 h-4 text-red-600 fill-red-600" />
               </div>
-              <div className="text-2xl font-black text-red-800">{emergencyRequests.length} টি</div>
+              <div className="text-2xl font-black text-red-800">{toBengaliNumber(emergencyRequests.length)} টি</div>
               <span className="text-[11px] text-red-600">ক্রিটিক্যাল ও আর্জেন্ট ক্যাটাগরি</span>
             </div>
 
@@ -173,7 +174,7 @@ export const EmergencyControlTab: React.FC = () => {
                 <span className="text-xs text-emerald-700 font-bold">জরুরি প্রস্তুত রক্তদাতা</span>
                 <Users className="w-4 h-4 text-emerald-600" />
               </div>
-              <div className="text-2xl font-black text-emerald-800">{emergencyDonorsCount} জন</div>
+              <div className="text-2xl font-black text-emerald-800">{toBengaliNumber(emergencyDonorsCount)} জন</div>
               <span className="text-[11px] text-emerald-600">অন-কল রেডিনেসে থাকা রক্তদাতা</span>
             </div>
 
@@ -182,7 +183,7 @@ export const EmergencyControlTab: React.FC = () => {
                 <span className="text-xs text-indigo-700 font-bold">ব্রডকাস্ট পেরিমিটার রেডিয়াস</span>
                 <Radio className="w-4 h-4 text-indigo-600" />
               </div>
-              <div className="text-2xl font-black text-indigo-800">{emergencyConfig?.broadcastRadiusKm || 50} কিমি</div>
+              <div className="text-2xl font-black text-indigo-800">{toBengaliNumber(emergencyConfig?.broadcastRadiusKm || 50)} কিমি</div>
               <span className="text-[11px] text-indigo-600">ধামরাই, সাভার ও মানিকগঞ্জ জোন</span>
             </div>
           </div>

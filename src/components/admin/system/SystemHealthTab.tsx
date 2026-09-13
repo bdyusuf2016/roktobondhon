@@ -24,6 +24,7 @@ import { useData } from '../../../contexts/DataContext';
 import { useSystemConfig } from '../../../contexts/SystemConfigContext';
 import { supabase, isSupabaseConfigured, isDemoMode } from '../../../supabase/config';
 import { usePWA } from '../../../hooks/usePWA';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 interface HealthCheckResult {
   id: string;
@@ -285,9 +286,9 @@ export const SystemHealthTab: React.FC = () => {
               <Heart className="w-4 h-4" />
             </span>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{pendingRequestsCount}</p>
+          <p className="text-2xl font-black text-slate-900 mt-2">{toBengaliNumber(pendingRequestsCount)}</p>
           <span className="text-[11px] text-red-600 font-semibold block mt-0.5">
-            {criticalRequestsCount} টি ক্রিটিক্যাল জরুরি
+            {toBengaliNumber(criticalRequestsCount)} টি ক্রিটিক্যাল জরুরি
           </span>
         </div>
 
@@ -298,9 +299,9 @@ export const SystemHealthTab: React.FC = () => {
               <Users className="w-4 h-4" />
             </span>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{unverifiedDonorsCount}</p>
+          <p className="text-2xl font-black text-slate-900 mt-2">{toBengaliNumber(unverifiedDonorsCount)}</p>
           <span className="text-[11px] text-slate-500 block mt-0.5">
-            {donors.length} জন মোট ডোনারের মধ্যে
+            {toBengaliNumber(donors.length)} জন মোট ডোনারের মধ্যে
           </span>
         </div>
 
@@ -312,10 +313,10 @@ export const SystemHealthTab: React.FC = () => {
             </span>
           </div>
           <p className="text-2xl font-black text-slate-900 mt-2">
-            {storageUsage.used > 0 ? `${storageUsage.used} MB` : 'স্বাভাবিক'}
+            {storageUsage.used > 0 ? `${toBengaliNumber(storageUsage.used)} MB` : 'স্বাভাবিক'}
           </p>
           <span className="text-[11px] text-slate-500 block mt-0.5">
-            {storageUsage.quota > 0 ? `মোট কোটা ${storageUsage.quota} MB` : 'ক্যাশে স্টোরেজ সচল'}
+            {storageUsage.quota > 0 ? `মোট কোটা ${toBengaliNumber(storageUsage.quota)} MB` : 'ক্যাশে স্টোরেজ সচল'}
           </span>
         </div>
 
@@ -326,7 +327,7 @@ export const SystemHealthTab: React.FC = () => {
               <ShieldCheck className="w-4 h-4" />
             </span>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-2">{auditLogs.length}</p>
+          <p className="text-2xl font-black text-slate-900 mt-2">{toBengaliNumber(auditLogs.length)}</p>
           <span className="text-[11px] text-emerald-700 font-semibold block mt-0.5">
             ইমিউটেবল ট্রেইল সুরক্ষিত
           </span>

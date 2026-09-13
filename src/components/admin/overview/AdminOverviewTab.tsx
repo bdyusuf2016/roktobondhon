@@ -20,6 +20,7 @@ import {
 import { useData } from '../../../contexts/DataContext';
 import type { BloodGroup, Donor, BloodRequest, Donation } from '../../../types';
 import type { AdminTabKey } from '../AdminSidebar';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 interface AdminOverviewTabProps {
   onNavigateToTab?: (tab: AdminTabKey) => void;
@@ -291,7 +292,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
 
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight">
-                    {kpi.value}
+                    {toBengaliNumber(kpi.value)}
                   </span>
                 </div>
               </div>
@@ -327,7 +328,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
               <span>রক্তের গ্রুপ অনুযায়ী ডোনার ফিল্টার</span>
             </h2>
             <span className="text-xs font-mono font-bold text-slate-500">
-              মোট: {totalDonors} জন
+              মোট: {toBengaliNumber(totalDonors)} জন
             </span>
           </div>
 
@@ -362,7 +363,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
                     {group}
                   </span>
                   <span className="text-xs font-bold text-slate-900 block mt-0.5 font-mono">
-                    {count} জন
+                    {toBengaliNumber(count)} জন
                   </span>
                   <div className="mt-1.5 w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden">
                     <div
@@ -371,7 +372,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
                     />
                   </div>
                   <span className="text-[10px] text-slate-500 font-mono block mt-1">
-                    {isCurrentActive ? 'সক্রিয়' : `${percent}%`}
+                    {isCurrentActive ? 'সক্রিয়' : `${toBengaliNumber(percent)}%`}
                   </span>
                 </button>
               );
@@ -389,7 +390,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
               <span>শাখা ও আঞ্চলিক ডোনার ফিল্টার</span>
             </h2>
             <span className="text-xs font-semibold text-slate-500">
-              {branches.length}টি সক্রিয় শাখা
+              {toBengaliNumber(branches.length)}টি সক্রিয় শাখা
             </span>
           </div>
 
@@ -437,7 +438,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
                       </span>
                     </div>
                     <span className="font-mono font-bold text-slate-700">
-                      {branchDonors} জন <span className="text-slate-400 font-normal">({pct}%)</span>
+                      {toBengaliNumber(branchDonors)} জন <span className="text-slate-400 font-normal">({toBengaliNumber(pct)}%)</span>
                     </span>
                   </div>
                   <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60 mt-1.5">
@@ -489,10 +490,10 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
               {/* Count Pill */}
               <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-slate-100 text-slate-800 border border-slate-200">
                 {activeFilter.type === 'requests_active' || activeFilter.type === 'requests_critical'
-                  ? `${filteredRequests.length}টি আবেদন`
+                  ? `${toBengaliNumber(filteredRequests.length)}টি আবেদন`
                   : activeFilter.type === 'donations_all'
-                  ? `${filteredDonations.length}টি রক্তদান`
-                  : `${filteredDonors.length} জন ডোনার`}
+                  ? `${toBengaliNumber(filteredDonations.length)}টি রক্তদান`
+                  : `${toBengaliNumber(filteredDonors.length)} জন ডোনার`}
               </span>
 
               {/* Jump to Full Module */}
@@ -646,7 +647,7 @@ export const AdminOverviewTab: React.FC<AdminOverviewTabProps> = ({ onNavigateTo
                           )}
                         </td>
                         <td className="py-2.5 px-3 font-mono font-semibold text-slate-700">
-                          {r.requiredUnits} ব্যাগ
+                          {toBengaliNumber(r.requiredUnits)} ব্যাগ
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           <span

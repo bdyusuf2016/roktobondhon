@@ -28,6 +28,7 @@ import { RecordDonationModal } from './RecordDonationModal';
 import { DonationReportsTab } from './DonationReportsTab';
 import { getDonationReports } from '../../../services/donationService';
 import type { BloodGroup, DonationType, Donation } from '../../../types';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 export const AdminDonationsTab: React.FC = () => {
   const { donations, donors, donationSubmissions, deleteDonation, updateDonation, hasPermission } = useData();
@@ -211,7 +212,7 @@ export const AdminDonationsTab: React.FC = () => {
           <span>ডোনারদের রক্তদান রিপোর্ট</span>
           {pendingSubmissionsCount > 0 && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse">
-              {pendingSubmissionsCount} নতুন
+              {toBengaliNumber(pendingSubmissionsCount)} নতুন
             </span>
           )}
         </button>
@@ -226,28 +227,28 @@ export const AdminDonationsTab: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">মোট ডিজিটাল রক্তদান</span>
           <span className="text-2xl font-black text-slate-900 block mt-1 tracking-tight font-mono">
-            {reports.totalDonations} টি
+            {toBengaliNumber(reports.totalDonations)} টি
           </span>
           <span className="text-[10px] text-slate-500">ডাটাবেজে সংরক্ষিত রেকর্ড</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">মোট সরবরাহকৃত রক্ত</span>
           <span className="text-2xl font-black text-red-600 block mt-1 tracking-tight font-mono">
-            {reports.totalUnits} ব্যাগ
+            {toBengaliNumber(reports.totalUnits)} ব্যাগ
           </span>
           <span className="text-[10px] text-slate-500">সংগৃহীত রক্তের ব্যাগ</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">চলতি মাসে রক্তদান</span>
           <span className="text-2xl font-black text-blue-600 block mt-1 tracking-tight font-mono">
-            {reports.thisMonthCount} টি
+            {toBengaliNumber(reports.thisMonthCount)} টি
           </span>
           <span className="text-[10px] text-slate-500">এই মাসের সফল ইভেন্ট</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">আজকের রক্তদান</span>
           <span className="text-2xl font-black text-emerald-600 block mt-1 tracking-tight font-mono">
-            {reports.todayCount} টি
+            {toBengaliNumber(reports.todayCount)} টি
           </span>
           <span className="text-[10px] text-slate-500">আজকে সংরক্ষিত রেকর্ড</span>
         </div>
@@ -275,7 +276,7 @@ export const AdminDonationsTab: React.FC = () => {
             >
               <div className="text-[11px] font-black text-red-700">{grp}</div>
               <div className="text-sm font-black text-slate-900 font-mono">
-                {reports.byBloodGroup[grp] || 0}
+                {toBengaliNumber(reports.byBloodGroup[grp] || 0)}
               </div>
             </div>
           ))}

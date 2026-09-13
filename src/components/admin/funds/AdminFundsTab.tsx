@@ -21,6 +21,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useDialog } from '../../../contexts/DialogContext';
 import { PaymentMethodModal } from '../../modals';
 import type { PaymentMethodConfig, DonationCauseConfig } from '../../../types';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 export const AdminFundsTab: React.FC = () => {
   const {
@@ -177,28 +178,28 @@ export const AdminFundsTab: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">মোট অনুদান প্রাপ্তি</span>
           <span className="text-2xl font-black text-slate-900 block mt-1 tracking-tight font-mono">
-            ৳ {totalVerifiedFunds.toLocaleString()}
+            ৳ {toBengaliNumber(totalVerifiedFunds.toLocaleString())}
           </span>
           <span className="text-[10px] text-emerald-600 font-semibold">যাচাইকৃত ডোনেশন</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">রোগী সহায়তা ব্যয়</span>
           <span className="text-2xl font-black text-red-600 block mt-1 tracking-tight font-mono">
-            ৳ {totalDisbursedFunds.toLocaleString()}
+            ৳ {toBengaliNumber(totalDisbursedFunds.toLocaleString())}
           </span>
-          <span className="text-[10px] text-slate-500 font-semibold">{fundDisbursements.length}টি কার্যক্রমে প্রদান</span>
+          <span className="text-[10px] text-slate-500 font-semibold">{toBengaliNumber(fundDisbursements.length)}টি কার্যক্রমে প্রদান</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">চলতি ফান্ড ব্যালেন্স</span>
           <span className={`text-2xl font-black block mt-1 tracking-tight font-mono ${netReserveBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            ৳ {netReserveBalance.toLocaleString()}
+            ৳ {toBengaliNumber(netReserveBalance.toLocaleString())}
           </span>
           <span className="text-[10px] text-slate-500 font-semibold">বর্তমান রিজার্ভ তহবিল</span>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">যাচাইকরণ বাকি</span>
           <span className="text-2xl font-black text-amber-600 block mt-1 tracking-tight font-mono">
-            {pendingVerificationsCount} টি
+            {toBengaliNumber(pendingVerificationsCount)} টি
           </span>
           <span className="text-[10px] text-amber-700 font-semibold">অনুমোদন প্রয়োজন</span>
         </div>
@@ -218,7 +219,7 @@ export const AdminFundsTab: React.FC = () => {
             }`}
           >
             <Heart className="w-4 h-4" />
-            প্রাপ্ত আর্থিক অনুদান ({fundDonations.length})
+            প্রাপ্ত আর্থিক অনুদান ({toBengaliNumber(fundDonations.length)})
           </button>
           <button
             type="button"
@@ -230,7 +231,7 @@ export const AdminFundsTab: React.FC = () => {
             }`}
           >
             <Receipt className="w-4 h-4" />
-            রোগী সহায়তা ও ব্যয় ভাউচার ({fundDisbursements.length})
+            রোগী সহায়তা ও ব্যয় ভাউচার ({toBengaliNumber(fundDisbursements.length)})
           </button>
           <button
             type="button"
@@ -242,7 +243,7 @@ export const AdminFundsTab: React.FC = () => {
             }`}
           >
             <CreditCard className="w-4 h-4" />
-            পেমেন্ট গেটওয়ে ও মেথডস ({paymentMethods.length})
+            পেমেন্ট গেটওয়ে ও মেথডস ({toBengaliNumber(paymentMethods.length)})
           </button>
           <button
             type="button"
@@ -254,7 +255,7 @@ export const AdminFundsTab: React.FC = () => {
             }`}
           >
             <Layers className="w-4 h-4" />
-            ডোনেশন খাত ও ক্যাম্পেইন ({donationCauses.length})
+            ডোনেশন খাত ও ক্যাম্পেইন ({toBengaliNumber(donationCauses.length)})
           </button>
         </div>
 

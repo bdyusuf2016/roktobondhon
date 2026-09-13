@@ -30,6 +30,7 @@ import {
   type BloodGroupSupplyDemand
 } from '../../../services/analyticsService';
 import type { BloodGroup } from '../../../types';
+import { toBengaliNumber } from '../../../utils/bengali';
 
 export const AdminAnalyticsTab: React.FC = () => {
   const {
@@ -248,17 +249,17 @@ export const AdminAnalyticsTab: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">রিকোয়েস্ট সমাধান হার</span>
           <span className="text-2xl font-black text-emerald-600 block mt-1 tracking-tight font-mono">
-            {fulfillmentMetrics.fulfillmentRate}%
+            {toBengaliNumber(fulfillmentMetrics.fulfillmentRate)}%
           </span>
           <span className="text-[10px] text-slate-500">
-            {fulfillmentMetrics.fulfilledRequests} / {fulfillmentMetrics.totalRequests} টি সম্পন্ন
+            {toBengaliNumber(fulfillmentMetrics.fulfilledRequests)} / {toBengaliNumber(fulfillmentMetrics.totalRequests)} টি সম্পন্ন
           </span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">জরুরি ক্রাইসিস সমাধান</span>
           <span className="text-2xl font-black text-red-600 block mt-1 tracking-tight font-mono">
-            {fulfillmentMetrics.emergencyFulfillmentRate}%
+            {toBengaliNumber(fulfillmentMetrics.emergencyFulfillmentRate)}%
           </span>
           <span className="text-[10px] text-slate-500">ক্রিটিক্যাল কেস সমাধান</span>
         </div>
@@ -266,7 +267,7 @@ export const AdminAnalyticsTab: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">রক্তদান সরবরাহ ভলিউম</span>
           <span className="text-2xl font-black text-purple-600 block mt-1 tracking-tight font-mono">
-            {filteredDonations.reduce((sum, d) => sum + d.units, 0)} ব্যাগ
+            {toBengaliNumber(filteredDonations.reduce((sum, d) => sum + d.units, 0))} ব্যাগ
           </span>
           <span className="text-[10px] text-slate-500">মোট সফল পরিসঞ্চালন</span>
         </div>
@@ -274,7 +275,7 @@ export const AdminAnalyticsTab: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs">
           <span className="text-xs text-slate-400 font-medium">চলতি রিজার্ভ তহবিল</span>
           <span className={`text-2xl font-black block mt-1 tracking-tight font-mono ${financialMetrics.netReserve >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            ৳ {financialMetrics.netReserve.toLocaleString()}
+            ৳ {toBengaliNumber(financialMetrics.netReserve.toLocaleString())}
           </span>
           <span className="text-[10px] text-slate-500">রোগী সহায়তা তহবিল উদ্বৃত্ত</span>
         </div>
@@ -314,15 +315,15 @@ export const AdminAnalyticsTab: React.FC = () => {
               <div className="mt-3 pt-2 border-t border-slate-200/80 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>সক্রিয় রক্তদাতা:</span>
-                  <strong className="font-mono text-emerald-700">{s.availableDonors} জন</strong>
+                  <strong className="font-mono text-emerald-700">{toBengaliNumber(s.availableDonors)} জন</strong>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>চাহিদা / আবেদন:</span>
-                  <strong className="font-mono text-red-700">{s.requestCount} টি</strong>
+                  <strong className="font-mono text-red-700">{toBengaliNumber(s.requestCount)} টি</strong>
                 </div>
                 <div className="flex justify-between text-slate-500 text-[11px] pt-1">
                   <span>অনুপাত সূচক:</span>
-                  <span className="font-mono font-bold text-slate-800">{s.ratio}x</span>
+                  <span className="font-mono font-bold text-slate-800">{toBengaliNumber(s.ratio)}x</span>
                 </div>
               </div>
             </div>
@@ -352,10 +353,10 @@ export const AdminAnalyticsTab: React.FC = () => {
                 {regionalAnalytics.map((reg) => (
                   <tr key={reg.regionName} className="hover:bg-slate-50/70">
                     <td className="py-2.5 px-2.5 font-semibold text-slate-900">{reg.regionName}</td>
-                    <td className="py-2.5 px-2.5 font-mono text-slate-700">{reg.donorCount} জন</td>
-                    <td className="py-2.5 px-2.5 font-mono text-slate-700">{reg.requestCount} টি</td>
+                    <td className="py-2.5 px-2.5 font-mono text-slate-700">{toBengaliNumber(reg.donorCount)} জন</td>
+                    <td className="py-2.5 px-2.5 font-mono text-slate-700">{toBengaliNumber(reg.requestCount)} টি</td>
                     <td className="py-2.5 px-2.5 text-right font-mono font-bold text-emerald-600">
-                      {reg.fulfillmentRate}%
+                      {toBengaliNumber(reg.fulfillmentRate)}%
                     </td>
                   </tr>
                 ))}
@@ -374,11 +375,11 @@ export const AdminAnalyticsTab: React.FC = () => {
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-600 font-semibold">মোট সংগ্রহ:</span>
-                <span className="font-mono font-bold text-emerald-700">৳ {financialMetrics.totalCollected.toLocaleString()}</span>
+                <span className="font-mono font-bold text-emerald-700">৳ {toBengaliNumber(financialMetrics.totalCollected.toLocaleString())}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-600 font-semibold">রোগী সহায়তা ব্যয়:</span>
-                <span className="font-mono font-bold text-red-700">৳ {financialMetrics.totalDisbursed.toLocaleString()}</span>
+                <span className="font-mono font-bold text-red-700">৳ {toBengaliNumber(financialMetrics.totalDisbursed.toLocaleString())}</span>
               </div>
               <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden flex">
                 <div
