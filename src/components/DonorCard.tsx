@@ -20,12 +20,14 @@ interface DonorCardProps {
   donor: Donor;
   matchScore?: number;
   onSendRequestSuccess?: () => void;
+  viewMode?: 'grid' | 'list';
 }
 
 export const DonorCard: React.FC<DonorCardProps> = ({
   donor,
   matchScore,
   onSendRequestSuccess,
+  viewMode = 'grid',
 }) => {
   const { currentUser } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +41,161 @@ export const DonorCard: React.FC<DonorCardProps> = ({
     currentUser?.role === 'super_admin' ||
     currentUser?.role === 'admin' ||
     currentUser?.role === 'moderator';
+
+  if (viewMode === 'list') {
+    return (
+      <>
+        <div className="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-slate-300 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-3.5 relative overflow-hidden group">
+          {/* Match score ribbon */}
+          {typeof matchScore === 'number' && (
+            <div className="absolute top-0 right-0 bg-slate-900 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-bl-md border-l border-b border-slate-700">
+              ম্যাচ: {matchScore}%
+            </div>
+          )}
+
+          {/* Left Column: Blood badge, Name, Verification, Location */}
+          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+            <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-xl bg-red-50 border border-red-200 text-red-700 flex flex-col items-center justify-center font-black shadow-2xs shrink-0 font-mono">
+              <span className="text-lg leading-none">{donor.bloodGroup}</span>
+              <span className="text-[9px] font-semibold text-red-500 uppercase mt-0.5">গ্রুপ</span>
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Link
+                  to={`/donor/${donor.id}`}
+                  className="font-bold text-slate-900 text-base leading-tight hover:text-red-600 transition-colors truncate"
+                >
+                  {donor.fullName}
+                </Link>
+                {donor.verificationStatus === 'verified' && (
+                  <span title="ভেরিফাইড রক্তদাতা" className="inline-flex items-center text-emerald-600 shrink-0">
+                    <CheckCircle2 className="w-4 h-4 fill-emerald-100" />
+                  </span>
+                )}
+                {donor.emergencyAvailable && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200/80 text-[10px] font-semibold shrink-0">
+                    <AlertCircle className="w-3 h-3 text-red-600" />
+                    জরুরি ২৪/৭
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                <span className="flex items-center gap-1 shrink-0">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{donor.area}, {donor.upazila}</span>
+                </span>
+                <span className="text-slate-300 hidden sm:inline">•</span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                  <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                  সর্বশেষ: {donor.lastDonationDate || 'নতুন রক্তদাতা'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Middle Meta: Availability & Donation Count */}
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-100">
+            {/* Availability Pill */}
+            <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200/80">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  donor.availability ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              />
+              <span className={donor.availability ? 'text-emerald-700' : 'text-amber-700'}>
+                {donor.availability ? 'রক্তদানে প্রস্তুত' : 'সাময়িক অনুপলব্ধ'}
+              </span>
+            </div>
+
+            {/* Total Donations Count */}
+            <div className="text-xs text-slate-600 font-medium">
+              <span className="font-bold text-slate-900 font-mono">{donor.totalDonations || 0}</span> বার রক্তদান
+            </div>
+          </div>
+
+          {/* Right Action Area */}
+          <div className="flex items-center gap-2 shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-100 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="py-1.5 sm:py-2 px-3 sm:px-3.5 rounded-lg bg-red-600 hover:bg-red-700 border border-red-700/60 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>অনুরোধ পাঠান</span>
+            </button>
+
+            {canViewPhone ? (
+              isPhoneRevealed ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <a
+                    href={`tel:${donor.phone}`}
+                    className="p-1.5 sm:p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1 border border-slate-200 transition-colors font-mono"
+                    title="সরাসরি কল করুন"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-slate-700" />
+                  </a>
+                  <a
+                    href={getDonorWhatsAppLink({
+                      name: donor.name,
+                      phone: donor.phone,
+                      bloodGroup: donor.bloodGroup,
+                      upazila: donor.upazila,
+                      district: donor.district,
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 sm:p-2 rounded-lg bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs flex items-center gap-1 border border-emerald-600/30 shadow-2xs transition-transform active:scale-95"
+                    title="WhatsApp এ মেসেজ পাঠান"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsPhoneRevealed(true)}
+                  className="py-1.5 sm:py-2 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs flex items-center gap-1 border border-slate-200 transition-colors cursor-pointer"
+                  title="যোগাযোগ বিকল্প দেখুন"
+                >
+                  <Phone className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-[11px]">যোগাযোগ</span>
+                </button>
+              )
+            ) : (
+              <span
+                className="py-1.5 sm:py-2 px-2 rounded-lg bg-slate-50 text-slate-400 text-[10px] flex items-center gap-1 border border-slate-200"
+                title="ডোনারের ফোন নম্বর গোপন রাখা হয়েছে। সরাসরি অনুরোধ পাঠান।"
+              >
+                <ShieldCheck className="w-3 h-3" />
+                <span>গোপন</span>
+              </span>
+            )}
+
+            <Link
+              to={`/donor/${donor.id}`}
+              className="py-1.5 sm:py-2 px-2.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 text-xs font-semibold transition-colors"
+            >
+              বিবরণ
+            </Link>
+          </div>
+        </div>
+
+        {isModalOpen && (
+          <RequestDonorModal
+            donor={donor}
+            matchScore={matchScore || 85}
+            onClose={() => setIsModalOpen(false)}
+            onSuccess={() => {
+              setIsModalOpen(false);
+              if (onSendRequestSuccess) onSendRequestSuccess();
+            }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>

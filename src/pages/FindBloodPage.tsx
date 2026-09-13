@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Filter, ShieldCheck, AlertCircle, RefreshCw, MapPin } from 'lucide-react';
+import { Search, Filter, ShieldCheck, AlertCircle, RefreshCw, MapPin, LayoutGrid, List } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { DonorCard } from '../components/DonorCard';
 import { SearchableSelect } from '../components/common/SearchableSelect';
@@ -30,6 +30,23 @@ export const FindBloodPage: React.FC = () => {
   const [verifiedOnly, setVerifiedOnly] = useState<boolean>(false);
   const [emergencyOnly, setEmergencyOnly] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try {
+      const saved = localStorage.getItem('roktobondon_donor_view_mode');
+      return saved === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('roktobondon_donor_view_mode', mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Keep state synchronized with incoming query parameters
   useEffect(() => {
@@ -273,23 +290,63 @@ export const FindBloodPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Results Header */}
-      <div className="flex items-center justify-between text-xs text-slate-500 font-medium px-1">
-        <span>মোট <strong className="font-mono text-slate-800">{filteredDonors.length}</strong> জন রক্তদাতা পাওয়া গেছে</span>
-        {bloodGroup && (
-          <span className="text-red-700 font-semibold font-mono">
-            নির্বাচিত গ্রুপ: {bloodGroup}
-          </span>
-        )}
+      {/* Results Header with View Mode Switcher */}
+      <div className="flex items-center justify-between text-xs text-slate-500 font-medium px-1 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span>মোট <strong className="font-mono text-slate-800 text-sm">{filteredDonors.length}</strong> জন রক্তদাতা পাওয়া গেছে</span>
+          {bloodGroup && (
+            <span className="text-red-700 font-semibold font-mono bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+              গ্রুপ: {bloodGroup}
+            </span>
+          )}
+        </div>
+
+        {/* List / Grid View Toggle */}
+        <div className="flex items-center bg-slate-200/80 p-0.5 rounded-xl border border-slate-300/80 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => handleViewModeChange('grid')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'grid'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+            }`}
+            title="গ্রিড ভিউ (Grid View)"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-red-600" />
+            <span>গ্রিড</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleViewModeChange('list')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'list'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+            }`}
+            title="লিস্ট ভিউ (List View)"
+          >
+            <List className="w-3.5 h-3.5 text-red-600" />
+            <span>লিস্ট</span>
+          </button>
+        </div>
       </div>
 
-      {/* Donors Grid */}
+      {/* Donors List or Grid */}
       {filteredDonors.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredDonors.map((donor) => (
-            <DonorCard key={donor.id} donor={donor} />
-          ))}
-        </div>
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredDonors.map((donor) => (
+              <DonorCard key={donor.id} donor={donor} viewMode="grid" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {filteredDonors.map((donor) => (
+              <DonorCard key={donor.id} donor={donor} viewMode="list" />
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-16 bg-white rounded-xl border border-slate-200/90 p-8 space-y-4">
           <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-100">
