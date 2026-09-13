@@ -787,7 +787,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Sync to localStorage for instant local caching and fast reloads
   useEffect(() => {

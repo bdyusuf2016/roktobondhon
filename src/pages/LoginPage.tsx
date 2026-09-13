@@ -60,19 +60,15 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await loginWithEmail(identifier.trim(), password);
-
-      // Read current user session for role-based navigation
-      const saved = localStorage.getItem('roktobondon_current_user');
-      const parsed = saved ? JSON.parse(saved) : null;
+      const loggedInUser = await loginWithEmail(identifier.trim(), password);
 
       const redirectParam = searchParams.get('redirect');
       if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
-        navigate(redirectParam);
-      } else if (parsed?.role === 'super_admin' || parsed?.role === 'admin' || parsed?.role === 'moderator' || parsed?.role === 'volunteer') {
-        navigate('/admin');
+        navigate(redirectParam, { replace: true });
+      } else if (['super_admin', 'admin', 'moderator', 'volunteer'].includes(loggedInUser.role)) {
+        navigate('/admin', { replace: true });
       } else {
-        navigate('/profile');
+        navigate('/profile', { replace: true });
       }
     } catch (err: any) {
       setError(err.message || 'লগইন ব্যর্থ হয়েছে। সঠিক ইমেইল/নম্বর ও পাসওয়ার্ড দিন।');

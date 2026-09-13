@@ -26,8 +26,8 @@ interface AuthContextType {
   isLoading: boolean;
   isDemoMode: boolean;
   sendPhoneOtp: (phoneNumber: string) => Promise<boolean>;
-  loginWithPhoneOtp: (phone: string, otp: string) => Promise<void>;
-  loginWithEmail: (email: string, pass: string) => Promise<void>;
+  loginWithPhoneOtp: (phone: string, otp: string) => Promise<User>;
+  loginWithEmail: (email: string, pass: string) => Promise<User>;
   loginWithGoogle: () => Promise<void>;
   changePassword: (newPassword: string) => Promise<void>;
   register: (fullName: string, email: string, phone: string, role: UserRole, pass?: string) => Promise<User>;
@@ -152,7 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return await sendSupabasePhoneOtp(phoneNumber);
   };
 
-  const loginWithPhoneOtp = async (phone: string, otp: string) => {
+  const loginWithPhoneOtp = async (phone: string, otp: string): Promise<User> => {
     setIsLoading(true);
     try {
       // Real Supabase OTP Verification
@@ -171,14 +171,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await signOutUser();
           setSupabaseUser(null);
           setCurrentUser(null);
+          localStorage.removeItem('roktobondon_current_user');
           throw new Error('আপনার অ্যাকাউন্টটি স্থগিত (Suspended) রয়েছে। অনুগ্রহ করে এডমিনের সাথে যোগাযোগ করুন।');
         }
+        localStorage.setItem('roktobondon_current_user', JSON.stringify(resolvedUser));
         setCurrentUser(resolvedUser);
+        return resolvedUser;
       } else {
         if (!isDemoMode) {
           await signOutUser();
           setSupabaseUser(null);
           setCurrentUser(null);
+          localStorage.removeItem('roktobondon_current_user');
           throw new Error('অ্যাকাউন্টের সাথে কোনো অনুমোদিত প্রোফাইল পাওয়া যায়নি। অনুগ্রহ করে লগইন করুন বা প্রশাসনের সাথে যোগাযোগ করুন।');
         }
 
@@ -194,14 +198,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
+        localStorage.setItem('roktobondon_current_user', JSON.stringify(fallbackDonorUser));
         setCurrentUser(fallbackDonorUser);
+        return fallbackDonorUser;
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loginWithEmail = async (emailOrPhone: string, pass: string) => {
+  const loginWithEmail = async (emailOrPhone: string, pass: string): Promise<User> => {
     setIsLoading(true);
     try {
       const isPhoneInput = /^[0-9+-\s()]+$/.test(emailOrPhone.trim());
@@ -252,10 +258,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 await signOutUser();
                 setSupabaseUser(null);
                 setCurrentUser(null);
+                localStorage.removeItem('roktobondon_current_user');
                 throw new Error('আপনার অ্যাকাউন্টটি স্থগিত (Suspended) রয়েছে। অনুগ্রহ করে এডমিনের সাথে যোগাযোগ করুন।');
               }
+              localStorage.setItem('roktobondon_current_user', JSON.stringify(resolvedUser));
               setCurrentUser(resolvedUser);
-              return;
+              return resolvedUser;
             }
 
             // Neither public.users nor public.donors exists
@@ -263,6 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               await signOutUser();
               setSupabaseUser(null);
               setCurrentUser(null);
+              localStorage.removeItem('roktobondon_current_user');
               throw new Error('অ্যাকাউন্ট কনফিগারেশন ত্রুটি: আপনার অ্যাকাউন্টের সাথে কোনো অনুমোদিত স্টাফ বা রক্তদাতা প্রোফাইল পাওয়া যায়নি।');
             }
           }
@@ -307,8 +316,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               updatedAt: row.updated_at,
               lastLoginAt: new Date().toISOString(),
             };
+            localStorage.setItem('roktobondon_current_user', JSON.stringify(matchedUser));
             setCurrentUser(matchedUser);
-            return;
+            return matchedUser;
           }
         } catch (dbErr) {
           console.warn('Direct database lookup notice:', dbErr);

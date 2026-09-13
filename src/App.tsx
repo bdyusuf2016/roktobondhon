@@ -41,11 +41,13 @@ import { useSEO } from './hooks/useSEO';
 
 function ProtectedAuthenticatedRoute({ children }: { children: React.ReactNode }) {
   const { currentUser, isLoading } = useAuth();
+  const hasCachedSession = Boolean(localStorage.getItem('roktobondon_current_user'));
 
-  if (isLoading) {
+  if (isLoading || (!currentUser && hasCachedSession)) {
     return (
-      <div className="min-h-[40vh] flex items-center justify-center text-sm font-semibold text-slate-500">
-        অ্যাক্সেস যাচাই করা হচ্ছে...
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+        <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+        <span>অ্যাক্সেস যাচাই করা হচ্ছে...</span>
       </div>
     );
   }
@@ -59,13 +61,14 @@ function ProtectedAuthenticatedRoute({ children }: { children: React.ReactNode }
 
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
   const { currentUser, isLoading } = useAuth();
-
   const privilegedRoles = new Set(['super_admin', 'admin', 'moderator', 'volunteer']);
+  const hasCachedSession = Boolean(localStorage.getItem('roktobondon_current_user'));
 
-  if (isLoading) {
+  if (isLoading || (!currentUser && hasCachedSession)) {
     return (
-      <div className="min-h-[40vh] flex items-center justify-center text-sm font-semibold text-slate-500">
-        অ্যাক্সেস যাচাই করা হচ্ছে...
+      <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+        <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+        <span>প্রশাসনিক অ্যাক্সেস যাচাই করা হচ্ছে...</span>
       </div>
     );
   }

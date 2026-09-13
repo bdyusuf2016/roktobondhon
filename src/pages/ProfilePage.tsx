@@ -107,7 +107,18 @@ export const ProfilePage: React.FC = () => {
   const [copiedId, setCopiedId] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const hasCachedSession = Boolean(localStorage.getItem('roktobondon_current_user'));
+
   if (!currentUser) {
+    if (hasCachedSession) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+          <div className="w-8 h-8 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+          <span>প্রোফাইল লোড হচ্ছে...</span>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
         <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-200">
@@ -494,6 +505,15 @@ export const ProfilePage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              {['super_admin', 'admin', 'moderator', 'volunteer'].includes(currentUser.role) && (
+                <Link
+                  to="/admin"
+                  className="px-4 py-2 bg-slate-900/80 hover:bg-slate-950 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 border border-white/20"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  এডমিন প্যানেল
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={handleOpenEditProfile}
