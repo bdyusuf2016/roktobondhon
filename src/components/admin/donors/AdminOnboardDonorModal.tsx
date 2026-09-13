@@ -65,8 +65,6 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  if (!isOpen) return null;
-
   useEffect(() => {
     if (initialUser && isOpen) {
       setFullName(initialUser.fullName || '');
@@ -88,6 +86,8 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
       setEmail('');
     }
   }, [initialUser, isOpen]);
+
+  if (!isOpen) return null;
 
   const handleDistrictChange = (dist: string) => {
     setDistrict(dist);
@@ -172,7 +172,7 @@ export const AdminOnboardDonorModal: React.FC<AdminOnboardDonorModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       theme="modern"
-      size="lg"
+      size="2xl"
       icon={
         <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
           <UserPlus className="w-5 h-5 text-red-600" />
