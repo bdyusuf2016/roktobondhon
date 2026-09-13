@@ -25,9 +25,13 @@ import {
   Layout,
   Smartphone,
   Building,
+  X,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { usePermission } from '../../hooks/usePermission';
 import type { PermissionKey } from '../../types';
+import { toBengaliNumber } from '../../utils/bengali';
 
 export type AdminTabKey =
   | 'overview'
@@ -96,6 +100,10 @@ interface AdminSidebarProps {
     notifications?: number;
     audit: number;
   };
+  isDrawerMode?: boolean;
+  onCloseDrawer?: () => void;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }
 
 const ROLE_RANK: Record<string, number> = {
@@ -260,10 +268,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   activeTab,
   onSelectTab,
   counts,
+  isDrawerMode = false,
+  onCloseDrawer,
+  isPinned = true,
+  onTogglePin,
 }) => {
   const { can, currentRole, isSuperAdmin } = usePermission();
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const handleItemSelect = (tabId: AdminTabKey) => {
+    onSelectTab(tabId);
+    if (isDrawerMode && onCloseDrawer) {
+      onCloseDrawer();
+    }
+  };
 
   const toggleGroup = (groupId: string) => {
     setCollapsedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -333,7 +352,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     .filter((group) => group.items.length > 0);
 
   return (
-    <aside className="w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 space-y-3.5">
+    <aside
+      className={
+        isDrawerMode
+          ? 'w-full h-full flex flex-col bg-white p-3.5 sm:p-4 space-y-3.5 overflow-hidden'
+          : 'w-full lg:w-72 shrink-0 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 space-y-3.5 lg:sticky lg:top-20 z-20'
+      }
+    >
       {/* Sidebar Header & Counter */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
         <div className="flex items-center gap-2">
@@ -347,9 +372,34 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <p className="text-[10px] text-slate-400 font-medium">সিস্টেম নেভিগেশন</p>
           </div>
         </div>
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200/60">
-          {totalPermittedCount}টি মডিউল
-        </span>
+
+        <div className="flex items-center gap-1.5">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200/60">
+            {toBengaliNumber(totalPermittedCount)}টি
+          </span>
+
+          {onTogglePin && (
+            <button
+              type="button"
+              onClick={onTogglePin}
+              title={isPinned ? 'সাইডবার ড্রয়ার মোডে রূপান্তর করুন (ফুল-স্ক্রিন)' : 'সাইডবার স্ক্রিনে ডক/পিন করুন'}
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+            >
+              {isPinned ? <PinOff className="w-3.5 h-3.5 text-slate-500" /> : <Pin className="w-3.5 h-3.5 text-red-600" />}
+            </button>
+          )}
+
+          {isDrawerMode && onCloseDrawer && (
+            <button
+              type="button"
+              onClick={onCloseDrawer}
+              title="ড্রয়ার মেনু বন্ধ করুন (Esc)"
+              className="p-1 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quick Filter Search Bar */}
@@ -374,7 +424,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       </div>
 
       {/* Navigation Accordion Sections */}
-      <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1 no-scrollbar">
+      <div
+        className={
+          isDrawerMode
+            ? 'flex-1 overflow-y-auto pr-1 space-y-3 no-scrollbar'
+            : 'space-y-3 max-h-[75vh] overflow-y-auto pr-1 no-scrollbar'
+        }
+      >
         {visibleGroups.length === 0 ? (
           <div className="text-center py-6 text-xs text-slate-400 font-medium">
             কোনো অনুমোদিত মডিউল পাওয়া যায়নি।
@@ -430,7 +486,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => onSelectTab(item.id)}
+                          onClick={() => handleItemSelect(item.id)}
                           className={`group relative w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                             isActive
                               ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white font-bold shadow-sm shadow-red-500/25 border border-red-500/50'
@@ -469,7 +525,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                                   : 'bg-slate-100 text-slate-600 border border-slate-200'
                               }`}
                             >
-                              {item.badgeCount}
+                              {toBengaliNumber(item.badgeCount)}
                             </span>
                           )}
                         </button>

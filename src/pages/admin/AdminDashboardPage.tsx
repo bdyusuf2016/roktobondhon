@@ -9,7 +9,8 @@ import {
   getModuleMetadata,
   type AdminTabKey,
 } from '../../components/admin/AdminSidebar';
-import { Sliders } from 'lucide-react';
+import { Sliders, Menu, Pin, PinOff } from 'lucide-react';
+import { toBengaliNumber } from '../../utils/bengali';
 
 // Subcomponents
 import { AdminOverviewTab } from '../../components/admin/overview/AdminOverviewTab';
@@ -52,6 +53,45 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const queryTab = searchParams.get('tab') as AdminTabKey | null;
   const [activeTab, setActiveTab] = useState<AdminTabKey>(queryTab || initialTab);
   const { can, currentRole, isSuperAdmin } = usePermission();
+
+  // Sidebar Drawer & Pin State
+  const [isSidebarPinned, setIsSidebarPinned] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('roktobondhon_admin_sidebar_pinned');
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' ? window.innerWidth >= 1280 : true;
+    } catch {
+      return true;
+    }
+  });
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+
+  const togglePin = () => {
+    setIsSidebarPinned((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('roktobondhon_admin_sidebar_pinned', String(next));
+      } catch (e) {
+        console.error(e);
+      }
+      if (next) setIsDrawerOpen(false);
+      return next;
+    });
+  };
+
+  // Keyboard shortcut: Ctrl+B or Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsDrawerOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (queryTab) {
@@ -127,14 +167,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <AdminHeader />
 
         <div className="flex flex-col lg:flex-row items-start gap-6">
-          {/* Left Categorized Navigation Sidebar */}
-          <AdminSidebar
-            activeTab={activeTab}
-            onSelectTab={setActiveTab}
-            counts={counts}
-          />
+          {/* Docked Left Sidebar (Rendered on lg+ only when pinned) */}
+          {isSidebarPinned && (
+            <div className="hidden lg:block shrink-0">
+              <AdminSidebar
+                activeTab={activeTab}
+                onSelectTab={setActiveTab}
+                counts={counts}
+                isPinned={true}
+                onTogglePin={togglePin}
+              />
+            </div>
+          )}
 
-          {/* Right Main Content Panel */}
+          {/* Main Content Panel (Spans full width when unpinned or on mobile) */}
           <main className="flex-1 min-w-0 w-full space-y-5">
             {/* Active Module Header Context Banner */}
             {currentMeta && (
@@ -171,8 +217,43 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </div>
                 </div>
 
-                {/* Live Module Badge / Security Indicator */}
-                <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                {/* Live Module Badge, Drawer Trigger & Security Indicator */}
+                <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap">
+                  {/* Drawer Open Trigger Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsDrawerOpen(true)}
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all cursor-pointer border border-slate-700 active:scale-95"
+                    title="কন্ট্রোল মডিউল ড্রয়ার মেনু খুলুন (Ctrl+B)"
+                  >
+                    <Menu className="w-4 h-4 text-red-400" />
+                    <span>কন্ট্রোল ড্রয়ার</span>
+                  </button>
+
+                  {/* Pin / Unpin Docked Sidebar Toggle Button (Desktop) */}
+                  <button
+                    type="button"
+                    onClick={togglePin}
+                    className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                    title={
+                      isSidebarPinned
+                        ? 'সাইডবার ড্রয়ার মোডে রূপান্তর করুন (ফুল-স্ক্রিন ভিউ)'
+                        : 'সাইডবার স্ক্রিনের পাশে স্থায়ীভাবে পিন/ডক করুন'
+                    }
+                  >
+                    {isSidebarPinned ? (
+                      <>
+                        <PinOff className="w-3.5 h-3.5 text-slate-500" />
+                        <span>ড্রয়ার মোড</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="w-3.5 h-3.5 text-red-600" />
+                        <span>সাইডবার পিন</span>
+                      </>
+                    )}
+                  </button>
+
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     সক্রিয় মডিউল
@@ -277,8 +358,44 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
           </main>
         </div>
+
+        {/* Slide-In Sidebar Drawer for Mobile & Unpinned Desktop View */}
+        {isDrawerOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+            <div
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity cursor-pointer"
+              onClick={() => setIsDrawerOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="absolute inset-y-0 left-0 max-w-full flex">
+              <div className="w-80 sm:w-88 max-w-[88vw] h-full shadow-2xl bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-300 ease-out animate-in slide-in-from-left">
+                <AdminSidebar
+                  activeTab={activeTab}
+                  onSelectTab={setActiveTab}
+                  counts={counts}
+                  isDrawerMode={true}
+                  onCloseDrawer={() => setIsDrawerOpen(false)}
+                  isPinned={isSidebarPinned}
+                  onTogglePin={togglePin}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Action Button for Instant Drawer Access on Mobile */}
+        <button
+          type="button"
+          onClick={() => setIsDrawerOpen(true)}
+          className="lg:hidden fixed bottom-6 right-6 z-40 p-3.5 rounded-full bg-red-600 text-white shadow-xl hover:bg-red-700 active:scale-95 transition-all flex items-center gap-1.5 border-2 border-white cursor-pointer"
+          title="কন্ট্রোল মেনু ড্রয়ার খুলুন"
+        >
+          <Menu className="w-5 h-5" />
+          <span className="text-xs font-bold pr-1">মেনু ড্রয়ার</span>
+        </button>
       </div>
     </AdminGuard>
   );
 };
+
 
