@@ -15,7 +15,7 @@ export const generateDonorVerificationUrl = (donorId: string): string => {
     ? window.location.origin + (window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/')
     : `https://${PRIMARY_DOMAIN}/`;
 
-  return `${baseUrl}#/certificate?donorId=${encodeURIComponent(donorId)}`;
+  return `${baseUrl}certificate?donorId=${encodeURIComponent(donorId)}`;
 };
 
 export const generateDonorQrDataUrl = async (donorId: string): Promise<string> => {

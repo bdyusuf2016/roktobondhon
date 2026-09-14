@@ -52,7 +52,7 @@ export const DonorProfilePage: React.FC = () => {
     currentUser?.role === 'moderator';
 
   const canSeePrivate = isSelf || isPrivileged;
-  const canSeePhone = canSeePrivate || donor.privacy.showPhone;
+  const canSeePhone = Boolean(donor.phone && donor.phone.trim() !== '') && (canSeePrivate || (donor.privacy.showPhone && Boolean(currentUser)));
 
   // Donor's verified donations
   const donorDonations = donations.filter(

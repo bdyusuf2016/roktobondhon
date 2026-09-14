@@ -538,19 +538,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadSupabaseData = async () => {
       setIsLoading(true);
       try {
-        // 1. Fetch donors
-        const { data: donorsData } = await supabase.from('donors').select('*');
-        if (donorsData && isMounted) {
-          setDonors(donorsData.map(mapDonorRow));
+        // 1. Fetch donors (query public-safe view for directory, fallback to table if staff)
+        let donorsRows: any[] | null = null;
+        const { data: publicDonors, error: pubErr } = await supabase.from('donors_public_search').select('*');
+        if (publicDonors && !pubErr && publicDonors.length > 0) {
+          donorsRows = publicDonors;
+        } else {
+          const { data: rawDonors } = await supabase.from('donors').select('*');
+          if (rawDonors) donorsRows = rawDonors;
+        }
+        if (donorsRows && isMounted) {
+          setDonors(donorsRows.map(mapDonorRow));
         }
 
-        // 2. Fetch blood requests
-        const { data: reqsData } = await supabase
-          .from('blood_requests')
+        // 2. Fetch blood requests (query public-safe view, fallback to table if staff/requester)
+        let reqsRows: any[] | null = null;
+        const { data: publicReqs, error: pubReqErr } = await supabase
+          .from('blood_requests_public')
           .select('*')
           .order('created_at', { ascending: false });
-        if (reqsData && isMounted) {
-          setBloodRequests(reqsData.map(mapBloodRequestRow));
+        if (publicReqs && !pubReqErr && publicReqs.length > 0) {
+          reqsRows = publicReqs;
+        } else {
+          const { data: rawReqs } = await supabase
+            .from('blood_requests')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (rawReqs) reqsRows = rawReqs;
+        }
+        if (reqsRows && isMounted) {
+          setBloodRequests(reqsRows.map(mapBloodRequestRow));
         }
 
         // 3. Fetch donor requests

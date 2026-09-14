@@ -63,8 +63,8 @@ The following matrix documents the exact effective database access granted by `s
 │                      ROLE HIERARCHY                         │
 │                                                             │
 │  [PUBLIC / ANON]                                            │
-│    ├── SELECT: verified public donors (safe fields)        │
-│    ├── SELECT: active blood requests                        │
+│    ├── SELECT: donors_public_search view (PII masked)       │
+│    ├── SELECT: blood_requests_public view (patient masked)  │
 │    ├── SELECT: hospitals, blood camps, public config        │
 │    └── INSERT: public blood request, fund donation          │
 │                                                             │
@@ -87,3 +87,29 @@ The following matrix documents the exact effective database access granted by `s
 │    └── MANAGE: roles matrix, security config, restore       │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 5. Phase 0 — Security Hardening Status (September 2026)
+
+Applied via: `supabase/migrations/20260914_phase0_security_hardening.sql`
+
+1. **`public.users` Privacy & Role Protection (P0.1, P0.4)**:
+   - SELECT restricted to `id = auth.uid()::text` or `is_staff()`. Anonymous SELECT completely denied.
+   - `BEFORE INSERT OR UPDATE` trigger `protect_user_roles` blocks any non-admin from setting or elevating `role`, forcing it to `'donor'`.
+2. **`public.donors` PII Protection (P0.2)**:
+   - Raw table SELECT restricted to owner (`user_id = auth.uid()::text`) or `is_staff()`.
+   - Public queries routed to `donors_public_search` security definer view (excludes `phone`, `nid_or_id_number`, and `exact_address`).
+3. **`public.blood_requests` Requester Privacy (P0.3)**:
+   - Raw table SELECT restricted to creator (`created_by = auth.uid()::text`) or `is_staff()`.
+   - Public queries routed to `blood_requests_public` view (excludes `patient_name` and `contact_number`).
+4. **`public.audit_logs` Immutability (P0.5)**:
+   - Direct client INSERT policy dropped; writes allowed only through trusted `record_audit_log` SECURITY DEFINER RPC. UPDATE and DELETE hard-blocked (`USING (false)`).
+5. **Storage Hardening (P0.6)**:
+   - `avatars` bucket requires `auth.role() = 'authenticated'` and user folder isolation (`(storage.foldername(name))[1] = auth.uid()::text`). MIME types restricted to JPEG, PNG, WebP.
+   - `verification-docs` remains private bucket accessible only via signed URLs for owner or staff.
+6. **Hospital Auto-Creation Sanitization (P0.9)**:
+   - Fixed emergency requester phone leakage into hospital `hotline`. Unlisted hospitals created with empty hotline and `is_verified = false`.
+7. **Client Secret Elimination**:
+   - Removed `define: { 'process.env.GEMINI_API_KEY': ... }` from `vite.config.ts`.
+

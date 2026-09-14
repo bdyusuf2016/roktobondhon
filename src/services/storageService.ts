@@ -1,9 +1,11 @@
 import { supabase, isSupabaseConfigured } from '../supabase/config';
 
 export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
+export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const ALLOWED_DOC_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 /**
- * Upload a file to Supabase Storage bucket
+ * Upload a file to Supabase Storage bucket with strict security validation
  */
 export async function uploadFile(
   bucketName: string,
@@ -16,6 +18,17 @@ export async function uploadFile(
 
   if (file.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('ফাইলের আকার সর্বোচ্চ ৫ মেগাবাইট (5MB) হতে পারে।');
+  }
+
+  // Validate allowed MIME types to prevent XSS / malware execution
+  if (bucketName === 'avatars') {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      throw new Error('শুধুমাত্র JPEG, PNG বা WebP ফরম্যাটের ছবি আপলোড করা যাবে।');
+    }
+  } else if (bucketName === 'verification-docs') {
+    if (!ALLOWED_DOC_TYPES.includes(file.type)) {
+      throw new Error('শুধুমাত্র ছবি (JPG/PNG) অথবা PDF ডকুমেন্ট আপলোড করা যাবে।');
+    }
   }
 
   const { error } = await supabase.storage.from(bucketName).upload(storagePath, file, {

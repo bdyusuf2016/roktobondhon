@@ -45,7 +45,6 @@ export const CertificatePage: React.FC = () => {
     return (
       d.donorId.toLowerCase().includes(query) ||
       d.fullName.toLowerCase().includes(query) ||
-      d.phone.includes(query) ||
       d.district.toLowerCase().includes(query) ||
       d.upazila.toLowerCase().includes(query)
     );

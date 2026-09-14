@@ -198,15 +198,15 @@ export const RequestBloodPage: React.FC = () => {
             district,
             upazila,
             address: `${area.trim() ? area.trim() + ', ' : ''}${upazila}, ${district}`,
-            hotline: contactNumber.trim(),
-            emergencyPhone: contactNumber.trim(),
+            hotline: '',
+            emergencyPhone: '',
             hasBloodBank: false,
             hasICU: false,
             isOpen24Hours: true,
             isCommunityAdded: true,
             verificationStatus: 'unverified',
-            addedBy: currentUser?.fullName || contactPerson || patientName,
-            notes: `স্বয়ংক্রিয়ভাবে রক্তের জরুরি আবেদনকারী (${contactPerson || patientName}) কর্তৃক অন্তর্ভুক্ত হয়েছে।`,
+            addedBy: currentUser?.fullName || 'কমিউনিটি আবেদন',
+            notes: 'রক্তের জরুরি আবেদনকালে স্বয়ংক্রিয়ভাবে খসড়া হিসেবে অন্তর্ভুক্ত হয়েছে। যাচাইকরণ প্রয়োজন।',
           });
         } catch (err) {
           console.warn('Auto hospital addition non-fatal error:', err);

@@ -40,10 +40,11 @@ export const DonorCard: React.FC<DonorCardProps> = ({
   // Phone number is only exposed when the donor explicitly allowed it and the viewer is authenticated.
   // Admins may still access it for moderation, but anonymous users should never see a private number.
   const canViewPhone =
-    (donor.privacy.showPhone && !!currentUser) ||
-    currentUser?.role === 'super_admin' ||
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'moderator';
+    Boolean(donor.phone && donor.phone.trim() !== '') &&
+    ((donor.privacy?.showPhone && !!currentUser) ||
+      currentUser?.role === 'super_admin' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'moderator');
 
   if (viewMode === 'list') {
     return (

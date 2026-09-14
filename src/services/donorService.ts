@@ -77,8 +77,8 @@ export function mapDonorRow(row: any): Donor {
 export async function searchDonorsPublic(filters: DonorSearchFilters): Promise<DonorPublic[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
-    const PUBLIC_DONOR_COLUMNS = 'id, donor_id, user_id, full_name, photo_url, blood_group, division, district_id, district, upazila_id, upazila, area_id, area, location_label, age, availability, emergency_available, last_donation_date, next_eligible_date, first_donation_date, total_donations, verification_status, organization_id, branch_id, phone, gender, privacy, verified_by, verified_at, created_at, updated_at';
-    let query = supabase.from('donors').select(PUBLIC_DONOR_COLUMNS);
+    // 1. Primary query on secure donors_public_search view (zero sensitive PII)
+    let query = supabase.from('donors_public_search').select('*');
 
     if (filters.bloodGroup) {
       query = query.eq('blood_group', filters.bloodGroup);
@@ -103,19 +103,24 @@ export async function searchDonorsPublic(filters: DonorSearchFilters): Promise<D
     }
 
     const { data, error } = await query;
-    if (error) {
-      console.error('Error searching donors in Supabase:', error);
-      return [];
+    if (!error && data) {
+      return data.map(mapDonorRow);
     }
 
-    return (data || []).map((row) => {
-      const donor = mapDonorRow(row);
-      // Mask phone if privacy setting forbids public view
-      return {
-        ...donor,
-        phone: donor.privacy.showPhone ? donor.phone : '',
-      };
-    });
+    // 2. Fallback if donors_public_search view is not yet applied
+    const SAFE_PUBLIC_COLUMNS = 'id, donor_id, user_id, full_name, photo_url, blood_group, division, district_id, district, upazila_id, upazila, area_id, area, location_label, age, availability, emergency_available, last_donation_date, total_donations, verification_status, organization_id, branch_id, gender, privacy, created_at, updated_at';
+    let fallbackQuery = supabase.from('donors').select(SAFE_PUBLIC_COLUMNS);
+
+    if (filters.bloodGroup) fallbackQuery = fallbackQuery.eq('blood_group', filters.bloodGroup);
+    if (filters.district) fallbackQuery = fallbackQuery.eq('district', filters.district);
+    if (filters.upazila) fallbackQuery = fallbackQuery.eq('upazila', filters.upazila);
+    if (filters.availability !== undefined) fallbackQuery = fallbackQuery.eq('availability', filters.availability);
+    if (filters.verificationStatus) fallbackQuery = fallbackQuery.eq('verification_status', filters.verificationStatus);
+    if (filters.emergencyAvailable) fallbackQuery = fallbackQuery.eq('emergency_available', true);
+    if (filters.organizationId) fallbackQuery = fallbackQuery.eq('organization_id', filters.organizationId);
+
+    const fallbackRes = await fallbackQuery;
+    return (fallbackRes.data || []).map(mapDonorRow);
   } catch (err) {
     console.error('Exception searching donors in Supabase:', err);
     return [];
@@ -123,23 +128,30 @@ export async function searchDonorsPublic(filters: DonorSearchFilters): Promise<D
 }
 
 /**
- * Fetch a single donor profile by ID
+ * Fetch a single donor profile by ID (Owner/Staff gets full profile; Public gets public view)
  */
 export async function getDonorById(donorId: string): Promise<Donor | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
+    // 1. Try raw donors table (authorized for owner or staff)
     const { data, error } = await supabase
       .from('donors')
       .select('*')
       .or(`id.eq.${donorId},donor_id.eq.${donorId}`)
       .maybeSingle();
 
-    if (error) {
-      console.error('Error fetching donor profile:', error);
-      return null;
+    if (data && !error) {
+      return mapDonorRow(data);
     }
 
-    return data ? mapDonorRow(data) : null;
+    // 2. Fallback to public-safe view for anonymous or non-staff visitors
+    const { data: publicData } = await supabase
+      .from('donors_public_search')
+      .select('*')
+      .or(`id.eq.${donorId},donor_id.eq.${donorId}`)
+      .maybeSingle();
+
+    return publicData ? mapDonorRow(publicData) : null;
   } catch (err) {
     console.error('Exception fetching donor profile:', err);
     return null;

@@ -372,11 +372,26 @@ CREATE TRIGGER trigger_system_config_updated_at
   EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ==============================================================================
--- SUPABASE AUTH SYNCHRONIZATION TRIGGER
+-- SUPABASE AUTH SYNCHRONIZATION (TWO-TIER ARCHITECTURE)
 -- ==============================================================================
+-- In the Two-Tier Authentication Architecture:
+-- 1. Ordinary donors register into auth.users and public.donors (NOT public.users).
+-- 2. Staff accounts are created authoritatively via admin-create-user Edge Function.
+-- 3. Automatic insertion into public.users via auth.users hook is removed to prevent
+--    unauthorized role assignment via raw_user_meta_data and eliminate account bloat.
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
+    DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+  END IF;
+END $$;
+
+-- Harden fallback handle_new_user() with strict search_path and safe default role
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Always enforce safest role 'donor' regardless of client metadata
   INSERT INTO public.users (
     id,
     full_name,
@@ -394,7 +409,7 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'নতুন রক্তদাতা'),
     NEW.email,
     COALESCE(NEW.phone, NEW.raw_user_meta_data->>'phone', '01700000000'),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'donor'),
+    'donor', -- STRICT SAFE DEFAULT: raw_user_meta_data->>'role' is completely ignored
     'org-roktobondon',
     'active',
     NEW.phone_confirmed_at IS NOT NULL,
@@ -408,19 +423,7 @@ BEGIN
     updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger execution hook on auth.users (if auth schema exists)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'auth') THEN
-    DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-    CREATE TRIGGER on_auth_user_created
-      AFTER INSERT ON auth.users
-      FOR EACH ROW
-      EXECUTE FUNCTION public.handle_new_user();
-  END IF;
-END $$;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- ==============================================================================
 -- INDEXES FOR OPTIMAL QUERY PERFORMANCE
@@ -453,26 +456,14 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON public.audit_logs(timesta
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.is_staff()
 RETURNS BOOLEAN AS $$
-DECLARE
-  v_uid TEXT := auth.uid()::text;
-  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
-  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
-  IF v_uid IS NULL THEN
+  IF auth.uid() IS NULL THEN
     RETURN FALSE;
   END IF;
 
   RETURN EXISTS (
     SELECT 1 FROM public.users u
-    WHERE (
-      u.id = v_uid
-      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
-      OR (v_jwt_phone IS NOT NULL AND (
-        u.phone = v_jwt_phone 
-        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
-        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
-      ))
-    )
+    WHERE u.id = auth.uid()::text
     AND u.role IN ('super_admin', 'admin', 'moderator', 'volunteer')
     AND u.status = 'active'
   );
@@ -481,26 +472,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
-DECLARE
-  v_uid TEXT := auth.uid()::text;
-  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
-  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
-  IF v_uid IS NULL THEN
+  IF auth.uid() IS NULL THEN
     RETURN FALSE;
   END IF;
 
   RETURN EXISTS (
     SELECT 1 FROM public.users u
-    WHERE (
-      u.id = v_uid
-      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
-      OR (v_jwt_phone IS NOT NULL AND (
-        u.phone = v_jwt_phone 
-        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
-        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
-      ))
-    )
+    WHERE u.id = auth.uid()::text
     AND u.role IN ('super_admin', 'admin')
     AND u.status = 'active'
   );
@@ -509,26 +488,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
-DECLARE
-  v_uid TEXT := auth.uid()::text;
-  v_jwt_email TEXT := lower(auth.jwt() ->> 'email');
-  v_jwt_phone TEXT := auth.jwt() ->> 'phone';
 BEGIN
-  IF v_uid IS NULL THEN
+  IF auth.uid() IS NULL THEN
     RETURN FALSE;
   END IF;
 
   RETURN EXISTS (
     SELECT 1 FROM public.users u
-    WHERE (
-      u.id = v_uid
-      OR (v_jwt_email IS NOT NULL AND lower(u.email) = v_jwt_email)
-      OR (v_jwt_phone IS NOT NULL AND (
-        u.phone = v_jwt_phone 
-        OR replace(u.phone, '+88', '') = replace(v_jwt_phone, '+88', '')
-        OR replace(u.phone, '+880', '0') = replace(v_jwt_phone, '+880', '0')
-      ))
-    )
+    WHERE u.id = auth.uid()::text
     AND u.role = 'super_admin'
     AND u.status = 'active'
   );
@@ -562,19 +529,74 @@ DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 DROP POLICY IF EXISTS "Users can read profiles" ON public.users;
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 DROP POLICY IF EXISTS "Admins can delete user profiles" ON public.users;
+DROP POLICY IF EXISTS "Staff and users can view profiles" ON public.users;
+DROP POLICY IF EXISTS "Staff can view users or user view self" ON public.users;
+DROP POLICY IF EXISTS "Users view self or staff view all" ON public.users;
+DROP POLICY IF EXISTS "Admins and service_role insert users" ON public.users;
+DROP POLICY IF EXISTS "Users update self or admin update" ON public.users;
+DROP POLICY IF EXISTS "Admins delete users" ON public.users;
 
-CREATE POLICY "Users can read profiles" ON public.users
-  FOR SELECT USING (true);
+CREATE POLICY "Users view self or staff view all" ON public.users
+  FOR SELECT USING (
+    auth.uid()::text = id 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Users can insert own profile" ON public.users
-  FOR INSERT WITH CHECK (auth.uid()::text = id OR public.is_admin());
+CREATE POLICY "Admins and service_role insert users" ON public.users
+  FOR INSERT WITH CHECK (
+    public.is_admin() 
+    OR current_user IN ('postgres', 'service_role')
+  );
 
-CREATE POLICY "Users can update own profile" ON public.users
-  FOR UPDATE USING (auth.uid()::text = id OR public.is_admin())
-  WITH CHECK (auth.uid()::text = id OR public.is_admin());
+CREATE POLICY "Users update self or admin update" ON public.users
+  FOR UPDATE USING (
+    auth.uid()::text = id 
+    OR public.is_admin()
+  ) WITH CHECK (
+    auth.uid()::text = id 
+    OR public.is_admin()
+  );
 
-CREATE POLICY "Admins can delete user profiles" ON public.users
+CREATE POLICY "Admins delete users" ON public.users
   FOR DELETE USING (public.is_admin());
+
+-- Trigger: Prevent privilege escalation on both INSERT and UPDATE
+CREATE OR REPLACE FUNCTION public.protect_user_roles()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF current_user IN ('postgres', 'supabase_admin', 'service_role') AND auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NOT public.is_admin() THEN
+      NEW.role := 'donor';
+      NEW.status := 'active';
+      NEW.organization_id := 'org-roktobondon';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF (NEW.role IS DISTINCT FROM OLD.role) OR 
+       (NEW.status IS DISTINCT FROM OLD.status) OR 
+       (NEW.organization_id IS DISTINCT FROM OLD.organization_id) THEN
+      IF NOT public.is_admin() THEN
+        RAISE EXCEPTION 'Unauthorized: Only administrators can modify user role, status, or organization.';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_user_roles ON public.users;
+CREATE TRIGGER trg_protect_user_roles
+  BEFORE INSERT OR UPDATE ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_user_roles();
 
 -- 2. Branches Policies
 DROP POLICY IF EXISTS "Public can view branches" ON public.branches;
@@ -604,18 +626,34 @@ DROP POLICY IF EXISTS "Public can view verified donors" ON public.donors;
 DROP POLICY IF EXISTS "Authenticated users can create donor record" ON public.donors;
 DROP POLICY IF EXISTS "Donors can update own record" ON public.donors;
 DROP POLICY IF EXISTS "Admins can delete donor records" ON public.donors;
+DROP POLICY IF EXISTS "Donors view self or staff view all" ON public.donors;
+DROP POLICY IF EXISTS "Donors insert own profile" ON public.donors;
+DROP POLICY IF EXISTS "Donors update own profile" ON public.donors;
+DROP POLICY IF EXISTS "Admins delete donors" ON public.donors;
 
-CREATE POLICY "Public can view verified donors" ON public.donors
-  FOR SELECT USING (verification_status = 'verified' OR user_id = auth.uid()::text OR public.is_staff());
+CREATE POLICY "Donors view self or staff view all" ON public.donors
+  FOR SELECT USING (
+    auth.uid()::text = user_id 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Authenticated users can create donor record" ON public.donors
-  FOR INSERT WITH CHECK (auth.uid()::text = user_id OR public.is_staff());
+CREATE POLICY "Donors insert own profile" ON public.donors
+  FOR INSERT WITH CHECK (
+    auth.uid()::text = user_id 
+    OR public.is_staff() 
+    OR current_user IN ('postgres', 'service_role')
+  );
 
-CREATE POLICY "Donors can update own record" ON public.donors
-  FOR UPDATE USING (auth.uid()::text = user_id OR public.is_staff())
-  WITH CHECK (auth.uid()::text = user_id OR public.is_staff());
+CREATE POLICY "Donors update own profile" ON public.donors
+  FOR UPDATE USING (
+    auth.uid()::text = user_id 
+    OR public.is_staff()
+  ) WITH CHECK (
+    auth.uid()::text = user_id 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Admins can delete donor records" ON public.donors
+CREATE POLICY "Admins delete donors" ON public.donors
   FOR DELETE USING (public.is_admin());
 
 -- 4. Blood Requests Policies
@@ -626,18 +664,38 @@ DROP POLICY IF EXISTS "Public can view active blood requests" ON public.blood_re
 DROP POLICY IF EXISTS "Public can create blood requests" ON public.blood_requests;
 DROP POLICY IF EXISTS "Requesters and staff can update blood requests" ON public.blood_requests;
 DROP POLICY IF EXISTS "Admins can delete blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Authorized view on blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Public create blood requests" ON public.blood_requests;
+DROP POLICY IF EXISTS "Requesters and staff update blood requests" ON public.blood_requests;
 
-CREATE POLICY "Public can view active blood requests" ON public.blood_requests
-  FOR SELECT USING (status IN ('active', 'verified', 'matched', 'fulfilled') OR user_id = auth.uid()::text OR public.is_staff());
+CREATE POLICY "Authorized view on blood requests" ON public.blood_requests
+  FOR SELECT USING (
+    auth.uid()::text = user_id 
+    OR public.is_staff()
+    OR EXISTS (
+      SELECT 1 FROM public.donor_requests dr
+      WHERE dr.blood_request_id = blood_requests.id
+      AND dr.donor_user_id = auth.uid()::text
+      AND dr.status = 'accepted'
+    )
+  );
 
-CREATE POLICY "Public can create blood requests" ON public.blood_requests
-  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public create blood requests" ON public.blood_requests
+  FOR INSERT WITH CHECK (
+    user_id = COALESCE(auth.uid()::text, user_id)
+    OR current_user IN ('postgres', 'service_role')
+  );
 
-CREATE POLICY "Requesters and staff can update blood requests" ON public.blood_requests
-  FOR UPDATE USING (user_id = auth.uid()::text OR public.is_staff())
-  WITH CHECK (user_id = auth.uid()::text OR public.is_staff());
+CREATE POLICY "Requesters and staff update blood requests" ON public.blood_requests
+  FOR UPDATE USING (
+    user_id = auth.uid()::text 
+    OR public.is_staff()
+  ) WITH CHECK (
+    user_id = auth.uid()::text 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Admins can delete blood requests" ON public.blood_requests
+CREATE POLICY "Admins delete blood requests" ON public.blood_requests
   FOR DELETE USING (public.is_admin());
 
 -- 5. Donor Requests (Matching) Policies
@@ -665,17 +723,23 @@ DROP POLICY IF EXISTS "Public can view donation impact logs" ON public.donations
 DROP POLICY IF EXISTS "Staff can insert verified donations" ON public.donations;
 DROP POLICY IF EXISTS "Admins can update donations" ON public.donations;
 DROP POLICY IF EXISTS "Admins can delete donations" ON public.donations;
+DROP POLICY IF EXISTS "Donors view own donations or staff view all" ON public.donations;
+DROP POLICY IF EXISTS "Staff insert donations" ON public.donations;
 
-CREATE POLICY "Public can view donation impact logs" ON public.donations
-  FOR SELECT USING (true);
+-- P0.8: Donations history is private to the donor or staff
+CREATE POLICY "Donors view own donations or staff view all" ON public.donations
+  FOR SELECT USING (
+    donor_user_id = auth.uid()::text
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Staff can insert verified donations" ON public.donations
+CREATE POLICY "Staff insert donations" ON public.donations
   FOR INSERT WITH CHECK (public.is_staff());
 
-CREATE POLICY "Admins can update donations" ON public.donations
+CREATE POLICY "Admins update donations" ON public.donations
   FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
 
-CREATE POLICY "Admins can delete donations" ON public.donations
+CREATE POLICY "Admins delete donations" ON public.donations
   FOR DELETE USING (public.is_admin());
 
 -- 7. Hospitals Directory Policies
@@ -685,18 +749,31 @@ DROP POLICY IF EXISTS "Admins can update hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Admins can delete hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Public can view verified hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Staff and community can submit hospitals" ON public.hospitals;
+DROP POLICY IF EXISTS "Community submit unverified hospitals" ON public.hospitals;
 DROP POLICY IF EXISTS "Staff can update hospitals" ON public.hospitals;
+DROP POLICY IF EXISTS "Staff update hospitals" ON public.hospitals;
+DROP POLICY IF EXISTS "Admins delete hospitals" ON public.hospitals;
 
-CREATE POLICY "Public can view verified hospitals" ON public.hospitals
-  FOR SELECT USING (verification_status = 'verified' OR public.is_staff());
+-- Public can view ONLY verified hospitals or staff can view all
+CREATE POLICY "Public view verified hospitals" ON public.hospitals
+  FOR SELECT USING (
+    verification_status = 'verified' 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Staff and community can submit hospitals" ON public.hospitals
-  FOR INSERT WITH CHECK (true);
+-- Community submissions must be quarantined as 'unverified'
+CREATE POLICY "Community submit unverified hospitals" ON public.hospitals
+  FOR INSERT WITH CHECK (
+    verification_status = 'unverified' 
+    OR public.is_staff()
+  );
 
-CREATE POLICY "Staff can update hospitals" ON public.hospitals
+-- Staff can verify and update hospitals
+CREATE POLICY "Staff update hospitals" ON public.hospitals
   FOR UPDATE USING (public.is_staff()) WITH CHECK (public.is_staff());
 
-CREATE POLICY "Admins can delete hospitals" ON public.hospitals
+-- Admins can delete hospitals
+CREATE POLICY "Admins delete hospitals" ON public.hospitals
   FOR DELETE USING (public.is_admin());
 
 -- 8. Blood Camps Policies
@@ -802,12 +879,29 @@ DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "System can insert audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "Staff can view audit trail" ON public.audit_logs;
 DROP POLICY IF EXISTS "System can record audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "audit_logs_insert_authenticated" ON public.audit_logs;
+DROP POLICY IF EXISTS "Prevent updating audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Prevent deleting audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Staff view audit trail" ON public.audit_logs;
+DROP POLICY IF EXISTS "Service role insert audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Block update audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Block delete audit logs" ON public.audit_logs;
 
-CREATE POLICY "Staff can view audit trail" ON public.audit_logs
+-- Read restricted to authorized staff
+CREATE POLICY "Staff view audit trail" ON public.audit_logs
   FOR SELECT USING (public.is_staff());
 
-CREATE POLICY "System can record audit logs" ON public.audit_logs
-  FOR INSERT WITH CHECK (true);
+-- Direct client INSERT is blocked; insertion is only possible via record_audit_log() RPC
+CREATE POLICY "Service role insert audit logs" ON public.audit_logs
+  FOR INSERT WITH CHECK (
+    current_user IN ('postgres', 'service_role')
+  );
+
+CREATE POLICY "Block update audit logs" ON public.audit_logs
+  FOR UPDATE USING (false);
+
+CREATE POLICY "Block delete audit logs" ON public.audit_logs
+  FOR DELETE USING (false);
 
 -- 15. Verification Logs Policies
 DROP POLICY IF EXISTS "Admins can view verification logs" ON public.verification_logs;
@@ -845,17 +939,80 @@ VALUES
   ('avatars', 'avatars', true),
   ('verification-docs', 'verification-docs', false),
   ('assets', 'assets', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
 DROP POLICY IF EXISTS "Public can view avatar images" ON storage.objects;
 DROP POLICY IF EXISTS "Public can upload avatar images" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users upload avatar" ON storage.objects;
 DROP POLICY IF EXISTS "Public can view organization assets" ON storage.objects;
 DROP POLICY IF EXISTS "Staff can upload organization assets" ON storage.objects;
+DROP POLICY IF EXISTS "Staff upload assets" ON storage.objects;
+DROP POLICY IF EXISTS "Public view avatar images" ON storage.objects;
+DROP POLICY IF EXISTS "Public view assets" ON storage.objects;
+DROP POLICY IF EXISTS "Owner and staff upload verification docs" ON storage.objects;
+DROP POLICY IF EXISTS "Owner and staff view verification docs" ON storage.objects;
+DROP POLICY IF EXISTS "Admins delete verification docs" ON storage.objects;
 
-CREATE POLICY "Public can view avatar images" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
-CREATE POLICY "Public can upload avatar images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars');
-CREATE POLICY "Public can view organization assets" ON storage.objects FOR SELECT USING (bucket_id = 'assets');
-CREATE POLICY "Staff can upload organization assets" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'assets');
+-- Avatars: Public read, authenticated user upload to own folder only
+CREATE POLICY "Public view avatar images" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Authenticated users upload avatar" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'avatars' 
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR public.is_staff()
+    )
+  );
+
+-- Assets: Public read, staff upload
+CREATE POLICY "Public view assets" ON storage.objects
+  FOR SELECT USING (bucket_id = 'assets');
+
+CREATE POLICY "Staff upload assets" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'assets' 
+    AND public.is_staff()
+  );
+
+-- Verification Docs: STRICT PRIVATE — only owner or staff can read & upload
+CREATE POLICY "Owner and staff upload verification docs" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'verification-docs' 
+    AND (
+      (storage.foldername(name))[1] IN (
+        SELECT donor_id FROM public.donors WHERE user_id = auth.uid()::text
+        UNION
+        SELECT id FROM public.donors WHERE user_id = auth.uid()::text
+        UNION
+        SELECT auth.uid()::text
+      )
+      OR public.is_staff()
+    )
+  );
+
+CREATE POLICY "Owner and staff view verification docs" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'verification-docs' 
+    AND (
+      (storage.foldername(name))[1] IN (
+        SELECT donor_id FROM public.donors WHERE user_id = auth.uid()::text
+        UNION
+        SELECT id FROM public.donors WHERE user_id = auth.uid()::text
+        UNION
+        SELECT auth.uid()::text
+      )
+      OR public.is_staff()
+    )
+  );
+
+CREATE POLICY "Admins delete verification docs" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'verification-docs' 
+    AND public.is_admin()
+  );
 
 -- ==============================================================================
 -- INITIAL SYSTEM CONFIGURATION SEED
@@ -1017,4 +1174,58 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.verify_donor(TEXT, TEXT, TEXT) TO authenticated;
+
+-- ==============================================================================
+-- SECURE PUBLIC VIEWS (Partitioned Safe Access: Zero Sensitive PII)
+-- ==============================================================================
+CREATE OR REPLACE VIEW public.donors_public_search AS
+SELECT
+  d.id,
+  d.donor_id,
+  d.full_name,
+  d.photo_url,
+  d.blood_group,
+  d.division,
+  d.district,
+  d.upazila,
+  d.area,
+  d.location_label,
+  d.availability,
+  d.emergency_available,
+  d.last_donation_date,
+  d.total_donations,
+  d.verification_status,
+  d.organization_id,
+  d.branch_id,
+  d.gender,
+  d.created_at
+FROM public.donors d
+WHERE d.verification_status = 'verified';
+
+GRANT SELECT ON public.donors_public_search TO anon, authenticated;
+
+CREATE OR REPLACE VIEW public.blood_requests_public AS
+SELECT
+  r.id,
+  r.request_id,
+  r.blood_group,
+  r.required_units,
+  r.required_date,
+  r.required_time,
+  r.hospital,
+  r.division,
+  r.district,
+  r.upazila,
+  r.area,
+  r.emergency_level,
+  r.status,
+  r.is_verified,
+  r.verified_at,
+  r.organization_id,
+  r.expires_at,
+  r.created_at
+FROM public.blood_requests r
+WHERE r.status IN ('active', 'verified', 'matched', 'fulfilled');
+
+GRANT SELECT ON public.blood_requests_public TO anon, authenticated;
 

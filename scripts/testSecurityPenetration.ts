@@ -313,6 +313,155 @@ const SECURITY_TESTS: SecurityTestCase[] = [
       return true;
     },
   },
+
+  // 11. Phase 0 SQL Migration Security Audit (Schema & RLS Verification)
+  {
+    id: 'SEC-11',
+    name: 'Phase 0 SQL Migration: Schema Integrity & RLS Verification',
+    severity: 'CRITICAL',
+    category: 'Database Migrations',
+    fn: () => {
+      const migrationPath = path.resolve(process.cwd(), 'supabase/migrations/20260914_phase0_security_hardening.sql');
+      if (!fs.existsSync(migrationPath)) {
+        throw new Error('CRITICAL: Phase 0 migration file 20260914_phase0_security_hardening.sql missing');
+      }
+      const sql = fs.readFileSync(migrationPath, 'utf8');
+
+      // Check view definitions
+      if (!sql.includes('CREATE OR REPLACE VIEW public.donors_public_search')) {
+        throw new Error('FAILED: donors_public_search view missing from Phase 0 migration');
+      }
+      if (sql.includes('d.phone,') || sql.includes('d.nid_or_id_number,') || sql.includes('d.exact_address,')) {
+        throw new Error('CRITICAL: donors_public_search includes sensitive PII columns');
+      }
+      if (!sql.includes('CREATE OR REPLACE VIEW public.blood_requests_public')) {
+        throw new Error('FAILED: blood_requests_public view missing from Phase 0 migration');
+      }
+      if (sql.includes('br.patient_name,') || sql.includes('br.contact_number,')) {
+        throw new Error('CRITICAL: blood_requests_public includes requester PII columns');
+      }
+
+      // Check trigger on INSERT OR UPDATE
+      if (!sql.includes('BEFORE INSERT OR UPDATE ON public.users')) {
+        throw new Error('CRITICAL: protect_user_roles trigger must be on BEFORE INSERT OR UPDATE');
+      }
+
+      // Check immutable audit logs
+      if (!sql.includes('DROP POLICY IF EXISTS "audit_logs_insert_authenticated" ON public.audit_logs;')) {
+        throw new Error('FAILED: Direct client audit_logs insert policy was not dropped');
+      }
+      if (!sql.includes('CREATE OR REPLACE FUNCTION public.record_audit_log')) {
+        throw new Error('FAILED: Trusted record_audit_log RPC function missing');
+      }
+
+      return true;
+    },
+  },
+
+  // 12. Storage MIME Type & Executable Attack Surface Hardening
+  {
+    id: 'SEC-12',
+    name: 'Storage Upload Validation: Strict MIME Types (No Executable / SVG / HTML)',
+    severity: 'HIGH',
+    category: 'Storage Security',
+    fn: async () => {
+      const { ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES } = await import('../src/services/storageService');
+
+      // SVG or HTML could execute script tags in browser; check they are disallowed in image uploads
+      const dangerousMimeTypes = ['image/svg+xml', 'text/html', 'text/javascript', 'application/x-msdownload', 'application/x-php'];
+      for (const dangerous of dangerousMimeTypes) {
+        if (ALLOWED_IMAGE_TYPES.includes(dangerous)) {
+          throw new Error(`CRITICAL: Dangerous MIME type ${dangerous} allowed in ALLOWED_IMAGE_TYPES`);
+        }
+        if (ALLOWED_DOC_TYPES.includes(dangerous)) {
+          throw new Error(`CRITICAL: Dangerous MIME type ${dangerous} allowed in ALLOWED_DOC_TYPES`);
+        }
+      }
+
+      return true;
+    },
+  },
+
+  // 13. Hospital Auto-Registration PII Leak Prevention
+  {
+    id: 'SEC-13',
+    name: 'Hospital Auto-Creation: Prevent Requester Phone Leakage into Public Hotline',
+    severity: 'CRITICAL',
+    category: 'Privacy & Data Protection',
+    fn: () => {
+      const pagePath = path.resolve(process.cwd(), 'src/pages/RequestBloodPage.tsx');
+      const content = fs.readFileSync(pagePath, 'utf8');
+
+      // Must not set hotline: formData.contactNumber or similar
+      if (/hotline:\s*formData\.contactNumber/.test(content)) {
+        throw new Error('CRITICAL: RequestBloodPage sets hospital hotline to requester contactNumber');
+      }
+      if (!/hotline:\s*''/.test(content)) {
+        throw new Error('WARNING: RequestBloodPage auto-hospital does not default hotline to empty');
+      }
+
+      return true;
+    },
+  },
+
+  // 14. Frontend Service Query Routing (Safe Views vs Raw Tables)
+  {
+    id: 'SEC-14',
+    name: 'Frontend Services: Route Public Queries to Safe Masked Views',
+    severity: 'HIGH',
+    category: 'API & Query Routing',
+    fn: () => {
+      const donorServicePath = path.resolve(process.cwd(), 'src/services/donorService.ts');
+      const donorContent = fs.readFileSync(donorServicePath, 'utf8');
+      if (!donorContent.includes("from('donors_public_search')")) {
+        throw new Error('FAILED: donorService does not query donors_public_search for public donors');
+      }
+
+      const bloodRequestServicePath = path.resolve(process.cwd(), 'src/services/bloodRequestService.ts');
+      const requestContent = fs.readFileSync(bloodRequestServicePath, 'utf8');
+      if (!requestContent.includes("from('blood_requests_public')")) {
+        throw new Error('FAILED: bloodRequestService does not query blood_requests_public for public requests');
+      }
+
+      return true;
+    },
+  },
+
+  // 15. Certificate Privacy: No Raw Phone Search Exposing Donor Details
+  {
+    id: 'SEC-15',
+    name: 'Certificate Search: Disallow Public Phone Search for Donor Discovery',
+    severity: 'HIGH',
+    category: 'Privacy & Data Protection',
+    fn: () => {
+      const certPagePath = path.resolve(process.cwd(), 'src/pages/CertificatePage.tsx');
+      const content = fs.readFileSync(certPagePath, 'utf8');
+
+      if (content.includes('d.phone === searchQuery') || content.includes('d.phone.includes(searchQuery)')) {
+        throw new Error('CRITICAL: CertificatePage permits searching donor records by phone number');
+      }
+
+      return true;
+    },
+  },
+
+  // 16. Build Config: Zero Secret Leaks via Vite Define
+  {
+    id: 'SEC-16',
+    name: 'Vite Config: Zero API Key Embedding in Client Bundles',
+    severity: 'CRITICAL',
+    category: 'Secrets & Keys',
+    fn: () => {
+      const viteConfigPath = path.resolve(process.cwd(), 'vite.config.ts');
+      const content = fs.readFileSync(viteConfigPath, 'utf8');
+
+      if (content.includes("define: { 'process.env.GEMINI_API_KEY'") || content.includes("process.env.GEMINI_API_KEY")) {
+        throw new Error('CRITICAL: vite.config.ts embeds GEMINI_API_KEY into client bundle');
+      }
+
+      return true;
+    },
+  },
 ];
 
 async function runSecurityPenetrationSuite() {

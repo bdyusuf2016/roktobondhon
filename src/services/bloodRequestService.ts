@@ -38,14 +38,26 @@ export function mapBloodRequestRow(row: any): BloodRequest {
 }
 
 /**
- * Fetch all active blood requests
+ * Fetch all active blood requests (Queries secure public view omitting patient contact PII)
  */
 export async function getActiveBloodRequests(): Promise<BloodRequest[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
+    // 1. Primary: Query secure public view (never leaks patient phone or private notes)
+    const { data: publicData, error: publicErr } = await supabase
+      .from('blood_requests_public')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (publicData && !publicErr) {
+      return publicData.map(mapBloodRequestRow);
+    }
+
+    // 2. Fallback if view is not yet applied
+    const SAFE_REQUEST_COLUMNS = 'id, request_id, blood_group, required_units, required_date, required_time, hospital, division, district, upazila, area, emergency_level, status, is_verified, organization_id, expires_at, created_at';
     const { data, error } = await supabase
       .from('blood_requests')
-      .select('*')
+      .select(SAFE_REQUEST_COLUMNS)
       .in('status', ['active', 'matched', 'pending'])
       .order('created_at', { ascending: false });
 
@@ -62,7 +74,7 @@ export async function getActiveBloodRequests(): Promise<BloodRequest[]> {
 }
 
 /**
- * Fetch blood requests created by a specific user
+ * Fetch blood requests created by a specific user (Authenticated owner)
  */
 export async function getUserRequests(userId: string): Promise<BloodRequest[]> {
   if (!isSupabaseConfigured || !supabase) return [];
@@ -86,23 +98,30 @@ export async function getUserRequests(userId: string): Promise<BloodRequest[]> {
 }
 
 /**
- * Fetch a single blood request by ID
+ * Fetch a single blood request by ID (Full record if requester/responder/staff; public safe view otherwise)
  */
 export async function getBloodRequestById(id: string): Promise<BloodRequest | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
+    // 1. Try authorized raw blood_requests table
     const { data, error } = await supabase
       .from('blood_requests')
       .select('*')
       .or(`id.eq.${id},request_id.eq.${id}`)
       .maybeSingle();
 
-    if (error) {
-      console.error('Error fetching blood request by ID:', error);
-      return null;
+    if (data && !error) {
+      return mapBloodRequestRow(data);
     }
 
-    return data ? mapBloodRequestRow(data) : null;
+    // 2. Fallback to public-safe view for anonymous/public visitors
+    const { data: publicData } = await supabase
+      .from('blood_requests_public')
+      .select('*')
+      .or(`id.eq.${id},request_id.eq.${id}`)
+      .maybeSingle();
+
+    return publicData ? mapBloodRequestRow(publicData) : null;
   } catch (err) {
     console.error('Exception fetching blood request:', err);
     return null;

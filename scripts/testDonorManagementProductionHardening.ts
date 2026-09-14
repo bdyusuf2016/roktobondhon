@@ -137,8 +137,8 @@ assert(
 // 9. Staff+donor account routing
 assert(
   userServiceContent.includes('getUserProfile(uid, email, phone)') &&
-  loginPageContent.includes("parsed?.role === 'super_admin'") &&
-  loginPageContent.includes("navigate('/admin')"),
+  (loginPageContent.includes("['super_admin', 'admin', 'moderator', 'volunteer'].includes(loggedInUser.role)") || loginPageContent.includes("parsed?.role === 'super_admin'")) &&
+  loginPageContent.includes("navigate('/admin'"),
   'Test 9: Dual role staff+donor account preserves staff privileges and routes to administrative portal'
 );
 
