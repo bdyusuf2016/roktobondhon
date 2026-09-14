@@ -580,4 +580,36 @@ export async function deleteDonorAccount(donorId: string): Promise<DeleteDonorRe
   };
 }
 
+/**
+ * Calculate remaining days until next eligible donation date
+ * Official interval rules: Male 90 days, Female 120 days
+ */
+export function calculateDonorEligibilityCountdown(
+  lastDonationDate?: string,
+  gender: 'male' | 'female' | 'other' = 'male'
+): { isEligible: boolean; daysRemaining: number; nextEligibleDate: string | null } {
+  if (!lastDonationDate) {
+    return { isEligible: true, daysRemaining: 0, nextEligibleDate: null };
+  }
 
+  const lastDate = new Date(lastDonationDate);
+  if (isNaN(lastDate.getTime())) {
+    return { isEligible: true, daysRemaining: 0, nextEligibleDate: null };
+  }
+
+  const intervalDays = gender === 'female' ? 120 : 90;
+  const nextDate = new Date(lastDate.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const nextDay = new Date(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate()).getTime();
+
+  const diffMs = nextDay - nowDay;
+  const daysRemaining = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+  return {
+    isEligible: daysRemaining <= 0,
+    daysRemaining: daysRemaining > 0 ? daysRemaining : 0,
+    nextEligibleDate: nextDate.toISOString().split('T')[0],
+  };
+}

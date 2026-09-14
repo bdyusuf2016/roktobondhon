@@ -42,6 +42,7 @@ import { useOrgConfig } from '../contexts/OrgConfigContext';
 import { BANGLADESH_DISTRICTS, getUpazilasForDistrict } from '../data/bangladeshGeoData';
 import { printCertificateInStandaloneWindow } from '../services/certificatePrintService';
 import { volunteerForBloodRequest } from '../services/donorRequestService';
+import { calculateDonorEligibilityCountdown } from '../services/donorService';
 import { DonorSelfReportModal } from '../components/profile/DonorSelfReportModal';
 import type { BloodGroup, Gender, DonationSubmission } from '../types';
 
@@ -778,6 +779,46 @@ export const ProfilePage: React.FC = () => {
         <div className="space-y-6 animate-in fade-in duration-150">
           {myDonor ? (
             <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs space-y-4">
+              {/* Eligibility Countdown Banner */}
+              {(() => {
+                const countdown = calculateDonorEligibilityCountdown(
+                  myDonor.lastDonationDate,
+                  myDonor.gender || 'male'
+                );
+
+                return (
+                  <div
+                    className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      countdown.isEligible
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                        : 'bg-amber-50 border-amber-200 text-amber-950'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Clock className={`w-5 h-5 shrink-0 ${countdown.isEligible ? 'text-emerald-600' : 'text-amber-600'}`} />
+                      <div>
+                        <span className="font-bold block text-sm">
+                          {countdown.isEligible
+                            ? '🎉 আপনি বর্তমানে রক্তদানের জন্য সম্পূর্ণ প্রস্তুত ও উপযুক্ত!'
+                            : `⏳ পরবর্তী রক্তদানের জন্য আরও ${countdown.daysRemaining} দিন অপেক্ষা করতে হবে`}
+                        </span>
+                        <span className="text-[11px] opacity-80">
+                          {myDonor.lastDonationDate
+                            ? `সর্বশেষ রক্তদান: ${myDonor.lastDonationDate} • বিরতি নিয়ম: ${myDonor.gender === 'female' ? '১২০ দিন' : '৯০ দিন'}`
+                            : 'এখনো রক্তদানের কোনো পূর্ব রেকর্ড নেই। আপনি এখনই রক্তদান করতে পারেন।'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {countdown.nextEligibleDate && !countdown.isEligible && (
+                      <span className="font-mono font-bold text-xs bg-amber-100 text-amber-900 px-3 py-1 rounded-lg border border-amber-300 shrink-0 self-start sm:self-center">
+                        সম্ভাব্য তারিখ: {countdown.nextEligibleDate}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">

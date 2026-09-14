@@ -460,7 +460,9 @@ CREATE INDEX IF NOT EXISTS idx_camp_registrations_camp_id ON public.camp_registr
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_donor_requests_donor_user_id ON public.donor_requests(donor_user_id);
+CREATE INDEX IF NOT EXISTS idx_donor_requests_active_count ON public.donor_requests(blood_request_id, status);
 CREATE INDEX IF NOT EXISTS idx_donations_donor_id ON public.donations(donor_id);
+CREATE INDEX IF NOT EXISTS idx_blood_requests_status_emergency ON public.blood_requests(status, emergency_level);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON public.audit_logs(timestamp DESC);
 
 -- ==============================================================================
@@ -710,6 +712,103 @@ CREATE POLICY "Requesters and staff update blood requests" ON public.blood_reque
 CREATE POLICY "Admins delete blood requests" ON public.blood_requests
   FOR DELETE USING (public.is_admin());
 
+-- Trigger: Protect Immutable Blood Request Fields & Enforce Absolute Terminal Protection & Transition Matrix
+CREATE OR REPLACE FUNCTION public.protect_blood_request_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- A. Absolute Terminal State Protection (NO BYPASS FOR ANY ROLE, ADMIN, OR SYSTEM)
+  -- A terminal blood request is completely immutable: no field may be altered.
+  IF OLD.status IN ('fulfilled', 'cancelled', 'expired') THEN
+    RAISE EXCEPTION 'Unauthorized: Modification of a terminal blood request (status: "%") is strictly forbidden.', OLD.status;
+  END IF;
+
+  -- B. Enforce Immutable Identity Keys for ALL callers (including staff and admin)
+  IF (NEW.id IS DISTINCT FROM OLD.id) OR
+     (NEW.request_id IS DISTINCT FROM OLD.request_id) OR
+     (NEW.user_id IS DISTINCT FROM OLD.user_id) OR
+     (NEW.blood_group IS DISTINCT FROM OLD.blood_group) OR
+     (NEW.created_at IS DISTINCT FROM OLD.created_at) OR
+     (NEW.organization_id IS DISTINCT FROM OLD.organization_id) THEN
+    RAISE EXCEPTION 'Unauthorized: Modification of immutable blood request identity fields is forbidden.';
+  END IF;
+
+  -- C. Database-Authoritative Status Transition Matrix Enforcement
+  IF (NEW.status IS DISTINCT FROM OLD.status) THEN
+    -- Disallow direct transition to 'expired' unless executed through trusted system expiration process
+    -- Enforced via trusted transaction-local GUC marker 'app.in_blood_request_expiration'
+    IF NEW.status = 'expired' THEN
+      IF OLD.status NOT IN ('active', 'matched') THEN
+        RAISE EXCEPTION 'Invalid transition: blood request must be active or matched to be expired.';
+      END IF;
+      IF current_setting('app.in_blood_request_expiration', true) IS DISTINCT FROM 'true' THEN
+        RAISE EXCEPTION 'Direct update to expired is forbidden. Expiration is managed by system automated processes setting trusted transaction context.';
+      END IF;
+    END IF;
+
+    -- Disallow direct transition to 'fulfilled' unless executed through complete_donation_fulfillment RPC
+    -- Enforced via trusted transaction-local GUC marker 'app.in_donation_fulfillment'
+    IF NEW.status = 'fulfilled' THEN
+      IF OLD.status NOT IN ('active', 'matched') THEN
+        RAISE EXCEPTION 'Invalid transition: blood request must be active or matched to be fulfilled.';
+      END IF;
+      IF current_setting('app.in_donation_fulfillment', true) IS DISTINCT FROM 'true' THEN
+        RAISE EXCEPTION 'Direct update to fulfilled is forbidden. Fulfillment must occur through complete_donation_fulfillment().';
+      END IF;
+    END IF;
+
+    -- Enforce transition matrix for each starting status
+    IF OLD.status = 'pending' THEN
+      IF NEW.status NOT IN ('verified', 'active', 'cancelled') THEN
+        RAISE EXCEPTION 'Invalid status transition from pending to "%".', NEW.status;
+      END IF;
+      IF NEW.status IN ('verified', 'active') AND NOT public.is_staff() THEN
+        RAISE EXCEPTION 'Unauthorized: Only staff members can verify or activate blood requests.';
+      END IF;
+
+    ELSIF OLD.status = 'verified' THEN
+      IF NEW.status NOT IN ('active', 'cancelled') THEN
+        RAISE EXCEPTION 'Invalid status transition from verified to "%".', NEW.status;
+      END IF;
+      IF NEW.status = 'active' AND NOT public.is_staff() THEN
+        RAISE EXCEPTION 'Unauthorized: Only staff members can activate verified blood requests.';
+      END IF;
+
+    ELSIF OLD.status = 'active' THEN
+      IF NEW.status NOT IN ('matched', 'cancelled', 'expired', 'fulfilled') THEN
+        RAISE EXCEPTION 'Invalid status transition from active to "%".', NEW.status;
+      END IF;
+
+    ELSIF OLD.status = 'matched' THEN
+      IF NEW.status NOT IN ('active', 'cancelled', 'expired', 'fulfilled') THEN
+        RAISE EXCEPTION 'Invalid status transition from matched to "%".', NEW.status;
+      END IF;
+
+    ELSE
+      RAISE EXCEPTION 'Invalid current status: "%".', OLD.status;
+    END IF;
+  END IF;
+
+  -- D. For Non-Staff Callers (Requesters):
+  IF NOT public.is_staff() THEN
+    -- Requester cannot alter staff-only verification fields
+    IF (NEW.is_verified IS DISTINCT FROM OLD.is_verified) OR
+       (NEW.verified_by IS DISTINCT FROM OLD.verified_by) OR
+       (NEW.verified_at IS DISTINCT FROM OLD.verified_at) THEN
+      RAISE EXCEPTION 'Unauthorized: Only staff members can modify verification details.';
+    END IF;
+  END IF;
+
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_blood_request_fields ON public.blood_requests;
+CREATE TRIGGER trg_protect_blood_request_fields
+  BEFORE UPDATE ON public.blood_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_blood_request_fields();
+
 -- 5. Donor Requests (Matching) Policies
 DROP POLICY IF EXISTS "Users can view donor requests" ON public.donor_requests;
 DROP POLICY IF EXISTS "Users can insert donor requests" ON public.donor_requests;
@@ -885,6 +984,193 @@ CREATE TRIGGER trg_donor_request_notifications
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_donor_request_notifications();
 
+-- Trigger: Concurrency & Rate Limit on public.donor_requests (Max 5 Pending Requests)
+CREATE OR REPLACE FUNCTION public.enforce_donor_request_limits()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_pending_count INTEGER;
+  v_breq_status TEXT;
+BEGIN
+  SELECT status INTO v_breq_status
+  FROM public.blood_requests
+  WHERE id = NEW.blood_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Blood request does not exist: %', NEW.blood_request_id;
+  END IF;
+
+  IF v_breq_status IN ('fulfilled', 'cancelled', 'expired') THEN
+    RAISE EXCEPTION 'Cannot dispatch donor requests for a % blood request.', v_breq_status;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.donor_requests
+    WHERE blood_request_id = NEW.blood_request_id
+      AND donor_id = NEW.donor_id
+      AND status IN ('pending', 'accepted')
+  ) THEN
+    RAISE EXCEPTION 'Duplicate: A request has already been sent to this donor for this blood request.';
+  END IF;
+
+  IF NEW.status = 'pending' THEN
+    SELECT count(*) INTO v_pending_count
+    FROM public.donor_requests
+    WHERE blood_request_id = NEW.blood_request_id
+      AND status = 'pending';
+
+    IF v_pending_count >= 5 THEN
+      RAISE EXCEPTION 'Rate limit exceeded: A blood request cannot have more than 5 concurrent pending donor requests.';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_enforce_donor_request_limits ON public.donor_requests;
+CREATE TRIGGER trg_enforce_donor_request_limits
+  BEFORE INSERT ON public.donor_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_donor_request_limits();
+
+-- Privacy-Preserving Accepted Donor Contact RPC
+CREATE OR REPLACE FUNCTION public.get_accepted_donor_contact(
+  p_donor_request_id TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_caller_uid UUID;
+  v_dreq public.donor_requests%ROWTYPE;
+  v_breq public.blood_requests%ROWTYPE;
+  v_donor public.donors%ROWTYPE;
+BEGIN
+  v_caller_uid := auth.uid();
+  IF v_caller_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required to view donor contact details.';
+  END IF;
+
+  SELECT * INTO v_dreq
+  FROM public.donor_requests
+  WHERE id = p_donor_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Donor request not found: %', p_donor_request_id;
+  END IF;
+
+  SELECT * INTO v_breq
+  FROM public.blood_requests
+  WHERE id = v_dreq.blood_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Linked blood request not found: %', v_dreq.blood_request_id;
+  END IF;
+
+  IF v_breq.user_id != v_caller_uid::text AND NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Unauthorized: Only the blood request owner or authorized staff can access donor contact details.';
+  END IF;
+
+  IF v_dreq.status != 'accepted' THEN
+    RAISE EXCEPTION 'Unauthorized: Donor contact details are only disclosed when the request is accepted.';
+  END IF;
+
+  SELECT * INTO v_donor
+  FROM public.donors
+  WHERE id = v_dreq.donor_id
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Donor record not found.';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'donor_id', v_donor.id,
+    'human_id', v_donor.donor_id,
+    'full_name', v_donor.full_name,
+    'phone', v_donor.phone,
+    'blood_group', v_donor.blood_group,
+    'location_label', v_donor.location_label,
+    'photo_url', v_donor.photo_url,
+    'last_donation_date', v_donor.last_donation_date,
+    'total_donations', v_donor.total_donations
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+GRANT EXECUTE ON FUNCTION public.get_accepted_donor_contact(TEXT) TO authenticated;
+
+-- Match-State Synchronization
+CREATE OR REPLACE FUNCTION public.recompute_blood_request_match_state(
+  p_blood_request_id TEXT
+)
+RETURNS VOID AS $$
+DECLARE
+  v_breq public.blood_requests%ROWTYPE;
+  v_accepted_count INTEGER;
+BEGIN
+  SELECT * INTO v_breq
+  FROM public.blood_requests
+  WHERE id = p_blood_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  IF v_breq.status IN ('fulfilled', 'cancelled', 'expired') THEN
+    RETURN;
+  END IF;
+
+  SELECT count(*) INTO v_accepted_count
+  FROM public.donor_requests
+  WHERE blood_request_id = p_blood_request_id
+    AND status = 'accepted';
+
+  IF v_accepted_count > 0 AND v_breq.status = 'active' THEN
+    UPDATE public.blood_requests
+    SET status = 'matched', updated_at = NOW()
+    WHERE id = p_blood_request_id;
+  ELSIF v_accepted_count = 0 AND v_breq.status = 'matched' THEN
+    UPDATE public.blood_requests
+    SET status = 'active', updated_at = NOW()
+    WHERE id = p_blood_request_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Revoke client execution from internal helper
+REVOKE ALL ON FUNCTION public.recompute_blood_request_match_state(TEXT) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.handle_donor_request_match_state()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status = 'accepted' THEN
+      PERFORM public.recompute_blood_request_match_state(NEW.blood_request_id);
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF (OLD.status IS DISTINCT FROM NEW.status) AND (OLD.status = 'accepted' OR NEW.status = 'accepted') THEN
+      PERFORM public.recompute_blood_request_match_state(NEW.blood_request_id);
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Revoke client execution from trigger function
+REVOKE ALL ON FUNCTION public.handle_donor_request_match_state() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_donor_request_match_state ON public.donor_requests;
+CREATE TRIGGER trg_donor_request_match_state
+  AFTER INSERT OR UPDATE OF status ON public.donor_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_donor_request_match_state();
+
 -- 6. Donations Field Protection Trigger & Fulfillment RPC
 CREATE OR REPLACE FUNCTION public.protect_donation_fields()
 RETURNS TRIGGER AS $$
@@ -934,7 +1220,7 @@ DECLARE
   v_interval_days INTEGER;
 BEGIN
   v_caller_uid := auth.uid();
-  IF v_caller_uid IS NULL AND current_user NOT IN ('postgres', 'service_role') THEN
+  IF v_caller_uid IS NULL THEN
     RAISE EXCEPTION 'Authentication required to fulfill donation.';
   END IF;
 
@@ -947,8 +1233,8 @@ BEGIN
     RAISE EXCEPTION 'Donor request not found: %', p_donor_request_id;
   END IF;
 
-  IF current_user NOT IN ('postgres', 'service_role') THEN
-    IF v_dreq.donor_user_id != v_caller_uid::text AND NOT public.is_staff() THEN
+  IF NOT public.is_staff() THEN
+    IF v_dreq.donor_user_id != v_caller_uid::text THEN
       RAISE EXCEPTION 'Unauthorized: Only the assigned donor or staff can complete this donation.';
     END IF;
   END IF;
@@ -1044,6 +1330,9 @@ BEGIN
     v_now,
     v_now
   );
+
+  -- Set Transaction-Local Authorization Marker for RPC-Only Fulfillment
+  PERFORM set_config('app.in_donation_fulfillment', 'true', true);
 
   UPDATE public.blood_requests
   SET status = 'fulfilled',

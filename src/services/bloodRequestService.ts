@@ -211,6 +211,72 @@ export async function updateBloodRequestStatusInSupabase(
 }
 
 /**
+ * Fetch contact details for an accepted donor request via authoritative RPC
+ * (Returns strictly sanitized operational contact info; zero emergency_contact, NID, or exact address)
+ */
+export async function getAcceptedDonorContactInSupabase(
+  donorRequestId: string
+): Promise<{
+  donorId: string;
+  humanId: string;
+  fullName: string;
+  phone: string;
+  bloodGroup: string;
+  locationLabel?: string;
+  photoUrl?: string;
+  lastDonationDate?: string;
+  totalDonations?: number;
+} | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc('get_accepted_donor_contact', {
+      p_donor_request_id: donorRequestId,
+    });
+
+    if (error) {
+      console.error('Error fetching accepted donor contact:', error);
+      throw new Error(error.message || 'রক্তদাতার যোগাযোগের তথ্য লোড করতে সমস্যা হয়েছে।');
+    }
+
+    if (!data) return null;
+
+    return {
+      donorId: data.donor_id,
+      humanId: data.human_id,
+      fullName: data.full_name,
+      phone: data.phone,
+      bloodGroup: data.blood_group,
+      locationLabel: data.location_label,
+      photoUrl: data.photo_url,
+      lastDonationDate: data.last_donation_date,
+      totalDonations: data.total_donations,
+    };
+  } catch (err) {
+    console.error('Exception fetching accepted donor contact:', err);
+    throw err;
+  }
+}
+
+/**
+ * Cancel a blood request safely
+ */
+export async function cancelBloodRequestInSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  const { error } = await supabase
+    .from('blood_requests')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error cancelling blood request:', error);
+    throw new Error(error.message || 'রক্তের অনুরোধ বাতিল করতে সমস্যা হয়েছে।');
+  }
+}
+
+/**
  * Verify blood request by staff/volunteer
  */
 export async function verifyBloodRequestInSupabase(
@@ -233,6 +299,7 @@ export async function verifyBloodRequestInSupabase(
 
   if (error) {
     console.error('Error verifying blood request in Supabase:', error);
+    throw new Error(error.message || 'রক্তের অনুরোধ যাচাইকরণে সমস্যা হয়েছে।');
   }
 }
 

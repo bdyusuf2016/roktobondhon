@@ -27,6 +27,7 @@ import { EmergencyBroadcastModal } from '../components/EmergencyBroadcastModal';
 import { SocialShareBar } from '../components/common/SocialShareBar';
 import { useSEO } from '../hooks/useSEO';
 import { volunteerForBloodRequest } from '../services/donorRequestService';
+import { getAcceptedDonorContactInSupabase } from '../services/bloodRequestService';
 import { getRequestWhatsAppLink } from '../services/whatsappService';
 import type { Donor } from '../types';
 
@@ -48,6 +49,8 @@ export const RequestDetailPage: React.FC = () => {
   const [hasVolunteered, setHasVolunteered] = useState(false);
   const [isVolunteering, setIsVolunteering] = useState(false);
   const [isFulfilling, setIsFulfilling] = useState(false);
+  const [revealedContacts, setRevealedContacts] = useState<Record<string, { phone: string; fullName: string }>>({});
+  const [loadingContactId, setLoadingContactId] = useState<string | null>(null);
 
   const [selectedDonorForModal, setSelectedDonorForModal] = useState<{
     donor: Donor;
@@ -104,6 +107,8 @@ export const RequestDetailPage: React.FC = () => {
     currentUser?.role === 'super_admin' ||
     currentUser?.role === 'admin' ||
     currentUser?.role === 'moderator';
+
+  const isOwner = Boolean(currentUser?.id && request?.userId === currentUser.id);
 
   const handleShare = () => {
     const patientText = request.patientName ? `রোগী: ${request.patientName}\n` : '';
@@ -386,6 +391,55 @@ export const RequestDetailPage: React.FC = () => {
 
                     {dr.declineReason && (
                       <p className="text-[11px] text-slate-500 italic">কারণ: {dr.declineReason}</p>
+                    )}
+
+                    {dr.status === 'accepted' && (isOwner || isPrivileged) && (
+                      <div className="pt-1">
+                        {revealedContacts[dr.id] ? (
+                          <div className="p-2 rounded-md bg-emerald-50 border border-emerald-200 text-xs space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-emerald-900">রক্তদাতার যোগাযোগ:</span>
+                              <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">যাচাইকৃত</span>
+                            </div>
+                            <a
+                              href={`tel:${revealedContacts[dr.id].phone}`}
+                              className="inline-flex items-center gap-1.5 font-bold text-emerald-800 hover:text-emerald-900 text-sm"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                              {revealedContacts[dr.id].phone}
+                            </a>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={loadingContactId === dr.id}
+                            onClick={async () => {
+                              setLoadingContactId(dr.id);
+                              try {
+                                const contact = await getAcceptedDonorContactInSupabase(dr.id);
+                                if (contact?.phone) {
+                                  setRevealedContacts((prev) => ({
+                                    ...prev,
+                                    [dr.id]: { phone: contact.phone, fullName: contact.fullName },
+                                  }));
+                                }
+                              } catch (err: any) {
+                                dialog.alert({
+                                  title: 'যোগাযোগ নম্বর ত্রুটি',
+                                  message: err.message || 'রক্তদাতার যোগাযোগ নম্বর লোড করা সম্ভব হয়নি।',
+                                  type: 'error',
+                                });
+                              } finally {
+                                setLoadingContactId(null);
+                              }
+                            }}
+                            className="w-full py-1 px-2 text-[11px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                          >
+                            <Phone className="w-3 h-3" />
+                            {loadingContactId === dr.id ? 'লোড হচ্ছে...' : '📞 রক্তদাতার নম্বর দেখুন'}
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {!isFulfilled && isMyAcceptedRequest && (
