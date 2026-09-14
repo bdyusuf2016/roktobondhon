@@ -303,6 +303,44 @@ export async function verifyBloodRequestInSupabase(
   }
 }
 
+/**
+ * Execute batch expiration maintenance for overdue blood requests
+ * (Authorized trusted maintenance / backend execution via expire_overdue_blood_requests RPC)
+ */
+export async function expireOverdueBloodRequestsInSupabase(
+  batchLimit = 100
+): Promise<{
+  success: boolean;
+  expiredCount: number;
+  expiredRequestIds: string[];
+  executedAt: string;
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: true,
+      expiredCount: 0,
+      expiredRequestIds: [],
+      executedAt: new Date().toISOString(),
+    };
+  }
+
+  const { data, error } = await supabase.rpc('expire_overdue_blood_requests', {
+    p_batch_limit: batchLimit,
+  });
+
+  if (error) {
+    console.error('Error executing expire_overdue_blood_requests RPC:', error);
+    throw new Error(error.message || 'রক্তের অনুরোধের মেয়াদোত্তীর্ণ রক্ষণাবেক্ষণ সম্পন্ন করা যায়নি।');
+  }
+
+  return {
+    success: Boolean(data?.success),
+    expiredCount: Number(data?.expired_count) || 0,
+    expiredRequestIds: Array.isArray(data?.expired_request_ids) ? data.expired_request_ids : [],
+    executedAt: data?.executed_at || new Date().toISOString(),
+  };
+}
+
 // Compatibility aliases
 export const updateBloodRequestStatusInFirestore = updateBloodRequestStatusInSupabase;
 export const verifyBloodRequestInFirestore = verifyBloodRequestInSupabase;

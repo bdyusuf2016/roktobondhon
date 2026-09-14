@@ -344,9 +344,73 @@ export interface VerifyDonorResult {
 }
 
 /**
+ * Authoritative donor moderation / verification (Authorized staff only via verify_donor_profile RPC)
+ */
+export async function verifyDonorProfileInSupabase(
+  donorId: string,
+  targetStatus: VerificationStatus,
+  adminNotes?: string
+): Promise<{
+  success: boolean;
+  donorId: string;
+  humanId?: string;
+  oldStatus?: string;
+  newStatus: VerificationStatus;
+  adminNotes?: string;
+  verifiedBy: string;
+  verifiedAt: string;
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: true,
+      donorId,
+      newStatus: targetStatus,
+      verifiedBy: 'system',
+      verifiedAt: new Date().toISOString(),
+    };
+  }
+
+  // Resolve UUID if human donor_id format passed
+  let resolvedUuid = donorId;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(donorId);
+  if (!isUuid) {
+    const { data: donorLookup } = await supabase
+      .from('donors')
+      .select('id')
+      .eq('donor_id', donorId)
+      .maybeSingle();
+    if (donorLookup?.id) {
+      resolvedUuid = donorLookup.id;
+    }
+  }
+
+  const { data, error } = await supabase.rpc('verify_donor_profile', {
+    p_donor_id: resolvedUuid,
+    p_new_status: targetStatus,
+    p_admin_notes: adminNotes || null,
+  });
+
+  if (error) {
+    console.error('Error in verify_donor_profile RPC:', error);
+    throw new Error(error.message || 'রক্তদাতা প্রোফাইল ভেরিফিকেশন ব্যর্থ হয়েছে।');
+  }
+
+  return {
+    success: Boolean(data?.success),
+    donorId: data?.donor_id || resolvedUuid,
+    humanId: data?.human_id,
+    oldStatus: data?.old_status,
+    newStatus: (data?.new_status as VerificationStatus) || targetStatus,
+    adminNotes: data?.admin_notes,
+    verifiedBy: data?.verified_by || 'staff',
+    verifiedAt: data?.verified_at || new Date().toISOString(),
+  };
+}
+
+/**
  * Verify a donor (authorized staff only)
- * Executes atomic PostgreSQL transaction via verify_donor RPC,
- * with strict row-count validation, idempotency guards, and fallback sync.
+ * Executes atomic PostgreSQL transaction via verify_donor_profile RPC,
+ * with strict state machine validation, idempotency guards, and fallback sync.
  */
 export async function verifyDonorStatus(
   donorId: string,
@@ -372,7 +436,31 @@ export async function verifyDonorStatus(
     throw new Error('অননুমোদিত: আপনার সুপাবেজ অথেন্টিকেশন সেশন নিষ্ক্রিয় বা পাওয়া যায়নি। দয়া করে লগআউট করে আপনার অ্যাডমিন অ্যাকাউন্টে পুনরায় লগইন করুন। (Unauthorized: No active Supabase Auth session. Please log in again.)');
   }
 
-  // 1. Primary Path: Execute atomic PostgreSQL RPC function (single ACID transaction)
+  // 1. Primary Path: Execute atomic verify_donor_profile RPC
+  try {
+    const res = await verifyDonorProfileInSupabase(donorId, status, notes);
+    return {
+      success: res.success,
+      donorId: res.donorId,
+      humanId: res.humanId,
+      status: res.newStatus,
+      verifiedBy: res.verifiedBy || verifierName,
+      verifiedAt: res.verifiedAt || now,
+    };
+  } catch (err: any) {
+    const msg = err.message || '';
+    if (
+      msg.includes('Unauthorized') ||
+      msg.includes('not found') ||
+      msg.includes('Illegal verification state transition') ||
+      msg.includes('Invalid target status')
+    ) {
+      throw err;
+    }
+    console.warn('verify_donor_profile RPC call failed, attempting legacy verify_donor fallback:', err);
+  }
+
+  // Legacy fallback if verify_donor_profile not yet deployed
   try {
     const { data: rpcData, error: rpcError } = await supabase.rpc('verify_donor', {
       p_donor_id: donorId,
@@ -392,18 +480,8 @@ export async function verifyDonorStatus(
         logId: rpcData.log_id,
       };
     }
-
     if (rpcError) {
-      const msg = rpcError.message || '';
-      // If error is an explicit domain authorization or validation failure, reject immediately
-      if (
-        msg.includes('Unauthorized') ||
-        msg.includes('not found') ||
-        msg.includes('Invalid verification status')
-      ) {
-        throw new Error(msg);
-      }
-      console.warn('RPC verify_donor failed, attempting guarded fallback:', msg);
+      console.warn('RPC verify_donor failed, attempting guarded fallback:', rpcError.message);
     }
   } catch (err: any) {
     if (err.message && (err.message.includes('Unauthorized') || err.message.includes('not found'))) {

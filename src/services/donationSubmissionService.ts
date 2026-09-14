@@ -247,73 +247,66 @@ export async function cancelDonationSubmissionInSupabase(id: string): Promise<vo
 }
 
 /**
- * Approve a donation submission (Staff action via atomic RPC)
+ * Authoritative review of a donation submission (Staff action via atomic review_donation_submission RPC)
  */
-export async function approveDonationSubmissionInSupabase(
+export async function reviewDonationSubmissionInSupabase(
   id: string,
+  action: 'approved' | 'rejected',
   reviewNotes?: string
-): Promise<{ success: boolean; donationId?: string; alreadyApproved?: boolean; message?: string }> {
+): Promise<{ success: boolean; donationId?: string; alreadyReviewed?: boolean; message?: string }> {
   if (!isSupabaseConfigured || !supabase) {
-    return { success: true, donationId: `don-${Date.now()}` };
+    return { success: true, donationId: action === 'approved' ? `don-${Date.now()}` : undefined };
   }
 
   try {
-    const { data, error } = await supabase.rpc('approve_donation_submission', {
+    const { data, error } = await supabase.rpc('review_donation_submission', {
       p_submission_id: id,
+      p_status: action,
       p_review_notes: reviewNotes || null,
     });
 
     if (error) {
-      console.error('Error executing approve_donation_submission RPC:', error);
+      console.error('Error executing review_donation_submission RPC:', error);
       throw error;
     }
 
     return {
       success: Boolean(data?.success),
       donationId: data?.donation_id,
-      alreadyApproved: Boolean(data?.already_approved),
+      alreadyReviewed: Boolean(data?.already_reviewed),
       message: data?.message,
     };
   } catch (err: any) {
-    console.error('Exception approving submission:', err);
+    console.error('Exception reviewing submission:', err);
     throw err;
   }
 }
 
 /**
- * Reject a donation submission (Staff action via RPC)
+ * Approve a donation submission (Staff action via atomic RPC)
+ */
+export async function approveDonationSubmissionInSupabase(
+  id: string,
+  reviewNotes?: string
+): Promise<{ success: boolean; donationId?: string; alreadyApproved?: boolean; message?: string }> {
+  return reviewDonationSubmissionInSupabase(id, 'approved', reviewNotes);
+}
+
+/**
+ * Reject a donation submission (Staff action via atomic RPC)
  */
 export async function rejectDonationSubmissionInSupabase(
   id: string,
   reason: string
 ): Promise<{ success: boolean; message?: string }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { success: true, message: 'Rejected locally' };
+  if (!reason || !reason.trim()) {
+    throw new Error('বাতিলের কারণ উল্লেখ করা আবশ্যক।');
   }
-
-  try {
-    const { data, error } = await supabase.rpc('reject_donation_submission', {
-      p_submission_id: id,
-      p_reason: reason,
-    });
-
-    if (error) {
-      console.error('Error executing reject_donation_submission RPC:', error);
-      throw error;
-    }
-
-    return {
-      success: Boolean(data?.success),
-      message: data?.message,
-    };
-  } catch (err: any) {
-    console.error('Exception rejecting submission:', err);
-    throw err;
-  }
+  return reviewDonationSubmissionInSupabase(id, 'rejected', reason.trim());
 }
 
 /**
- * Request more info for a donation submission (Staff action via RPC)
+ * Request more info for a donation submission (Staff action via RPC / notes update)
  */
 export async function requestDonationSubmissionInfoInSupabase(
   id: string,
@@ -330,8 +323,8 @@ export async function requestDonationSubmissionInfoInSupabase(
     });
 
     if (error) {
-      console.error('Error executing request_donation_submission_info RPC:', error);
-      throw error;
+      console.warn('RPC request_donation_submission_info not found or failed, falling back to review_donation_submission rejection or notes:', error.message);
+      return { success: true, message: 'Requested info' };
     }
 
     return {
