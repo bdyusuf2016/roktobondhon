@@ -271,6 +271,69 @@ export function getDonationReports(donations: Donation[]) {
   };
 }
 
+/**
+ * Authoritative RPC caller to complete donation fulfillment for an accepted donor request
+ */
+export async function fulfillDonationInSupabase(
+  donorRequestId: string,
+  notes?: string
+): Promise<{ success: boolean; donationId?: string; bloodRequestId?: string; message?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: true,
+      donationId: `don-local-${Date.now()}`,
+      message: 'লোকাল ডেমো মোডে রক্তদান সফলভাবে সম্পন্ন হয়েছে।',
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('complete_donation_fulfillment', {
+      p_donor_request_id: donorRequestId,
+      p_notes: notes || null,
+    });
+
+    if (error) {
+      console.error('Error fulfilling donation via RPC:', error);
+      throw new Error(error.message || 'রক্তদান সম্পন্ন করার প্রক্রিয়ায় ত্রুটি ঘটেছে।');
+    }
+
+    return {
+      success: true,
+      donationId: data?.donation_id,
+      bloodRequestId: data?.blood_request_id,
+      message: data?.message || 'রক্তদান সফলভাবে সম্পন্ন হয়েছে!',
+    };
+  } catch (err: any) {
+    console.error('Exception fulfilling donation:', err);
+    throw err;
+  }
+}
+
+/**
+ * Fetch donation records linked to a specific blood request
+ */
+export async function getDonationsForBloodRequest(bloodRequestId: string): Promise<Donation[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('donations')
+      .select('*')
+      .or(`request_id.eq.${bloodRequestId},blood_request_id.eq.${bloodRequestId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching donations for blood request:', error);
+      return [];
+    }
+
+    return (data || []).map(mapDonationRow);
+  } catch (err) {
+    console.error('Exception fetching blood request donations:', err);
+    return [];
+  }
+}
+
 // Compatibility aliases
 export const recordDonationInFirestore = recordDonationInSupabase;
 export const deleteDonationInFirestore = deleteDonationInSupabase;
+

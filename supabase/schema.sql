@@ -150,15 +150,27 @@ CREATE TABLE IF NOT EXISTS public.donations (
   donor_name TEXT NOT NULL,
   blood_group TEXT NOT NULL,
   request_id TEXT,
+  blood_request_id TEXT,
+  donor_request_id TEXT REFERENCES public.donor_requests(id) ON DELETE SET NULL,
   donation_date DATE NOT NULL,
   hospital TEXT NOT NULL,
+  location TEXT,
   units INTEGER NOT NULL DEFAULT 1,
   donation_type TEXT NOT NULL DEFAULT 'Whole Blood' CHECK (donation_type IN ('Whole Blood', 'Platelets', 'Plasma', 'RBC')),
+  source TEXT DEFAULT 'request',
+  camp_id TEXT,
   verified_by TEXT NOT NULL,
   verification_date DATE NOT NULL,
   notes TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_donations_donor_request_id 
+  ON public.donations(donor_request_id) 
+  WHERE donor_request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_donations_donor_user_id ON public.donations(donor_user_id);
+CREATE INDEX IF NOT EXISTS idx_donations_blood_request_id ON public.donations(blood_request_id);
 
 -- ==============================================================================
 -- 7. HOSPITALS & BLOOD BANKS DIRECTORY
@@ -705,42 +717,457 @@ DROP POLICY IF EXISTS "Users can update donor requests" ON public.donor_requests
 DROP POLICY IF EXISTS "Users can view relevant donor requests" ON public.donor_requests;
 DROP POLICY IF EXISTS "Users and system can create donor requests" ON public.donor_requests;
 DROP POLICY IF EXISTS "Donors can respond to their requests" ON public.donor_requests;
+DROP POLICY IF EXISTS "Requesters and staff create donor requests" ON public.donor_requests;
 
 CREATE POLICY "Users can view relevant donor requests" ON public.donor_requests
   FOR SELECT USING (donor_user_id = auth.uid()::text OR requester_user_id = auth.uid()::text OR public.is_staff());
 
-CREATE POLICY "Users and system can create donor requests" ON public.donor_requests
-  FOR INSERT WITH CHECK (requester_user_id = auth.uid()::text OR public.is_staff());
+CREATE POLICY "Requesters and staff create donor requests" ON public.donor_requests
+  FOR INSERT WITH CHECK (
+    public.is_staff()
+    OR (
+      requester_user_id = auth.uid()::text
+      AND EXISTS (
+        SELECT 1 FROM public.blood_requests br
+        WHERE br.id = blood_request_id
+        AND br.user_id = auth.uid()::text
+        AND br.status IN ('active', 'pending', 'matched', 'verified')
+      )
+    )
+  );
 
 CREATE POLICY "Donors can respond to their requests" ON public.donor_requests
   FOR UPDATE USING (donor_user_id = auth.uid()::text OR public.is_staff())
   WITH CHECK (donor_user_id = auth.uid()::text OR public.is_staff());
 
--- 6. Donations Policies
-DROP POLICY IF EXISTS "Public can view donations" ON public.donations;
-DROP POLICY IF EXISTS "Admins can insert donations" ON public.donations;
-DROP POLICY IF EXISTS "Public can view donation impact logs" ON public.donations;
-DROP POLICY IF EXISTS "Staff can insert verified donations" ON public.donations;
-DROP POLICY IF EXISTS "Admins can update donations" ON public.donations;
-DROP POLICY IF EXISTS "Admins can delete donations" ON public.donations;
-DROP POLICY IF EXISTS "Donors view own donations or staff view all" ON public.donations;
-DROP POLICY IF EXISTS "Staff insert donations" ON public.donations;
+-- Trigger: Strict response-only protection on donor_requests
+CREATE OR REPLACE FUNCTION public.protect_donor_request_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Allow backend service/admin ONLY if not an authenticated client session
+  IF (current_user IN ('postgres', 'supabase_admin', 'service_role') AND auth.uid() IS NULL) OR public.is_staff() THEN
+    RETURN NEW;
+  END IF;
 
--- P0.8: Donations history is private to the donor or staff
-CREATE POLICY "Donors view own donations or staff view all" ON public.donations
+  -- For ordinary donors (donor_user_id = auth.uid()):
+  -- Ensure that ONLY status, decline_reason, and responded_at can be modified
+  IF (NEW.id IS DISTINCT FROM OLD.id) OR
+     (NEW.blood_request_id IS DISTINCT FROM OLD.blood_request_id) OR
+     (NEW.donor_id IS DISTINCT FROM OLD.donor_id) OR
+     (NEW.donor_user_id IS DISTINCT FROM OLD.donor_user_id) OR
+     (NEW.requester_user_id IS DISTINCT FROM OLD.requester_user_id) OR
+     (NEW.match_score IS DISTINCT FROM OLD.match_score) OR
+     (NEW.patient_name IS DISTINCT FROM OLD.patient_name) OR
+     (NEW.hospital IS DISTINCT FROM OLD.hospital) OR
+     (NEW.blood_group IS DISTINCT FROM OLD.blood_group) OR
+     (NEW.emergency_level IS DISTINCT FROM OLD.emergency_level) OR
+     (NEW.created_at IS DISTINCT FROM OLD.created_at) THEN
+    RAISE EXCEPTION 'Unauthorized: Modification of protected request fields is forbidden.';
+  END IF;
+
+  -- Validate allowed response status
+  IF NEW.status NOT IN ('pending', 'accepted', 'maybe', 'declined') THEN
+    RAISE EXCEPTION 'Invalid status for donor request response: %', NEW.status;
+  END IF;
+
+  -- Enforce state transition rules
+  IF OLD.status = 'declined' AND NEW.status != 'declined' AND NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Unauthorized: Cannot modify a declined donor request.';
+  END IF;
+
+  IF OLD.status = 'accepted' AND NEW.status = 'pending' AND NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Unauthorized: Accepted donor request cannot be reset to pending.';
+  END IF;
+
+  NEW.responded_at := NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_donor_request_fields ON public.donor_requests;
+CREATE TRIGGER trg_protect_donor_request_fields
+  BEFORE UPDATE ON public.donor_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_donor_request_fields();
+
+-- Automated Trigger for Atomic Notification Dispatch
+CREATE OR REPLACE FUNCTION public.handle_donor_request_notifications()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_notif_id TEXT;
+  v_title TEXT;
+  v_message TEXT;
+  v_type TEXT;
+  v_link TEXT;
+BEGIN
+  -- A. When a new donor_request is dispatched (AFTER INSERT)
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status = 'pending' THEN
+      v_notif_id := 'notif-dreq-' || NEW.id || '-invite';
+      v_title := 'জরুরি রক্তদানের নতুন অনুরোধ (' || NEW.blood_group || ')';
+      v_message := NEW.hospital || '-এ ' || NEW.blood_group || ' রক্তের জরুরি প্রয়োজন। অনুগ্রহ করে আপনার সম্মতি জানান।';
+      v_type := 'request';
+      v_link := '/profile?tab=requests';
+
+      INSERT INTO public.notifications (
+        id,
+        user_id,
+        title,
+        message,
+        type,
+        link,
+        is_read,
+        created_at
+      ) VALUES (
+        v_notif_id,
+        NEW.donor_user_id,
+        v_title,
+        v_message,
+        v_type,
+        v_link,
+        false,
+        NOW()
+      )
+      ON CONFLICT (id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- B. When donor responds to the request (AFTER UPDATE of status)
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status IN ('accepted', 'maybe', 'declined') THEN
+      v_notif_id := 'notif-dreq-' || NEW.id || '-' || NEW.status;
+      v_type := 'match';
+      v_link := '/request/' || NEW.blood_request_id;
+
+      IF NEW.status = 'accepted' THEN
+        v_title := 'রক্তদাতা রক্তদানে সম্মতি দিয়েছেন!';
+        v_message := 'একজন রক্তদাতা (' || NEW.blood_group || ') আপনার রক্তের অনুরোধে সাড়া দিয়ে রক্তদানে সম্মতি দিয়েছেন।';
+      ELSIF NEW.status = 'maybe' THEN
+        v_title := 'রক্তদাতা সম্ভাব্য সম্মতি জানিয়েছেন';
+        v_message := 'একজন রক্তদাতা (' || NEW.blood_group || ') জানিয়েছেন তিনি সম্ভবত রক্তদান করতে পারবেন।';
+      ELSIF NEW.status = 'declined' THEN
+        v_title := 'রক্তদাতা অপারগতা প্রকাশ করেছেন';
+        v_message := 'একজন রক্তদাতা (' || NEW.blood_group || ') বর্তমান অনুরোধটিতে রক্তদান করতে অপারগতা প্রকাশ করেছেন।';
+      END IF;
+
+      INSERT INTO public.notifications (
+        id,
+        user_id,
+        title,
+        message,
+        type,
+        link,
+        is_read,
+        created_at
+      ) VALUES (
+        v_notif_id,
+        NEW.requester_user_id,
+        v_title,
+        v_message,
+        v_type,
+        v_link,
+        false,
+        NOW()
+      )
+      ON CONFLICT (id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_donor_request_notifications ON public.donor_requests;
+CREATE TRIGGER trg_donor_request_notifications
+  AFTER INSERT OR UPDATE ON public.donor_requests
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_donor_request_notifications();
+
+-- 6. Donations Field Protection Trigger & Fulfillment RPC
+CREATE OR REPLACE FUNCTION public.protect_donation_fields()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (current_user IN ('postgres', 'supabase_admin', 'service_role') AND auth.uid() IS NULL) OR public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF (NEW.id IS DISTINCT FROM OLD.id) OR
+     (NEW.donor_id IS DISTINCT FROM OLD.donor_id) OR
+     (NEW.donor_user_id IS DISTINCT FROM OLD.donor_user_id) OR
+     (NEW.blood_request_id IS DISTINCT FROM OLD.blood_request_id) OR
+     (NEW.request_id IS DISTINCT FROM OLD.request_id) OR
+     (NEW.donor_request_id IS DISTINCT FROM OLD.donor_request_id) OR
+     (NEW.created_at IS DISTINCT FROM OLD.created_at) THEN
+    RAISE EXCEPTION 'Unauthorized: Modification of protected donation relationship fields is forbidden.';
+  END IF;
+
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_protect_donation_fields ON public.donations;
+CREATE TRIGGER trg_protect_donation_fields
+  BEFORE UPDATE ON public.donations
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_donation_fields();
+
+CREATE OR REPLACE FUNCTION public.complete_donation_fulfillment(
+  p_donor_request_id TEXT,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_caller_uid UUID;
+  v_caller_role TEXT;
+  v_caller_name TEXT;
+  v_dreq public.donor_requests%ROWTYPE;
+  v_breq public.blood_requests%ROWTYPE;
+  v_donor public.donors%ROWTYPE;
+  v_existing_donation public.donations%ROWTYPE;
+  v_donation_id TEXT;
+  v_now TIMESTAMPTZ := NOW();
+  v_today DATE := CURRENT_DATE;
+  v_gender TEXT;
+  v_interval_days INTEGER;
+BEGIN
+  v_caller_uid := auth.uid();
+  IF v_caller_uid IS NULL AND current_user NOT IN ('postgres', 'service_role') THEN
+    RAISE EXCEPTION 'Authentication required to fulfill donation.';
+  END IF;
+
+  SELECT * INTO v_dreq
+  FROM public.donor_requests
+  WHERE id = p_donor_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Donor request not found: %', p_donor_request_id;
+  END IF;
+
+  IF current_user NOT IN ('postgres', 'service_role') THEN
+    IF v_dreq.donor_user_id != v_caller_uid::text AND NOT public.is_staff() THEN
+      RAISE EXCEPTION 'Unauthorized: Only the assigned donor or staff can complete this donation.';
+    END IF;
+  END IF;
+
+  IF v_dreq.status != 'accepted' THEN
+    RAISE EXCEPTION 'Cannot complete donation for donor request with status "%". Donor request must be accepted first.', v_dreq.status;
+  END IF;
+
+  SELECT * INTO v_breq
+  FROM public.blood_requests
+  WHERE id = v_dreq.blood_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Linked blood request not found: %', v_dreq.blood_request_id;
+  END IF;
+
+  SELECT * INTO v_existing_donation
+  FROM public.donations
+  WHERE donor_request_id = p_donor_request_id
+  LIMIT 1;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'already_fulfilled', true,
+      'donation_id', v_existing_donation.id,
+      'blood_request_id', v_breq.id,
+      'message', 'Donation for this request is already recorded.'
+    );
+  END IF;
+
+  IF v_breq.status = 'fulfilled' THEN
+    RAISE EXCEPTION 'Blood request is already fulfilled.';
+  END IF;
+
+  IF v_breq.status IN ('cancelled', 'expired') THEN
+    RAISE EXCEPTION 'Cannot complete donation for a % blood request.', v_breq.status;
+  END IF;
+
+  SELECT * INTO v_donor
+  FROM public.donors
+  WHERE id = v_dreq.donor_id
+  LIMIT 1;
+
+  v_gender := COALESCE(v_donor.gender, 'male');
+  IF v_gender = 'female' THEN
+    v_interval_days := 120;
+  ELSE
+    v_interval_days := 90;
+  END IF;
+
+  v_donation_id := 'don-' || extract(epoch from v_now)::bigint || '-' || substr(md5(p_donor_request_id || random()::text), 1, 6);
+
+  INSERT INTO public.donations (
+    id,
+    donor_id,
+    donor_user_id,
+    donor_name,
+    blood_group,
+    request_id,
+    blood_request_id,
+    donor_request_id,
+    donation_date,
+    hospital,
+    location,
+    units,
+    donation_type,
+    source,
+    verified_by,
+    verification_date,
+    notes,
+    created_at,
+    updated_at
+  ) VALUES (
+    v_donation_id,
+    v_dreq.donor_id,
+    v_dreq.donor_user_id,
+    COALESCE(v_donor.full_name, 'রক্তদাতা'),
+    v_dreq.blood_group,
+    v_dreq.blood_request_id,
+    v_dreq.blood_request_id,
+    v_dreq.id,
+    v_today,
+    v_dreq.hospital,
+    v_dreq.hospital,
+    COALESCE(v_breq.required_units, 1),
+    'Whole Blood',
+    'request',
+    'সরাসরি সম্পন্ন (Direct Fulfillment)',
+    v_today,
+    p_notes,
+    v_now,
+    v_now
+  );
+
+  UPDATE public.blood_requests
+  SET status = 'fulfilled',
+      updated_at = v_now
+  WHERE id = v_breq.id;
+
+  IF v_donor.id IS NOT NULL THEN
+    UPDATE public.donors
+    SET total_donations = COALESCE(total_donations, 0) + 1,
+        last_donation_date = v_today,
+        next_eligible_date = v_today + (v_interval_days || ' days')::INTERVAL,
+        updated_at = v_now
+    WHERE id = v_donor.id;
+  END IF;
+
+  INSERT INTO public.notifications (
+    id,
+    user_id,
+    title,
+    message,
+    type,
+    link,
+    is_read,
+    created_at
+  ) VALUES (
+    'notif-fulfill-' || v_dreq.id,
+    v_dreq.requester_user_id,
+    'রক্তদানের অনুরোধ সফলভাবে সম্পন্ন হয়েছে!',
+    'আপনার ' || v_dreq.blood_group || ' রক্তের অনুরোধটিতে রক্তদাতা সফলভাবে রক্তদান সম্পন্ন করেছেন। রোগীর দ্রুত সুস্থতা কামনা করছি।',
+    'request',
+    '/request/' || v_dreq.blood_request_id,
+    false,
+    v_now
+  ) ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.notifications (
+    id,
+    user_id,
+    title,
+    message,
+    type,
+    link,
+    is_read,
+    created_at
+  ) VALUES (
+    'notif-donor-thanks-' || v_dreq.id,
+    v_dreq.donor_user_id,
+    'মানবিক রক্তদানের জন্য আন্তরিক ধন্যবাদ ও কৃতজ্ঞতা!',
+    'আপনার রক্তদানে একটি মূল্যবান প্রাণ রক্ষা পেয়েছে। কালামপুর রক্ত দান পরিবারের পক্ষ থেকে আপনাকে আন্তরিক মোবারকবাদ ও শুভেচ্ছা।',
+    'donation',
+    '/profile',
+    false,
+    v_now
+  ) ON CONFLICT (id) DO NOTHING;
+
+  PERFORM public.record_audit_log(
+    'BLOOD_REQUEST_FULFILLED',
+    'BloodRequest',
+    v_breq.id,
+    jsonb_build_object(
+      'blood_request_id', v_breq.id,
+      'donor_request_id', v_dreq.id,
+      'donor_id', v_dreq.donor_id,
+      'donor_user_id', v_dreq.donor_user_id,
+      'requester_user_id', v_dreq.requester_user_id,
+      'donation_id', v_donation_id,
+      'fulfilled_by', COALESCE(v_caller_uid::text, 'service_role')
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'donation_id', v_donation_id,
+    'blood_request_id', v_breq.id,
+    'status', 'fulfilled',
+    'message', 'Donation completed and blood request fulfilled successfully.'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- Hardened Donations RLS Policies (Purge all legacy policies dynamically)
+ALTER TABLE public.donations ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+    pol record;
+BEGIN
+    FOR pol IN
+        SELECT policyname
+        FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'donations'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.donations', pol.policyname);
+    END LOOP;
+END $$;
+
+CREATE POLICY "Donors and requesters view own donations or staff view all" ON public.donations
   FOR SELECT USING (
     donor_user_id = auth.uid()::text
+    OR EXISTS (
+      SELECT 1 FROM public.blood_requests br
+      WHERE (br.id = public.donations.request_id OR br.id = public.donations.blood_request_id)
+        AND br.user_id = auth.uid()::text
+    )
     OR public.is_staff()
   );
 
 CREATE POLICY "Staff insert donations" ON public.donations
-  FOR INSERT WITH CHECK (public.is_staff());
+  FOR INSERT WITH CHECK (
+    public.is_staff() OR current_user IN ('postgres', 'service_role')
+  );
 
 CREATE POLICY "Admins update donations" ON public.donations
-  FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+  FOR UPDATE USING (
+    public.is_admin()
+  )
+  WITH CHECK (
+    public.is_admin()
+  );
 
 CREATE POLICY "Admins delete donations" ON public.donations
-  FOR DELETE USING (public.is_admin());
+  FOR DELETE USING (
+    public.is_admin()
+  );
 
 -- 7. Hospitals Directory Policies
 DROP POLICY IF EXISTS "Public can view hospitals" ON public.hospitals;
@@ -856,13 +1283,21 @@ CREATE POLICY "Public can view active payment methods" ON public.payment_methods
 CREATE POLICY "Admins can manage payment methods" ON public.payment_methods
   FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 
--- 13. Notifications Policies
-DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
-DROP POLICY IF EXISTS "System can insert notifications" ON public.notifications;
-DROP POLICY IF EXISTS "Users can update notifications" ON public.notifications;
-DROP POLICY IF EXISTS "Users can view their notifications" ON public.notifications;
-DROP POLICY IF EXISTS "Staff can send notifications" ON public.notifications;
-DROP POLICY IF EXISTS "Users can mark notifications as read" ON public.notifications;
+-- 13. Notifications Policies (Purge all legacy policies dynamically)
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+    pol record;
+BEGIN
+    FOR pol IN
+        SELECT policyname
+        FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'notifications'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.notifications', pol.policyname);
+    END LOOP;
+END $$;
 
 CREATE POLICY "Users can view their notifications" ON public.notifications
   FOR SELECT USING (user_id = auth.uid()::text OR user_id = 'all' OR public.is_staff());

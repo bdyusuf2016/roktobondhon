@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface RequestDonorModalProps {
   donor: Donor;
   matchScore: number;
+  preSelectedRequestId?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -14,6 +15,7 @@ interface RequestDonorModalProps {
 export const RequestDonorModal: React.FC<RequestDonorModalProps> = ({
   donor,
   matchScore,
+  preSelectedRequestId,
   onClose,
   onSuccess,
 }) => {
@@ -25,16 +27,20 @@ export const RequestDonorModal: React.FC<RequestDonorModalProps> = ({
     (r) => r.status === 'active' || r.status === 'matched' || r.status === 'pending'
   );
 
-  const [selectedRequestId, setSelectedRequestId] = useState<string>(
-    activeRequests[0]?.id || ''
-  );
+  const [selectedRequestId, setSelectedRequestId] = useState<string>(() => {
+    if (preSelectedRequestId && activeRequests.some((r) => r.id === preSelectedRequestId || r.requestId === preSelectedRequestId)) {
+      const found = activeRequests.find((r) => r.id === preSelectedRequestId || r.requestId === preSelectedRequestId);
+      return found?.id || preSelectedRequestId;
+    }
+    return activeRequests[0]?.id || '';
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
   // Check if donor already has a request for this blood request
   const isAlreadySent = donorRequests.some(
-    (dr) => dr.donorId === donor.id && dr.bloodRequestId === selectedRequestId
+    (dr) => dr.donorId === donor.id && (dr.bloodRequestId === selectedRequestId || dr.bloodRequestId === preSelectedRequestId)
   );
 
   const handleSubmit = async (e: React.FormEvent) => {

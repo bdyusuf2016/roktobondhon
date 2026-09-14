@@ -20,6 +20,7 @@ import { toBengaliNumber } from '../utils/bengali';
 interface DonorCardProps {
   donor: Donor;
   matchScore?: number;
+  bloodRequestId?: string;
   onSendRequestSuccess?: () => void;
   viewMode?: 'grid' | 'list';
   compact?: boolean;
@@ -28,6 +29,7 @@ interface DonorCardProps {
 export const DonorCard: React.FC<DonorCardProps> = ({
   donor,
   matchScore,
+  bloodRequestId,
   onSendRequestSuccess,
   viewMode = 'grid',
   compact = false,
@@ -532,6 +534,7 @@ export const DonorCard: React.FC<DonorCardProps> = ({
         <RequestDonorModal
           donor={donor}
           matchScore={matchScore || 85}
+          preSelectedRequestId={bloodRequestId}
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => {
             setIsModalOpen(false);

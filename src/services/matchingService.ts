@@ -83,7 +83,16 @@ export function evaluateDonorEligibility(
   const reasons: string[] = [];
   let isDeferred = false;
 
-  // 1. Temporary Deferral Check
+  // 1. Verification status check (suspended or rejected are hard-blocked)
+  if (donor.verificationStatus === 'suspended') {
+    isDeferred = true;
+    reasons.push('রক্তদাতার অ্যাকাউন্ট সাময়িকভাবে স্থগিত (Suspended)');
+  } else if (donor.verificationStatus === 'rejected') {
+    isDeferred = true;
+    reasons.push('রক্তদাতার প্রোফাইল প্রত্যাখ্যাত (Rejected)');
+  }
+
+  // 2. Temporary Deferral Check
   if (rules.temporaryDeferralEnabled) {
     if (donor.temporaryDeferral) {
       isDeferred = true;
@@ -98,7 +107,7 @@ export function evaluateDonorEligibility(
     }
   }
 
-  // 2. Donation Interval Check
+  // 3. Donation Interval Check (Male 90 days, Female 120 days)
   let daysSinceLastDonation: number | undefined;
   let daysUntilEligible = 0;
 
@@ -123,26 +132,34 @@ export function evaluateDonorEligibility(
     }
   }
 
-  // 3. Weight Check (if weight is recorded on donor)
+  // 4. Weight Check (if weight is recorded on donor)
   if (donor.weight && donor.weight < rules.minimumWeightKg) {
     reasons.push(`ওজন অপর্যাপ্ত: ${donor.weight} কেজি (ন্যূনতম ${rules.minimumWeightKg} কেজি প্রয়োজন)`);
   }
 
-  // 4. Age Check (if age or dateOfBirth is present)
-  if (donor.age) {
-    if (donor.age < rules.minimumAge) {
-      reasons.push(`বয়স কম: ${donor.age} বছর (ন্যূনতম ${rules.minimumAge} বছর)`);
-    } else if (donor.age > rules.maximumAge) {
-      reasons.push(`বয়স বেশি: ${donor.age} বছর (সর্বোচ্চ ${rules.maximumAge} বছর)`);
+  // 5. Age Check (if age or dateOfBirth is present)
+  let donorAge = donor.age;
+  if (!donorAge && donor.dateOfBirth) {
+    const birthYear = new Date(donor.dateOfBirth).getFullYear();
+    if (!isNaN(birthYear)) {
+      donorAge = new Date().getFullYear() - birthYear;
     }
   }
 
-  // 5. Verification Requirement
+  if (donorAge) {
+    if (donorAge < rules.minimumAge) {
+      reasons.push(`বয়স কম: ${donorAge} বছর (ন্যূনতম ${rules.minimumAge} বছর)`);
+    } else if (donorAge > rules.maximumAge) {
+      reasons.push(`বয়স বেশি: ${donorAge} বছর (সর্বোচ্চ ${rules.maximumAge} বছর)`);
+    }
+  }
+
+  // 6. Verification Requirement
   if (rules.requireVerification && donor.verificationStatus !== 'verified') {
     reasons.push('প্রোফাইল যাচাইকৃত নয় (যাচাইকরণ বাধ্যতামূলক)');
   }
 
-  // 6. Availability Requirement
+  // 7. Availability Requirement
   if (rules.requireAvailability && !donor.availability) {
     reasons.push('রক্তদাতা বর্তমানে অনুপলব্ধ (Not Available)');
   }
@@ -161,6 +178,20 @@ export function evaluateDonorEligibility(
     reasons,
     daysSinceLastDonation,
     daysUntilEligible: daysUntilEligible > 0 ? daysUntilEligible : undefined,
+  };
+}
+
+/**
+ * Convenience helper to check if a donor is currently ready to donate
+ */
+export function isDonorReadyToDonate(
+  donor: Donor,
+  config: Partial<DonorEligibilityConfig> = {}
+): { isReady: boolean; reason?: string } {
+  const evalResult = evaluateDonorEligibility(donor, config);
+  return {
+    isReady: evalResult.isEligible,
+    reason: evalResult.reasons.length > 0 ? evalResult.reasons[0] : undefined,
   };
 }
 

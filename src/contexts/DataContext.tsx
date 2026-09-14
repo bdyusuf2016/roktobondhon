@@ -67,6 +67,7 @@ import {
   recordDonationInFirestore,
   updateDonationInSupabase,
   deleteDonationInFirestore,
+  fulfillDonationInSupabase,
 } from '../services/donationService';
 import {
   mapDonationSubmissionRow,
@@ -144,6 +145,7 @@ interface DataContextType {
   deleteDonor: (donorId: string) => Promise<void>;
   sendDonorRequest: (bloodRequestId: string, donor: Donor, requesterUserId: string, matchScore: number) => Promise<DonorRequest>;
   respondDonorRequest: (requestId: string, status: 'accepted' | 'maybe' | 'declined', declineReason?: string) => Promise<void>;
+  completeDonationFulfillment: (donorRequestId: string, notes?: string) => Promise<{ success: boolean; donationId?: string; bloodRequestId?: string; message?: string }>;
   recordDonation: (donation: Omit<Donation, 'id'>) => Promise<Donation>;
   updateDonation: (id: string, data: Partial<Donation>) => Promise<void>;
   deleteDonation: (donationId: string) => Promise<void>;
@@ -1560,6 +1562,80 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     addAuditLog(`Donor Response: ${status}`, 'DonorRequest', requestId, { status, declineReason });
+  };
+
+  const completeDonationFulfillment = async (
+    donorRequestId: string,
+    notes?: string
+  ): Promise<{ success: boolean; donationId?: string; bloodRequestId?: string; message?: string }> => {
+    const dreq = donorRequests.find((r) => r.id === donorRequestId);
+    if (!dreq) {
+      throw new Error('অনুরোধটি খুঁজে পাওয়া যায়নি।');
+    }
+    if (dreq.status !== 'accepted') {
+      throw new Error('শুধুমাত্র রক্তদানে সম্মত (Accepted) অনুরোধের রক্তদান সম্পন্ন করা যাবে।');
+    }
+
+    if (isSupabaseConfigured) {
+      const result = await fulfillDonationInSupabase(donorRequestId, notes);
+
+      // Optimistically update local blood request status to fulfilled
+      const targetReqId = result.bloodRequestId || dreq.bloodRequestId;
+      setBloodRequests((prev) =>
+        prev.map((r) => (r.id === targetReqId || r.requestId === targetReqId ? { ...r, status: 'fulfilled' } : r))
+      );
+
+      // Optimistically update donor stats
+      setDonors((prev) =>
+        prev.map((d) => {
+          if (d.id === dreq.donorId || d.userId === dreq.donorUserId) {
+            return {
+              ...d,
+              totalDonations: (d.totalDonations || 0) + 1,
+              lastDonationDate: new Date().toISOString().split('T')[0],
+              availability: false,
+            };
+          }
+          return d;
+        })
+      );
+
+      return result;
+    }
+
+    // Local simulation mode fallback
+    const newDonationId = `don-local-${Date.now()}`;
+    const today = new Date().toISOString().split('T')[0];
+
+    setBloodRequests((prev) =>
+      prev.map((r) => (r.id === dreq.bloodRequestId || r.requestId === dreq.bloodRequestId ? { ...r, status: 'fulfilled' } : r))
+    );
+
+    setDonors((prev) =>
+      prev.map((d) => {
+        if (d.id === dreq.donorId || d.userId === dreq.donorUserId) {
+          return {
+            ...d,
+            totalDonations: (d.totalDonations || 0) + 1,
+            lastDonationDate: today,
+            availability: false,
+          };
+        }
+        return d;
+      })
+    );
+
+    addAuditLog('BLOOD_REQUEST_FULFILLED', 'BloodRequest', dreq.bloodRequestId, {
+      donorRequestId,
+      donorId: dreq.donorId,
+    });
+
+    return {
+      success: true,
+      donationId: newDonationId,
+      bloodRequestId: dreq.bloodRequestId,
+      message: 'রক্তদান সফলভাবে সম্পন্ন হয়েছে!',
+    };
   };
 
   const deleteDonor = async (donorId: string) => {
@@ -3315,6 +3391,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteDonor,
         sendDonorRequest,
         respondDonorRequest,
+        completeDonationFulfillment,
         recordDonation,
         updateDonation,
         deleteDonation,

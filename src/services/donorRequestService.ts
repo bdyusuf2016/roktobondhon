@@ -22,6 +22,10 @@ function mapDonorRequestRow(row: any): DonorRequest {
 
 /**
  * Send a contact request to a donor for a blood request
+ * Authoritative checks:
+ * 1. Blood request must be active/pending/matched (not fulfilled, cancelled, or expired)
+ * 2. Donor must not be suspended or rejected
+ * 3. Duplicate request prevention for the same (bloodRequest, donor) pair
  */
 export async function sendDonorContactRequest(
   bloodRequest: BloodRequest,
@@ -29,16 +33,31 @@ export async function sendDonorContactRequest(
   requesterUserId: string,
   matchScore: number
 ): Promise<DonorRequest> {
+  if (!bloodRequest || !bloodRequest.id) {
+    throw new Error('অবৈধ রক্তের আবেদন আইডি।');
+  }
+
+  // Request status check: Can only request for active/pending/matched requests
+  const activeStatuses = ['active', 'pending', 'matched', 'verified'];
+  if (!activeStatuses.includes(bloodRequest.status)) {
+    throw new Error(`এই রক্তের আবেদনটি বর্তমানে ${bloodRequest.status} অবস্থায় রয়েছে। নতুন ডোনার রিকোয়েস্ট পাঠানো সম্ভব নয়।`);
+  }
+
+  // Donor status check
+  if (donor.verificationStatus === 'suspended' || donor.verificationStatus === 'rejected') {
+    throw new Error('এই রক্তদাতার প্রোফাইল স্থগিত বা বাতিল করা হয়েছে। অনুরোধ পাঠানো যাবে না।');
+  }
+
   if (isSupabaseConfigured && supabase) {
-    // Check duplicate
-    const { data: existing } = await supabase
+    // Check duplicate in Supabase
+    const { data: existing, error: findErr } = await supabase
       .from('donor_requests')
       .select('*')
       .eq('blood_request_id', bloodRequest.id)
       .eq('donor_id', donor.id)
       .maybeSingle();
 
-    if (existing) {
+    if (!findErr && existing) {
       return mapDonorRequestRow(existing);
     }
   }
@@ -51,7 +70,7 @@ export async function sendDonorContactRequest(
     donorUserId: donor.userId,
     requesterUserId,
     status: 'pending',
-    matchScore,
+    matchScore: Math.round(matchScore),
     patientName: bloodRequest.patientName,
     hospital: bloodRequest.hospital,
     bloodGroup: bloodRequest.bloodGroup,
@@ -61,7 +80,7 @@ export async function sendDonorContactRequest(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('donor_requests').insert({
+      const { error } = await supabase.from('donor_requests').insert({
         id: newRequest.id,
         blood_request_id: newRequest.bloodRequestId,
         donor_id: newRequest.donorId,
@@ -75,8 +94,14 @@ export async function sendDonorContactRequest(
         emergency_level: newRequest.emergencyLevel,
         created_at: newRequest.createdAt,
       });
-    } catch (err) {
-      console.error('Error inserting donor request in Supabase:', err);
+
+      if (error) {
+        console.error('Error inserting donor request in Supabase:', error);
+        throw new Error(error.message || 'ডাটাবেজে রক্তের অনুরোধ সংরক্ষণ করা সম্ভব হয়নি।');
+      }
+    } catch (err: any) {
+      console.error('Exception inserting donor request:', err);
+      throw err;
     }
   }
 
@@ -87,7 +112,7 @@ export async function sendDonorContactRequest(
  * Fetch requests received by a specific donor
  */
 export async function getRequestsForDonor(donorUserId: string): Promise<DonorRequest[]> {
-  if (!isSupabaseConfigured || !supabase) return [];
+  if (!isSupabaseConfigured || !supabase || !donorUserId) return [];
   try {
     const { data, error } = await supabase
       .from('donor_requests')
@@ -109,12 +134,18 @@ export async function getRequestsForDonor(donorUserId: string): Promise<DonorReq
 
 /**
  * Donor response to a contact request
+ * Legal state transitions: pending -> accepted | maybe | declined
  */
 export async function respondToDonorRequest(
   requestId: string,
   status: 'accepted' | 'maybe' | 'declined',
   declineReason?: string
 ): Promise<void> {
+  const validStatuses = ['accepted', 'maybe', 'declined'];
+  if (!validStatuses.includes(status)) {
+    throw new Error(`অবৈধ রেসপন্স স্ট্যাটাস: ${status}`);
+  }
+
   if (!isSupabaseConfigured || !supabase) return;
   const { error } = await supabase
     .from('donor_requests')
@@ -122,12 +153,12 @@ export async function respondToDonorRequest(
       status,
       decline_reason: declineReason || null,
       responded_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .eq('id', requestId);
 
   if (error) {
     console.error('Error responding to donor request in Supabase:', error);
+    throw new Error(error.message || 'অনুরোধে সাড়া সংরক্ষণ করতে সমস্যা হয়েছে।');
   }
 }
 
@@ -138,6 +169,14 @@ export async function volunteerForBloodRequest(
   bloodRequest: BloodRequest,
   donor: Donor
 ): Promise<{ success: boolean; isDuplicate: boolean; donorRequest: DonorRequest }> {
+  if (!bloodRequest || !bloodRequest.id || !donor || !donor.id) {
+    throw new Error('অবৈধ রক্তদান বা রক্তদাতার তথ্য।');
+  }
+
+  if (donor.verificationStatus === 'suspended' || donor.verificationStatus === 'rejected') {
+    throw new Error('আপনার প্রোফাইল স্থগিত বা বাতিল থাকা অবস্থায় রক্তদানে সম্মতি দেওয়া সম্ভব নয়।');
+  }
+
   // Check duplicate in Supabase
   if (isSupabaseConfigured && supabase) {
     try {

@@ -33,13 +33,21 @@ import type { Donor } from '../types';
 export const RequestDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { bloodRequests, donors, updateBloodRequestStatus, verifyBloodRequest } = useData();
+  const {
+    bloodRequests,
+    donors,
+    donorRequests,
+    updateBloodRequestStatus,
+    verifyBloodRequest,
+    completeDonationFulfillment,
+  } = useData();
   const { currentUser } = useAuth();
   const dialog = useDialog();
 
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [hasVolunteered, setHasVolunteered] = useState(false);
   const [isVolunteering, setIsVolunteering] = useState(false);
+  const [isFulfilling, setIsFulfilling] = useState(false);
 
   const [selectedDonorForModal, setSelectedDonorForModal] = useState<{
     donor: Donor;
@@ -48,6 +56,11 @@ export const RequestDetailPage: React.FC = () => {
 
   const request = bloodRequests.find((r) => r.id === id || r.requestId === id);
   const myDonor = donors.find((d) => d.userId === currentUser?.id || d.phone === currentUser?.phone);
+
+  const currentDonorRequests = useMemo(() => {
+    if (!request) return [];
+    return donorRequests.filter((dr) => dr.bloodRequestId === request.id || dr.bloodRequestId === request.requestId);
+  }, [donorRequests, request]);
 
   useSEO({
     title: request ? `${request.bloodGroup} রক্তের জরুরি প্রয়োজন - ${request.patientName || request.hospital}` : 'রক্তের আবেদন বিবরণ',
@@ -188,7 +201,13 @@ export const RequestDetailPage: React.FC = () => {
       </div>
 
       {/* Main Request Hero Card */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-6 sm:p-8 shadow-xs relative overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200/90 p-6 sm:p-8 shadow-xs relative overflow-hidden space-y-4">
+        {request.status === 'fulfilled' && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2.5 text-xs font-bold text-emerald-900 shadow-2xs">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>এই রক্তের অনুরোধটির রক্তদান সফলভাবে সম্পন্ন হয়েছে এবং রোগীর রক্তের চাহিদা পূরণ (Fulfilled) হয়েছে।</span>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
           <div className="flex items-start gap-4">
             {/* Big Blood Badge */}
@@ -323,6 +342,96 @@ export const RequestDetailPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Sent Direct Requests Status Tray (For Requester & Staff) */}
+        {currentDonorRequests.length > 0 && (
+          <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-4 sm:p-5 space-y-3 shadow-2xs">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-red-600" />
+              এই আবেদনের জন্য প্রেরিত অনুরোধের অবস্থা ({currentDonorRequests.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {currentDonorRequests.map((dr) => {
+                const matchedDonor = donors.find((d) => d.id === dr.donorId || d.userId === dr.donorUserId);
+                const statusConfig = {
+                  accepted: { bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', text: '✅ রক্তদানে সম্মত (Accepted)' },
+                  maybe: { bg: 'bg-amber-50 text-amber-800 border-amber-200', text: '🤔 বিবেচনাধীন (Maybe)' },
+                  declined: { bg: 'bg-rose-50 text-rose-800 border-rose-200', text: '❌ অপারগ (Declined)' },
+                  pending: { bg: 'bg-blue-50 text-blue-800 border-blue-200', text: '⏳ অপেক্ষমাণ (Pending)' },
+                }[dr.status] || { bg: 'bg-slate-100 text-slate-700 border-slate-200', text: dr.status };
+
+                const isFulfilled = request.status === 'fulfilled';
+                const isMyAcceptedRequest = dr.status === 'accepted' && (dr.donorUserId === currentUser?.id || isPrivileged);
+
+                return (
+                  <div key={dr.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-xs text-slate-900 truncate">
+                        {matchedDonor?.fullName || 'রক্তদাতা'} ({dr.bloodGroup})
+                      </span>
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-600">
+                        {dr.matchScore}%
+                      </span>
+                    </div>
+
+                    {isFulfilled && dr.status === 'accepted' ? (
+                      <div className="text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1 bg-emerald-100 text-emerald-900 border-emerald-300">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        🎉 রক্তদান সম্পন্ন (Fulfilled)
+                      </div>
+                    ) : (
+                      <div className={`text-[11px] font-bold px-2 py-0.5 rounded-md border inline-block ${statusConfig.bg}`}>
+                        {statusConfig.text}
+                      </div>
+                    )}
+
+                    {dr.declineReason && (
+                      <p className="text-[11px] text-slate-500 italic">কারণ: {dr.declineReason}</p>
+                    )}
+
+                    {!isFulfilled && isMyAcceptedRequest && (
+                      <button
+                        type="button"
+                        disabled={isFulfilling}
+                        onClick={async () => {
+                          const confirmed = await dialog.confirm({
+                            title: 'রক্তদান সম্পন্নকরণ নিশ্চিত করুন',
+                            message: `${request.hospital}-এ ${request.bloodGroup} রক্তদান সম্পন্ন হয়েছে বলে নিশ্চিত করতে চান? এটি রক্তের আবেদনটিকে 'Fulfilled' করবে এবং রক্তদানের তথ্য সিস্টেমে স্থায়ীভাবে সংরক্ষণ করবে।`,
+                            confirmText: 'হ্যাঁ, রক্তদান সম্পন্ন করেছি',
+                            cancelText: 'বাতিল',
+                            type: 'success',
+                          });
+                          if (!confirmed) return;
+                          setIsFulfilling(true);
+                          try {
+                            await completeDonationFulfillment(dr.id);
+                            dialog.alert({
+                              title: 'রক্তদান সম্পন্ন হয়েছে!',
+                              message: 'রক্তদানের তথ্য সফলভাবে সংরক্ষিত হয়েছে এবং রক্তের আবেদনটি Fulfilled হয়েছে। আপনাকে অসংখ্য ধন্যবাদ!',
+                              type: 'success',
+                            });
+                          } catch (err: any) {
+                            dialog.alert({
+                              title: 'ত্রুটি',
+                              message: err.message || 'রক্তদান সম্পন্ন করতে ব্যর্থ হয়েছে।',
+                              type: 'error',
+                            });
+                          } finally {
+                            setIsFulfilling(false);
+                          }
+                        }}
+                        className="mt-1 w-full px-2.5 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 shadow-xs border border-red-700/60 cursor-pointer transition-colors"
+                      >
+                        <Heart className="w-3.5 h-3.5 fill-white" />
+                        {isFulfilling ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদান সম্পন্ন হয়েছে'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {matchedDonors.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {matchedDonors.map((m) => (
@@ -330,6 +439,7 @@ export const RequestDetailPage: React.FC = () => {
                 key={m.donor.id}
                 donor={m.donor}
                 matchScore={m.matchScore}
+                bloodRequestId={request.id}
                 onSendRequestSuccess={() => {
                   dialog.alert({
                     title: 'অনুরোধ পাঠানো হয়েছে',

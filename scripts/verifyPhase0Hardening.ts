@@ -114,7 +114,10 @@ const allSqlFiles = [
   'supabase/migrations/20260909_two_tier_auth_architecture.sql',
   'supabase/migrations/20260909_donor_import_system.sql',
   'supabase/migrations/20260909_donation_submission_workflow.sql',
-  'supabase/migrations/20260914_auto_vanish_verification_notifications.sql'
+  'supabase/migrations/20260914_auto_vanish_verification_notifications.sql',
+  'supabase/migrations/20260914_phase1a_donor_request_authorization.sql',
+  'supabase/migrations/20260914_phase1b1_notification_response_lifecycle.sql',
+  'supabase/migrations/20260914_phase1b2_donation_fulfillment.sql'
 ];
 
 let secDefIssues: string[] = [];

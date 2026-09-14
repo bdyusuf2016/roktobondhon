@@ -10,18 +10,23 @@ import {
   ShieldCheck,
   AlertTriangle,
   Trash2,
+  Heart,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import type { DonorRequest } from '../types';
 
 export const NotificationsPage: React.FC = () => {
   const navigate = useNavigate();
+  const dialog = useDialog();
   const {
     notifications,
     donorRequests,
+    bloodRequests,
     donors,
     respondDonorRequest,
+    completeDonationFulfillment,
     markNotificationRead,
     deleteNotification,
   } = useData();
@@ -29,6 +34,7 @@ export const NotificationsPage: React.FC = () => {
 
   const [declineModalItem, setDeclineModalItem] = useState<DonorRequest | null>(null);
   const [declineReason, setDeclineReason] = useState('Currently unavailable');
+  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
 
   // Filter donor requests matching current user
   const myDonorRequests = donorRequests.filter(
@@ -39,6 +45,36 @@ export const NotificationsPage: React.FC = () => {
     if (!declineModalItem) return;
     await respondDonorRequest(declineModalItem.id, 'declined', declineReason);
     setDeclineModalItem(null);
+  };
+
+  const handleCompleteDonation = async (req: DonorRequest) => {
+    const confirmed = await dialog.confirm({
+      title: 'রক্তদান সম্পন্নকরণ নিশ্চিত করুন',
+      message: `${req.hospital}-এ ${req.bloodGroup} রক্তদান সম্পন্ন হয়েছে বলে নিশ্চিত করতে চান? এটি রক্তের অনুরোধটিকে 'Fulfilled' করবে এবং আপনার প্রোফাইলে সফল রক্তদানের রেকর্ড যুক্ত করবে।`,
+      confirmText: 'হ্যাঁ, রক্তদান সম্পন্ন করেছি',
+      cancelText: 'বাতিল',
+      type: 'success',
+    });
+
+    if (!confirmed) return;
+
+    setFulfillingId(req.id);
+    try {
+      await completeDonationFulfillment(req.id);
+      dialog.alert({
+        title: 'রক্তদান সম্পন্ন হয়েছে!',
+        message: 'আপনার মূল্যবান রক্তদানের তথ্য সিস্টেমে সফলভাবে সংরক্ষিত হয়েছে এবং রক্তের অনুরোধটি Fulfilled হয়েছে। আপনাকে অসংখ্য ধন্যবাদ!',
+        type: 'success',
+      });
+    } catch (err: any) {
+      dialog.alert({
+        title: 'ত্রুটি',
+        message: err.message || 'রক্তদান সম্পন্ন করতে ব্যর্থ হয়েছে।',
+        type: 'error',
+      });
+    } finally {
+      setFulfillingId(null);
+    }
   };
 
   const isStaff = Boolean(
@@ -122,31 +158,33 @@ export const NotificationsPage: React.FC = () => {
                 </div>
 
                 {/* Status or action buttons */}
-                {req.status === 'pending' ? (
+                {req.status === 'pending' || req.status === 'maybe' ? (
                   <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => respondDonorRequest(req.id, 'accepted')}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-xs border border-emerald-700/60"
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-xs border border-emerald-700/60 cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      সম্মত (Accept)
+                      আমি রক্ত দিতে আগ্রহী
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => respondDonorRequest(req.id, 'maybe')}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-xs border border-amber-600/60"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      সম্ভাব্য (Maybe)
-                    </button>
+                    {req.status === 'pending' && (
+                      <button
+                        type="button"
+                        onClick={() => respondDonorRequest(req.id, 'maybe')}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-xs border border-amber-600/60 cursor-pointer"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        সম্ভবত দিতে পারব
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setDeclineModalItem(req)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors"
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
                     >
                       <XCircle className="w-3.5 h-3.5 inline mr-1" />
-                      অসম্মত (Decline)
+                      আমি দিতে পারছি না
                     </button>
                     <Link
                       to={`/request/${req.bloodRequestId}`}
@@ -155,18 +193,50 @@ export const NotificationsPage: React.FC = () => {
                       আবেদনের পূর্ণ বিবরণ
                     </Link>
                   </div>
+                ) : req.status === 'accepted' ? (
+                  (() => {
+                    const parentReq = bloodRequests.find((r) => r.id === req.bloodRequestId || r.requestId === req.bloodRequestId);
+                    const isFulfilled = parentReq?.status === 'fulfilled';
+
+                    return (
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        {isFulfilled ? (
+                          <span className="font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            রক্তদান সফলভাবে সম্পন্ন হয়েছে (Fulfilled)
+                          </span>
+                        ) : (
+                          <span className="font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            আপনার প্রতিক্রিয়া: রক্তদানে সম্মত (Accepted)
+                          </span>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          {!isFulfilled && (
+                            <button
+                              type="button"
+                              disabled={fulfillingId === req.id}
+                              onClick={() => handleCompleteDonation(req)}
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs border border-red-700/60 cursor-pointer transition-colors"
+                            >
+                              <Heart className="w-3.5 h-3.5 fill-white" />
+                              {fulfillingId === req.id ? 'সংরক্ষণ হচ্ছে...' : 'রক্তদান সম্পন্ন হয়েছে'}
+                            </button>
+                          )}
+                          <Link
+                            to={`/request/${req.bloodRequestId}`}
+                            className="text-xs text-red-600 font-bold hover:underline"
+                          >
+                            আবেদনের পূর্ণ বিবরণ
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span
-                      className={`font-bold px-2.5 py-1 rounded-full ${
-                        req.status === 'accepted'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : req.status === 'maybe'
-                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}
-                    >
-                      আপনার প্রতিক্রিয়া: {req.status === 'accepted' ? 'সম্মত' : req.status === 'maybe' ? 'সম্ভাব্য' : 'অসম্মত'}
+                    <span className="font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                      আপনার প্রতিক্রিয়া: অপারগতা প্রকাশ করেছেন (Declined)
                     </span>
                     {req.declineReason && (
                       <span className="text-slate-500 text-[11px]">
