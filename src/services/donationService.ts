@@ -73,23 +73,113 @@ export async function getDonationsForDonor(donorId: string): Promise<Donation[]>
 }
 
 /**
+ * Authoritative staff recording of manual/offline donations via record_manual_donation RPC
+ */
+export async function recordManualDonationInSupabase(params: {
+  donorId: string;
+  donationDate: string;
+  hospital: string;
+  location?: string;
+  bloodRequestId?: string;
+  donorRequestId?: string;
+  campId?: string;
+  units?: number;
+  donationType?: DonationType;
+  notes?: string;
+  fulfillRequest?: boolean;
+}): Promise<{
+  success: boolean;
+  donationId: string;
+  donorId: string;
+  donorHumanId?: string;
+  totalDonations: number;
+  nextEligibleDate: string;
+  message?: string;
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { data, error } = await supabase.rpc('record_manual_donation', {
+    p_donor_id: params.donorId,
+    p_donation_date: params.donationDate,
+    p_hospital: params.hospital,
+    p_location: params.location || null,
+    p_blood_request_id: params.bloodRequestId || null,
+    p_donor_request_id: params.donorRequestId || null,
+    p_camp_id: params.campId || null,
+    p_units: params.units || 1,
+    p_donation_type: params.donationType || 'Whole Blood',
+    p_notes: params.notes || null,
+    p_fulfill_request: Boolean(params.fulfillRequest),
+  });
+
+  if (error) {
+    console.error('Error invoking record_manual_donation RPC:', error);
+    throw new Error(error.message || 'রক্তদান রেকর্ড সংরক্ষণ করতে ব্যর্থ হয়েছে।');
+  }
+
+  return {
+    success: Boolean(data?.success),
+    donationId: data?.donation_id,
+    donorId: data?.donor_id,
+    donorHumanId: data?.donor_human_id,
+    totalDonations: data?.total_donations,
+    nextEligibleDate: data?.next_eligible_date,
+    message: data?.message,
+  };
+}
+
+/**
  * Record a verified donation (authorized staff only)
  */
 export async function recordDonationInSupabase(
   donation: Omit<Donation, 'id'>
 ): Promise<Donation> {
-  const id = `don-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const nowIso = new Date().toISOString();
-  const newDonation: Donation = {
-    ...donation,
-    id,
-    source: donation.source || 'manual',
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
 
   if (isSupabaseConfigured && supabase) {
     try {
+      // 1. Primary Authoritative Flow: Try record_manual_donation RPC if donation date is provided
+      if (donation.donationDate) {
+        try {
+          const rpcRes = await recordManualDonationInSupabase({
+            donorId: donation.donorId,
+            donationDate: donation.donationDate,
+            hospital: donation.hospital || 'ধামরাই রক্তদান কেন্দ্র',
+            location: donation.location,
+            bloodRequestId: donation.bloodRequestId || donation.requestId,
+            campId: donation.campId,
+            units: donation.units || 1,
+            donationType: donation.donationType,
+            notes: donation.notes,
+          });
+
+          return {
+            ...donation,
+            id: rpcRes.donationId,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+        } catch (rpcErr: any) {
+          // If RPC is missing in remote instance cache or specific error, throw or fallback
+          if (rpcErr.message?.includes('duplicate') || rpcErr.message?.includes('Conflict') || rpcErr.message?.includes('Unauthorized')) {
+            throw rpcErr;
+          }
+          console.warn('record_manual_donation RPC fallback to direct insert:', rpcErr.message);
+        }
+      }
+
+      // 2. Direct insert fallback
+      const id = `don-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const newDonation: Donation = {
+        ...donation,
+        id,
+        source: donation.source || 'manual',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
       const payload: Record<string, any> = {
         id: newDonation.id,
         donor_id: newDonation.donorId,
@@ -113,40 +203,26 @@ export async function recordDonationInSupabase(
 
       let { error } = await supabase.from('donations').insert(payload);
 
-      // Resilient fallback: If any extended column is missing in older remote schema cache, retry with core canonical columns
-      if (error && (error.message?.includes('column') || error.code === '42703' || error.message?.includes('schema cache'))) {
-        console.warn('Retrying donation insert with core schema columns due to:', error.message);
-        const corePayload: Record<string, any> = {
-          id: newDonation.id,
-          donor_id: newDonation.donorId,
-          donor_user_id: newDonation.donorUserId || null,
-          donor_name: newDonation.donorName,
-          blood_group: newDonation.bloodGroup,
-          request_id: newDonation.requestId || newDonation.bloodRequestId || null,
-          donation_date: newDonation.donationDate || new Date().toISOString().split('T')[0],
-          hospital: newDonation.hospital || newDonation.location || 'ধামরাই রক্তদান কেন্দ্র',
-          units: newDonation.units || 1,
-          donation_type: newDonation.donationType || 'Whole Blood',
-          verified_by: newDonation.verifiedBy || 'এডমিন',
-          verification_date: newDonation.verificationDate || new Date().toISOString().split('T')[0],
-          notes: newDonation.notes || null,
-          created_at: nowIso,
-        };
-        const retryResult = await supabase.from('donations').insert(corePayload);
-        error = retryResult.error;
-      }
-
       if (error) {
         console.error('Error inserting donation in Supabase:', error);
         throw new Error(error.message || 'ডাটাবেজে রক্তদান রেকর্ড সংরক্ষণ করতে ব্যর্থ হয়েছে।');
       }
+
+      return newDonation;
     } catch (err: any) {
       console.error('Exception recording donation:', err);
       throw err;
     }
   }
 
-  return newDonation;
+  const id = `don-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  return {
+    ...donation,
+    id,
+    source: donation.source || 'manual',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
 }
 
 /**
@@ -336,4 +412,3 @@ export async function getDonationsForBloodRequest(bloodRequestId: string): Promi
 // Compatibility aliases
 export const recordDonationInFirestore = recordDonationInSupabase;
 export const deleteDonationInFirestore = deleteDonationInSupabase;
-

@@ -80,6 +80,7 @@ import {
   requestDonationSubmissionInfoInSupabase,
   checkDuplicateDonation,
 } from '../services/donationSubmissionService';
+import { verifyFundDonationInSupabase } from '../services/fundService';
 import { sendNotificationToSupabase } from '../services/notificationService';
 import { isDistrictMatch, isUpazilaMatch } from '../data/bangladeshGeoData';
 import { isBloodCompatible } from '../services/matchingService';
@@ -644,9 +645,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
 
-        // 6. Fetch fund donations
+        // 6. Fetch fund donations (Staff queries raw table; Public queries sanitized fund_donations_public view)
         const { data: fndData } = await supabase.from('fund_donations').select('*');
-        if (fndData && isMounted) {
+        if (fndData && fndData.length > 0 && isMounted) {
           setFundDonations(
             fndData.map((row) => ({
               id: row.id,
@@ -668,6 +669,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               createdAt: row.created_at,
             }))
           );
+        } else {
+          const { data: pubFndData } = await supabase.from('fund_donations_public').select('*');
+          if (pubFndData && isMounted) {
+            setFundDonations(
+              pubFndData.map((row) => ({
+                id: row.id,
+                donorName: row.donor_name,
+                donorPhone: '',
+                donorEmail: undefined,
+                amount: Number(row.amount),
+                paymentMethod: row.payment_method,
+                transactionId: '',
+                accountNumber: undefined,
+                fundCause: row.fund_cause,
+                area: row.area,
+                message: row.message,
+                isAnonymous: Boolean(row.is_anonymous),
+                status: row.status,
+                verifiedBy: undefined,
+                verifiedAt: row.verified_at,
+                organizationId: row.organization_id,
+                createdAt: row.created_at,
+              }))
+            );
+          }
         }
 
         // 7. Fetch payment methods
@@ -2533,6 +2559,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const verifyFundDonation = async (id: string, verifierName: string) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await verifyFundDonationInSupabase(id, 'verify');
+      } catch (err: any) {
+        console.error('[DataContext] Error verifying fund donation via RPC:', err);
+        throw err;
+      }
+    }
+
     setFundDonations((prev) =>
       prev.map((d) =>
         d.id === id
@@ -2540,33 +2575,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : d
       )
     );
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase.from('fund_donations').update({
-          status: 'verified',
-          verified_by: verifierName,
-          verified_at: new Date().toISOString(),
-        }).eq('id', id);
-        if (error) console.error('[DataContext] Error verifying fund donation in Supabase:', error);
-      } catch (err) {
-        console.error('[DataContext] Exception verifying fund donation:', err);
-      }
-    }
     addAuditLog(`অনুদান ভেরিফাই ও অনুমোদন করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
 
-  const rejectFundDonation = async (id: string) => {
+  const rejectFundDonation = async (id: string, reason?: string) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await verifyFundDonationInSupabase(id, 'reject', reason || 'তথ্য যাচাইয়ে অসঙ্গতি পাওয়া গেছে');
+      } catch (err: any) {
+        console.error('[DataContext] Error rejecting fund donation via RPC:', err);
+        throw err;
+      }
+    }
+
     setFundDonations((prev) =>
       prev.map((d) => (d.id === id ? { ...d, status: 'rejected' } : d))
     );
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase.from('fund_donations').update({ status: 'rejected' }).eq('id', id);
-        if (error) console.error('[DataContext] Error rejecting fund donation in Supabase:', error);
-      } catch (err) {
-        console.error('[DataContext] Exception rejecting fund donation:', err);
-      }
-    }
     addAuditLog(`অনুদান বাতিল/অস্বীকৃত করা হয়েছে: ${id}`, 'FUND_DONATION', id);
   };
 

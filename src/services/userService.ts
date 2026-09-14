@@ -23,6 +23,41 @@ export function mapUserRow(row: any): User {
 }
 
 /**
+ * Deterministic Bangladesh Phone Number Normalization
+ * Output format: Canonical 11-digit national format '01XXXXXXXXX'
+ * Handles Bengali digits, +880/880 prefixes, whitespace, hyphens, parentheses, and leading zeroes.
+ */
+export function normalizeExactBangladeshPhone(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  let str = String(raw).trim();
+  if (str.length === 0) return null;
+
+  // 1. Convert Bengali numerals (০-৯) to ASCII digits (0-9)
+  const bnToEnMap: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+  };
+  str = str.replace(/[০-৯]/g, (char) => bnToEnMap[char] || char);
+
+  // 2. Strip all non-digit characters (spaces, dashes, parens, plus, dots)
+  let digits = str.replace(/[^0-9]/g, '');
+
+  // 3. Normalize international and national prefixes
+  if (digits.startsWith('880') && digits.length === 13) {
+    digits = digits.slice(2); // '88017...' -> '017...'
+  } else if (digits.length === 10 && digits.startsWith('1')) {
+    digits = '0' + digits;   // '17...' -> '017...'
+  }
+
+  // 4. Validate exact 11 digits starting with valid Bangladesh mobile prefixes (013, 014, 015, 016, 017, 018, 019)
+  if (/^01[3-9]\d{8}$/.test(digits)) {
+    return digits;
+  }
+
+  return null;
+}
+
+/**
  * Fetch staff user profile from Supabase: users table
  */
 export async function getUserProfile(uid: string, email?: string | null, phone?: string | null): Promise<User | null> {
@@ -48,17 +83,19 @@ export async function getUserProfile(uid: string, email?: string | null, phone?:
       }
     }
 
-    // 3. Fallback lookup by phone if id and email didn't match (e.g., Phone OTP login)
+    // 3. Fallback lookup by phone using exact normalized canonical equality
     if (!data && phone) {
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
-      const phoneQuery = await supabase
-        .from('users')
-        .select('*')
-        .ilike('phone', `%${cleanPhone.slice(-10)}%`)
-        .maybeSingle();
+      const normalizedPhone = normalizeExactBangladeshPhone(phone);
+      if (normalizedPhone) {
+        const phoneQuery = await supabase
+          .from('users')
+          .select('*')
+          .eq('phone', normalizedPhone)
+          .maybeSingle();
 
-      if (phoneQuery.data) {
-        data = phoneQuery.data;
+        if (phoneQuery.data) {
+          data = phoneQuery.data;
+        }
       }
     }
 
@@ -99,16 +136,18 @@ export async function getDonorProfileByUserId(uid: string, email?: string | null
       }
     }
 
-    // 3. Fallback by phone
+    // 3. Fallback by phone using exact normalized canonical equality
     if (!data && phone) {
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
-      const phoneQuery = await supabase
-        .from('donors')
-        .select('*')
-        .ilike('phone', `%${cleanPhone.slice(-10)}%`)
-        .maybeSingle();
-      if (phoneQuery.data) {
-        data = phoneQuery.data;
+      const normalizedPhone = normalizeExactBangladeshPhone(phone);
+      if (normalizedPhone) {
+        const phoneQuery = await supabase
+          .from('donors')
+          .select('*')
+          .eq('phone', normalizedPhone)
+          .maybeSingle();
+        if (phoneQuery.data) {
+          data = phoneQuery.data;
+        }
       }
     }
 

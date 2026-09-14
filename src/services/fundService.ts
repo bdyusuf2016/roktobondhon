@@ -121,25 +121,70 @@ export async function addFundDonationToSupabase(
 }
 
 /**
- * Verify fund donation
+ * Authoritative fund donation review via verify_fund_donation RPC
  */
 export async function verifyFundDonationInSupabase(
   id: string,
-  verifierName: string
-): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return;
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('fund_donations')
-    .update({
-      status: 'verified',
-      verified_by: verifierName,
-      verified_at: now,
-    })
-    .eq('id', id);
+  action: 'verify' | 'reject' = 'verify',
+  notes?: string
+): Promise<{ success: boolean; status: string; message?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const { data, error } = await supabase.rpc('verify_fund_donation', {
+    p_donation_id: id,
+    p_action: action,
+    p_notes: notes || null,
+  });
 
   if (error) {
     console.error('Error verifying fund donation in Supabase:', error);
+    throw new Error(error.message || 'তহবিল অনুদান যাচাই করতে ব্যর্থ হয়েছে।');
+  }
+
+  return {
+    success: Boolean(data?.success),
+    status: data?.status || action,
+    message: data?.message,
+  };
+}
+
+/**
+ * Fetch verified public Fund Donations (PII-safe view)
+ */
+export async function getPublicFundDonationsFromSupabase(): Promise<FundDonation[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('fund_donations_public')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching public fund donations from Supabase:', error);
+      return [];
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      donorName: row.donor_name,
+      donorPhone: '***',
+      amount: Number(row.amount),
+      paymentMethod: row.payment_method,
+      transactionId: '***',
+      fundCause: row.fund_cause || 'সাধারণ তহবিল',
+      area: row.area || undefined,
+      message: row.message || undefined,
+      isAnonymous: Boolean(row.is_anonymous),
+      status: row.status || 'verified',
+      organizationId: row.organization_id || 'org-roktobondon',
+      createdAt: row.created_at || new Date().toISOString(),
+      verifiedAt: row.verified_at || undefined,
+    }));
+  } catch (err) {
+    console.error('Exception fetching public fund donations:', err);
+    return [];
   }
 }
 

@@ -87,16 +87,12 @@ export function normalizeBangladeshPhone(raw: any): string | null {
   };
   str = str.replace(/[০-৯]/g, (char) => bnToEnMap[char] || char);
 
-  // Remove spaces, hyphens, plus, parenthesis
+  // Remove spaces, hyphens, plus, parenthesis, dots
   let digits = str.replace(/[^0-9]/g, '');
 
-  if (digits.startsWith('880')) {
+  if (digits.startsWith('880') && digits.length === 13) {
     digits = digits.slice(2);
-  } else if (digits.startsWith('+880')) {
-    digits = digits.slice(3);
-  }
-
-  if (digits.length === 10 && digits.startsWith('1')) {
+  } else if (digits.length === 10 && digits.startsWith('1')) {
     digits = '0' + digits;
   }
 
