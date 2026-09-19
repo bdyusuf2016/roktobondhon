@@ -88,6 +88,7 @@ import { recordAuditLog } from '../services/auditService';
 import { generatePlatformBackup, resolveSelectiveRestore } from '../services/backupService';
 import type { BackupCollectionKey, PlatformBackupPayload } from '../types/backup';
 import { useAuth } from './AuthContext';
+import { isStaffRole } from '../services/permissions';
 
 interface DataContextType {
   donors: Donor[];
@@ -541,15 +542,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const loadSupabaseData = async () => {
       setIsLoading(true);
       try {
-        // 1. Fetch donors (query public-safe view for directory, fallback to table if staff)
+        // 1. Fetch donors
+        // For staff roles (super_admin, admin, moderator, volunteer): load all records directly from public.donors
+        // to manage verification statuses (pending, unverified, verified, suspended, rejected).
+        // For non-staff/public contexts: preserve donors_public_search view (verified only).
         let donorsRows: any[] | null = null;
-        const { data: publicDonors, error: pubErr } = await supabase.from('donors_public_search').select('*');
-        if (publicDonors && !pubErr && publicDonors.length > 0) {
-          donorsRows = publicDonors;
+        const isStaff = isStaffRole(currentUser?.role);
+
+        if (isStaff) {
+          const { data: staffDonors, error: staffErr } = await supabase
+            .from('donors')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!staffErr && staffDonors) {
+            donorsRows = staffDonors;
+          } else {
+            const { data: publicFallback } = await supabase.from('donors_public_search').select('*');
+            if (publicFallback) donorsRows = publicFallback;
+          }
         } else {
-          const { data: rawDonors } = await supabase.from('donors').select('*');
-          if (rawDonors) donorsRows = rawDonors;
+          const { data: publicDonors, error: pubErr } = await supabase
+            .from('donors_public_search')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (publicDonors && !pubErr && publicDonors.length > 0) {
+            donorsRows = publicDonors;
+          } else {
+            const { data: rawDonors } = await supabase.from('donors').select('*');
+            if (rawDonors) donorsRows = rawDonors;
+          }
         }
+
         if (donorsRows && isMounted) {
           setDonors(donorsRows.map(mapDonorRow));
         }
@@ -832,7 +855,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.role]);
 
   // Sync to localStorage for instant local caching and fast reloads
   useEffect(() => {
