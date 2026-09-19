@@ -23,6 +23,7 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDialog } from '../contexts/DialogContext';
 import { DonationReceiptModal } from '../components/modals';
+import { TurnstileWidget } from '../components/common/TurnstileWidget';
 import type { FundDonation } from '../types';
 
 export const DonatePage: React.FC = () => {
@@ -54,6 +55,7 @@ export const DonatePage: React.FC = () => {
 
   const [copiedMethodId, setCopiedMethodId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState('');
   const [submittedDonation, setSubmittedDonation] = useState<FundDonation | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -146,7 +148,7 @@ export const DonatePage: React.FC = () => {
         message: message.trim() || undefined,
         isAnonymous,
         organizationId: 'org-roktobondon',
-      });
+      }, turnstileToken);
 
       setSubmittedDonation(created);
       setShowReceiptModal(true);
@@ -514,6 +516,11 @@ export const DonatePage: React.FC = () => {
                   <Lock className="w-4 h-4 text-slate-400" />
                 </div>
               </div>
+
+              <TurnstileWidget
+                onVerify={(token) => setTurnstileToken(token)}
+                onExpire={() => setTurnstileToken('')}
+              />
 
               {/* Submit Button */}
               <button

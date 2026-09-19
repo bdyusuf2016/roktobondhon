@@ -137,14 +137,44 @@ export async function recordDonationInSupabase(
   donation: Omit<Donation, 'id'>
 ): Promise<Donation> {
   const nowIso = new Date().toISOString();
+  let canonicalDonorId = donation.donorId;
+  let canonicalDonorUserId = donation.donorUserId || null;
 
   if (isSupabaseConfigured && supabase) {
+    try {
+      // 0. Resolve canonical donor primary key (donors.id) if caller passed human-readable code (e.g., DNR-DHM-000104)
+      const { data: matchedDonor } = await supabase
+        .from('donors')
+        .select('id, user_id, donor_id')
+        .or(`id.eq.${donation.donorId},donor_id.eq.${donation.donorId}`)
+        .maybeSingle();
+
+      if (matchedDonor) {
+        canonicalDonorId = matchedDonor.id;
+        if (!canonicalDonorUserId && matchedDonor.user_id) {
+          canonicalDonorUserId = matchedDonor.user_id;
+        }
+      } else {
+        // Fallback check on donors_public_search view
+        const { data: publicDonor } = await supabase
+          .from('donors_public_search')
+          .select('id, donor_id')
+          .or(`id.eq.${donation.donorId},donor_id.eq.${donation.donorId}`)
+          .maybeSingle();
+        if (publicDonor) {
+          canonicalDonorId = publicDonor.id;
+        }
+      }
+    } catch (lookupErr) {
+      console.warn('[donationService] Canonical donor lookup notice:', lookupErr);
+    }
+
     try {
       // 1. Primary Authoritative Flow: Try record_manual_donation RPC if donation date is provided
       if (donation.donationDate) {
         try {
           const rpcRes = await recordManualDonationInSupabase({
-            donorId: donation.donorId,
+            donorId: canonicalDonorId,
             donationDate: donation.donationDate,
             hospital: donation.hospital || 'ধামরাই রক্তদান কেন্দ্র',
             location: donation.location,
@@ -158,6 +188,8 @@ export async function recordDonationInSupabase(
           return {
             ...donation,
             id: rpcRes.donationId,
+            donorId: canonicalDonorId,
+            donorUserId: canonicalDonorUserId || undefined,
             createdAt: nowIso,
             updatedAt: nowIso,
           };
@@ -175,6 +207,8 @@ export async function recordDonationInSupabase(
       const newDonation: Donation = {
         ...donation,
         id,
+        donorId: canonicalDonorId,
+        donorUserId: canonicalDonorUserId || undefined,
         source: donation.source || 'manual',
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -182,8 +216,8 @@ export async function recordDonationInSupabase(
 
       const payload: Record<string, any> = {
         id: newDonation.id,
-        donor_id: newDonation.donorId,
-        donor_user_id: newDonation.donorUserId || null,
+        donor_id: canonicalDonorId,
+        donor_user_id: canonicalDonorUserId || null,
         donor_name: newDonation.donorName,
         blood_group: newDonation.bloodGroup,
         request_id: newDonation.requestId || newDonation.bloodRequestId || null,

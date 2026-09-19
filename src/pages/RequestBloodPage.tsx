@@ -25,6 +25,7 @@ import { BANGLADESH_DISTRICTS, getUpazilasForDistrict, isDistrictMatch, isUpazil
 import { isBloodCompatible } from '../services/matchingService';
 import { SearchableSelect } from '../components/common/SearchableSelect';
 import { DonorCard } from '../components/DonorCard';
+import { TurnstileWidget } from '../components/common/TurnstileWidget';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -61,6 +62,7 @@ export const RequestBloodPage: React.FC = () => {
   const [notifyDistrictDonors, setNotifyDistrictDonors] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState('');
 
   // Modal state for viewing matched donors directly on page
@@ -237,7 +239,7 @@ export const RequestBloodPage: React.FC = () => {
         expiresAt,
         notifyUpazilaDonors,
         notifyDistrictDonors,
-      });
+      }, turnstileToken);
 
       // Redirect immediately to matching engine for this request
       navigate(`/blood-requests/${created.id}`);
@@ -711,6 +713,11 @@ export const RequestBloodPage: React.FC = () => {
           <p>• রক্তদান সম্পূর্ণ মানবিক ও নিঃস্বার্থ; রক্তদানের জন্য কোনো অর্থ লেনদেন করা নিষিদ্ধ।</p>
           <p>• আবেদন যাচাইকরণের পর সংগঠনের ভলান্টিয়ার টিম থেকেও আপনার সাথে যোগাযোগ করা হতে পারে।</p>
         </div>
+
+        <TurnstileWidget
+          onVerify={(token) => setTurnstileToken(token)}
+          onExpire={() => setTurnstileToken('')}
+        />
 
         <button
           type="submit"

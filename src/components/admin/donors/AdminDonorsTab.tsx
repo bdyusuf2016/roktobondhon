@@ -435,7 +435,7 @@ export const AdminDonorsTab: React.FC = () => {
     setIsRecordingDonation(true);
     try {
       await recordDonation({
-        donorId: activeDonationDonor.donorId,
+        donorId: activeDonationDonor.id,
         donorUserId: activeDonationDonor.userId,
         donorName: activeDonationDonor.fullName,
         bloodGroup: activeDonationDonor.bloodGroup,

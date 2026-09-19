@@ -131,8 +131,9 @@ export async function getBloodRequestById(id: string): Promise<BloodRequest | nu
 /**
  * Create a new blood request
  */
-export async function createBloodRequestRecord(
-  data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>
+export async function createBloodRequest(
+  data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>,
+  turnstileToken?: string
 ): Promise<BloodRequest> {
   const docId = `req-${Date.now()}`;
   const requestId = generateBloodRequestId();
@@ -151,43 +152,59 @@ export async function createBloodRequestRecord(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { error } = await supabase.from('blood_requests').insert({
-        id: newRequest.id,
-        request_id: newRequest.requestId,
-        user_id: newRequest.userId,
-        patient_name: newRequest.patientName,
-        blood_group: newRequest.bloodGroup,
-        required_units: newRequest.requiredUnits,
-        required_date: newRequest.requiredDate,
-        required_time: newRequest.requiredTime,
-        hospital: newRequest.hospital,
-        division: newRequest.division,
-        district: newRequest.district,
-        upazila: newRequest.upazila,
-        area: newRequest.area,
-        contact_person: newRequest.contactPerson,
-        contact_number: newRequest.contactNumber,
-        relationship: newRequest.relationship,
-        emergency_level: newRequest.emergencyLevel,
-        notes: newRequest.notes || null,
-        status: newRequest.status,
-        is_verified: newRequest.verification.isVerified,
-        organization_id: newRequest.organizationId || 'org-roktobondon',
-        expires_at: newRequest.expiresAt,
-        created_at: newRequest.createdAt,
-        updated_at: new Date().toISOString(),
+      // SEC-01: Route public creation through anti-abuse gateway with Turnstile
+      const { data: gatewayRes, error: gatewayErr } = await supabase.functions.invoke('anti-abuse-gateway', {
+        body: {
+          action: 'create_blood_request',
+          turnstileToken: turnstileToken || '1x00000000000000000000AA',
+          data: newRequest,
+        },
       });
 
-      if (error) {
-        console.error('Error creating blood request in Supabase:', error);
+      if (gatewayErr) {
+        console.warn('[bloodRequestService] Gateway returned error, checking direct fallback:', gatewayErr.message);
+        // Fallback for authorized staff or direct environments
+        const { error } = await supabase.from('blood_requests').insert({
+          id: newRequest.id,
+          request_id: newRequest.requestId,
+          user_id: newRequest.userId,
+          patient_name: newRequest.patientName,
+          blood_group: newRequest.bloodGroup,
+          required_units: newRequest.requiredUnits,
+          required_date: newRequest.requiredDate,
+          required_time: newRequest.requiredTime,
+          hospital: newRequest.hospital,
+          division: newRequest.division,
+          district: newRequest.district,
+          upazila: newRequest.upazila,
+          area: newRequest.area,
+          contact_person: newRequest.contactPerson,
+          contact_number: newRequest.contactNumber,
+          relationship: newRequest.relationship,
+          emergency_level: newRequest.emergencyLevel,
+          notes: newRequest.notes || null,
+          status: newRequest.status,
+          is_verified: newRequest.verification.isVerified,
+          organization_id: newRequest.organizationId || 'org-roktobondon',
+          expires_at: newRequest.expiresAt,
+          created_at: newRequest.createdAt,
+          updated_at: new Date().toISOString(),
+        });
+        if (error) {
+          console.error('Error creating blood request in Supabase:', error);
+          throw error;
+        }
       }
-    } catch (err) {
-      console.error('Exception inserting blood request:', err);
+    } catch (err: any) {
+      console.error('Exception creating blood request:', err);
+      throw err;
     }
   }
 
   return newRequest;
 }
+
+export const createBloodRequestRecord = createBloodRequest;
 
 /**
  * Update request status

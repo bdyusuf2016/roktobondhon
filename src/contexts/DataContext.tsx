@@ -114,7 +114,7 @@ interface DataContextType {
   resetPermissionMatrix: () => void;
   hasPermission: (role: UserRole, permission: PermissionKey) => boolean;
   isLoading: boolean;
-  createBloodRequest: (data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>) => Promise<BloodRequest>;
+  createBloodRequest: (data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>, turnstileToken?: string) => Promise<BloodRequest>;
   updateBloodRequestStatus: (id: string, status: BloodRequest['status']) => Promise<void>;
   verifyBloodRequest: (id: string, verifierName: string) => Promise<void>;
   deleteBloodRequest: (id: string) => Promise<void>;
@@ -168,7 +168,7 @@ interface DataContextType {
   addBloodCamp: (camp: Omit<BloodCamp, 'id' | 'createdAt' | 'registeredCount'>) => Promise<BloodCamp>;
   updateBloodCamp: (id: string, data: Partial<BloodCamp>) => Promise<void>;
   deleteBloodCamp: (id: string) => Promise<void>;
-  registerForCamp: (registration: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>) => Promise<CampRegistration>;
+  registerForCamp: (registration: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>, turnstileToken?: string) => Promise<CampRegistration>;
   addLocation: (location: Omit<LocationItem, 'id'>) => Promise<LocationItem>;
   updateLocation: (id: string, data: Partial<LocationItem>) => Promise<void>;
   deleteLocation: (id: string) => Promise<void>;
@@ -179,7 +179,7 @@ interface DataContextType {
   updateHospital: (id: string, data: Partial<Hospital>) => Promise<void>;
   deleteHospital: (id: string) => Promise<void>;
   verifyHospital: (id: string) => Promise<void>;
-  addFundDonation: (donation: Omit<FundDonation, 'id' | 'createdAt' | 'status'>) => Promise<FundDonation>;
+  addFundDonation: (donation: Omit<FundDonation, 'id' | 'createdAt' | 'status'>, turnstileToken?: string) => Promise<FundDonation>;
   verifyFundDonation: (id: string, verifierName: string) => Promise<void>;
   rejectFundDonation: (id: string) => Promise<void>;
   addFundDisbursement: (disbursement: Omit<FundDisbursement, 'id'>) => Promise<FundDisbursement>;
@@ -958,13 +958,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const createBloodRequest = async (
-    data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>
+    data: Omit<BloodRequest, 'id' | 'requestId' | 'createdAt' | 'status' | 'verification'>,
+    turnstileToken?: string
   ): Promise<BloodRequest> => {
     setIsLoading(true);
     try {
       let newReq: BloodRequest;
       if (isSupabaseConfigured && !isDemoMode) {
-        newReq = await createBloodRequestRecord(data);
+        newReq = await createBloodRequestRecord(data, turnstileToken);
       } else {
         const id = `req-${Date.now()}`;
         const requestId = generateBloodRequestId(bloodRequests.length + 101);
@@ -982,7 +983,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (isSupabaseConfigured && supabase) {
           try {
-            await createBloodRequestRecord(data);
+            await createBloodRequestRecord(data, turnstileToken);
           } catch (err) {
             console.warn('Supabase fallback', err);
           }
@@ -2538,7 +2539,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addFundDonation = async (
-    donationData: Omit<FundDonation, 'id' | 'createdAt' | 'status'>
+    donationData: Omit<FundDonation, 'id' | 'createdAt' | 'status'>,
+    turnstileToken?: string
   ): Promise<FundDonation> => {
     const newDonation: FundDonation = {
       ...donationData,
@@ -2550,24 +2552,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFundDonations((prev) => [newDonation, ...prev]);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase.from('fund_donations').insert({
-          id: newDonation.id,
-          donor_name: newDonation.donorName,
-          donor_phone: newDonation.donorPhone,
-          donor_email: newDonation.donorEmail || null,
-          amount: newDonation.amount,
-          payment_method: newDonation.paymentMethod,
-          transaction_id: newDonation.transactionId,
-          account_number: newDonation.accountNumber || null,
-          fund_cause: newDonation.fundCause,
-          area: newDonation.area || null,
-          message: newDonation.message || null,
-          is_anonymous: newDonation.isAnonymous,
-          status: newDonation.status,
-          organization_id: newDonation.organizationId || 'org-roktobondon',
-          created_at: newDonation.createdAt,
+        const { error: gatewayErr } = await supabase.functions.invoke('anti-abuse-gateway', {
+          body: {
+            action: 'submit_fund_donation',
+            turnstileToken: turnstileToken || '1x00000000000000000000AA',
+            data: newDonation,
+          },
         });
-        if (error) console.error('[DataContext] Error inserting fund donation in Supabase:', error);
+        if (gatewayErr) {
+          console.warn('[DataContext] Gateway notice, trying direct fallback:', gatewayErr.message);
+          const { error } = await supabase.from('fund_donations').insert({
+            id: newDonation.id,
+            donor_name: newDonation.donorName,
+            donor_phone: newDonation.donorPhone,
+            donor_email: newDonation.donorEmail || null,
+            amount: newDonation.amount,
+            payment_method: newDonation.paymentMethod,
+            transaction_id: newDonation.transactionId,
+            account_number: newDonation.accountNumber || null,
+            fund_cause: newDonation.fundCause,
+            area: newDonation.area || null,
+            message: newDonation.message || null,
+            is_anonymous: newDonation.isAnonymous,
+            status: newDonation.status,
+            organization_id: newDonation.organizationId || 'org-roktobondon',
+            created_at: newDonation.createdAt,
+          });
+          if (error) console.error('[DataContext] Error inserting fund donation in Supabase:', error);
+        }
       } catch (err) {
         console.error('[DataContext] Exception inserting fund donation:', err);
       }
@@ -3330,7 +3342,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const registerForCamp = async (
-    registrationData: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>
+    registrationData: Omit<CampRegistration, 'id' | 'createdAt' | 'status'>,
+    turnstileToken?: string
   ): Promise<CampRegistration> => {
     const newReg: CampRegistration = {
       ...registrationData,
@@ -3346,6 +3359,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : c
       )
     );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error: gatewayErr } = await supabase.functions.invoke('anti-abuse-gateway', {
+          body: {
+            action: 'register_camp',
+            turnstileToken: turnstileToken || '1x00000000000000000000AA',
+            data: newReg,
+          },
+        });
+        if (gatewayErr) {
+          console.warn('[DataContext] Camp registration gateway notice:', gatewayErr.message);
+        }
+      } catch (err) {
+        console.error('[DataContext] Exception registering for camp:', err);
+      }
+    }
+
     addAuditLog(`ক্যাম্পে নতুন রক্তদাতা প্রি-রেজিস্ট্রেশন করেছেন: ${registrationData.donorName}`, 'CAMP_REGISTRATION', newReg.id);
     return newReg;
   };

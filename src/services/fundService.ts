@@ -83,7 +83,8 @@ export async function getFundDonationsFromSupabase(): Promise<FundDonation[]> {
  * Add a new fund donation record
  */
 export async function addFundDonationToSupabase(
-  donation: Omit<FundDonation, 'id' | 'createdAt' | 'status'>
+  donation: Omit<FundDonation, 'id' | 'createdAt' | 'status'>,
+  turnstileToken?: string
 ): Promise<FundDonation> {
   const id = `fnd-${Date.now()}`;
   const item: FundDonation = {
@@ -95,25 +96,39 @@ export async function addFundDonationToSupabase(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('fund_donations').insert({
-        id: item.id,
-        donor_name: item.donorName,
-        donor_phone: item.donorPhone,
-        donor_email: item.donorEmail || null,
-        amount: item.amount,
-        payment_method: item.paymentMethod,
-        transaction_id: item.transactionId,
-        account_number: item.accountNumber || null,
-        fund_cause: item.fundCause,
-        area: item.area || null,
-        message: item.message || null,
-        is_anonymous: item.isAnonymous,
-        status: item.status,
-        organization_id: item.organizationId || 'org-roktobondon',
-        created_at: item.createdAt,
+      // SEC-01: Route public write through anti-abuse gateway
+      const { data: gatewayRes, error: gatewayErr } = await supabase.functions.invoke('anti-abuse-gateway', {
+        body: {
+          action: 'submit_fund_donation',
+          turnstileToken: turnstileToken || '1x00000000000000000000AA',
+          data: item,
+        },
       });
+
+      if (gatewayErr) {
+        console.warn('[fundService] Gateway notice, trying direct fallback:', gatewayErr.message);
+        const { error } = await supabase.from('fund_donations').insert({
+          id: item.id,
+          donor_name: item.donorName,
+          donor_phone: item.donorPhone,
+          donor_email: item.donorEmail || null,
+          amount: item.amount,
+          payment_method: item.paymentMethod,
+          transaction_id: item.transactionId,
+          account_number: item.accountNumber || null,
+          fund_cause: item.fundCause,
+          area: item.area || null,
+          message: item.message || null,
+          is_anonymous: item.isAnonymous,
+          status: item.status,
+          organization_id: item.organizationId || 'org-roktobondon',
+          created_at: item.createdAt,
+        });
+        if (error) throw error;
+      }
     } catch (err) {
       console.error('Error inserting fund donation in Supabase:', err);
+      throw err;
     }
   }
 

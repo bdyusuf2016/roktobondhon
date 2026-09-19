@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { BloodCamp, BloodGroup } from '../types';
+import { TurnstileWidget } from '../components/common/TurnstileWidget';
 import {
   Calendar,
   MapPin,
@@ -34,7 +35,8 @@ export const BloodCampsPage: React.FC = () => {
   const [regName, setRegName] = useState(currentUser?.fullName || '');
   const [regPhone, setRegPhone] = useState(currentUser?.phone || '');
   const [regBloodGroup, setRegBloodGroup] = useState<BloodGroup>('A+');
-  const [regTime, setRegTime] = useState('সকাল ১০:০০ - ১২:০০');
+  const [regTime, setRegTime] = useState<string>('সকাল ০৯:০০ - ১১:০০');
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
   const [regSuccess, setRegSuccess] = useState(false);
 
   // New Camp Modal State (for Volunteers / Admins)
@@ -79,7 +81,7 @@ export const BloodCampsPage: React.FC = () => {
       bloodGroup: regBloodGroup,
       preferredTime: regTime,
       userId: currentUser?.id,
-    });
+    }, turnstileToken);
 
     setRegSuccess(true);
     setTimeout(() => {
@@ -333,6 +335,11 @@ export const BloodCampsPage: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                <TurnstileWidget
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken('')}
+                />
 
                 <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
                   <button

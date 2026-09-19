@@ -140,7 +140,7 @@ export const RecordDonationModal: React.FC<RecordDonationModalProps> = ({
     setIsSubmitting(true);
     try {
       await recordDonation({
-        donorId: selectedDonor.donorId,
+        donorId: selectedDonor.id,
         donorUserId: selectedDonor.userId || undefined,
         donorName: selectedDonor.fullName,
         bloodGroup: selectedDonor.bloodGroup,
