@@ -2426,17 +2426,36 @@ DECLARE
   v_expired_count INTEGER := 0;
   v_expired_ids TEXT[] := ARRAY[]::TEXT[];
   v_now TIMESTAMPTZ := NOW();
+  v_lock_acquired BOOLEAN;
 BEGIN
-  -- A. Authorization Check: Caller MUST be authorized staff OR executed in trusted backend worker context
+  -- A. Clamp batch limit strictly between 1 and 100 (default 50)
+  IF p_batch_limit IS NULL OR p_batch_limit < 1 THEN
+    p_batch_limit := 50;
+  ELSIF p_batch_limit > 100 THEN
+    p_batch_limit := 100;
+  END IF;
+
+  -- B. Authorization Check: Caller MUST be authorized staff OR executed in trusted backend worker context (service_role / postgres)
   v_caller_uid := auth.uid();
   IF v_caller_uid IS NOT NULL AND NOT public.is_staff() THEN
     RAISE EXCEPTION 'Unauthorized: Only authorized staff or maintenance jobs can execute request expiration.';
   END IF;
 
-  -- B. Set Transaction-Local Marker for Expiration
+  -- C. Advisory Transaction Lock to prevent concurrent overlapping executions
+  v_lock_acquired := pg_try_advisory_xact_lock(hashtext('expire_overdue_blood_requests'));
+  IF NOT v_lock_acquired THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'expired_count', 0,
+      'expired_ids', ARRAY[]::TEXT[],
+      'message', 'Another blood request expiration maintenance job is currently executing.'
+    );
+  END IF;
+
+  -- D. Set Transaction-Local Marker for Expiration (enforces canonical transition)
   PERFORM set_config('app.in_blood_request_expiration', 'true', true);
 
-  -- C. Fetch and lock overdue requests with 2-day grace period
+  -- E. Fetch and lock overdue requests with 2-day grace period (only active or matched)
   FOR v_breq IN
     SELECT id, request_id, user_id, patient_name, hospital
     FROM public.blood_requests
@@ -2455,7 +2474,7 @@ BEGIN
     v_expired_count := v_expired_count + 1;
     v_expired_ids := array_append(v_expired_ids, v_breq.id);
 
-    -- Dispatch closure notification to requester
+    -- Dispatch closure notification to requester (deterministic deduplication)
     INSERT INTO public.notifications (
       id,
       user_id,
@@ -2476,7 +2495,7 @@ BEGIN
       v_now
     ) ON CONFLICT (id) DO NOTHING;
 
-    -- Record Audit Trail
+    -- Record Audit Trail (Zero Sensitive PII)
     PERFORM public.record_audit_log(
       'BLOOD_REQUEST_EXPIRED',
       'BloodRequest',
@@ -2501,6 +2520,26 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 REVOKE ALL ON FUNCTION public.expire_overdue_blood_requests(INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.expire_overdue_blood_requests(INTEGER) TO service_role;
+
+-- 4. Idempotent pg_cron Automated Hourly Job Registration
+DO $cron_setup$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'expire-overdue-blood-requests') THEN
+    PERFORM cron.unschedule('expire-overdue-blood-requests');
+  END IF;
+
+  PERFORM cron.schedule(
+    'expire-overdue-blood-requests',
+    '0 * * * *',
+    'SELECT public.expire_overdue_blood_requests(100);'
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'pg_cron registration skipped or encountered non-fatal error: %', SQLERRM;
+END;
+$cron_setup$;
 
 -- ==============================================================================
 -- SECURE PUBLIC VIEWS (Partitioned Safe Access: Zero Sensitive PII)
