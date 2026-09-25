@@ -285,13 +285,30 @@ export async function cancelBloodRequestInSupabase(id: string): Promise<void> {
       status: 'cancelled',
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .or(`id.eq.${id},request_id.eq.${id}`);
 
   if (error) {
     console.error('Error cancelling blood request:', error);
     throw new Error(error.message || 'রক্তের অনুরোধ বাতিল করতে সমস্যা হয়েছে।');
   }
 }
+
+/**
+ * Permanently delete a blood request from Supabase (Admin only)
+ */
+export async function deleteBloodRequestInSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  const { error } = await supabase
+    .from('blood_requests')
+    .delete()
+    .or(`id.eq.${id},request_id.eq.${id}`);
+
+  if (error) {
+    console.error('Error deleting blood request in Supabase:', error);
+    throw new Error(error.message || 'রক্তের আবেদন ডাটাবেজ থেকে মুছে ফেলতে সমস্যা হয়েছে।');
+  }
+}
+
 
 /**
  * Verify blood request by staff/volunteer

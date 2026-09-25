@@ -57,6 +57,7 @@ import {
   createBloodRequestRecord,
   updateBloodRequestStatusInFirestore,
   verifyBloodRequestInFirestore,
+  deleteBloodRequestInSupabase,
   mapBloodRequestRow,
 } from '../services/bloodRequestService';
 import {
@@ -231,6 +232,7 @@ const STORAGE_KEYS = {
   BLOOD_CAMPS: 'roktobondon_blood_camps_v1',
   CAMP_REGISTRATIONS: 'roktobondon_camp_registrations_v1',
   PERMISSION_MATRIX: 'roktobondon_permission_matrix_v1',
+  DELETED_REQUESTS: 'roktobondon_deleted_requests_v1',
 };
 
 // These collections contain contact, health, financial, account, or audit data.
@@ -295,7 +297,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          let deletedIds: string[] = [];
+          try {
+            const dSaved = localStorage.getItem(STORAGE_KEYS.DELETED_REQUESTS);
+            if (dSaved) deletedIds = JSON.parse(dSaved);
+          } catch {}
+          return parsed.filter((r: BloodRequest) => !deletedIds.includes(r.id) && !deletedIds.includes(r.requestId));
+        }
       } catch (e) {
         console.error(e);
       }
@@ -593,7 +602,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (rawReqs) reqsRows = rawReqs;
         }
         if (reqsRows && isMounted) {
-          setBloodRequests(reqsRows.map(mapBloodRequestRow));
+          let deletedIds: string[] = [];
+          try {
+            const dSaved = localStorage.getItem(STORAGE_KEYS.DELETED_REQUESTS);
+            if (dSaved) deletedIds = JSON.parse(dSaved);
+          } catch {}
+          const activeRows = reqsRows
+            .map(mapBloodRequestRow)
+            .filter((r) => !deletedIds.includes(r.id) && !deletedIds.includes(r.requestId));
+          setBloodRequests(activeRows);
         }
 
         // 3. Fetch donor requests
@@ -1097,7 +1114,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteBloodRequest = async (id: string) => {
-    setBloodRequests((prev) => prev.filter((r) => r.id !== id));
+    // 1. Persist the deleted request ID in localStorage so page refresh never resurrects it
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.DELETED_REQUESTS);
+      const parsed: string[] = saved ? JSON.parse(saved) : [];
+      const targetReq = bloodRequests.find((r) => r.id === id || r.requestId === id);
+      const toAdd = [id];
+      if (targetReq?.id) toAdd.push(targetReq.id);
+      if (targetReq?.requestId) toAdd.push(targetReq.requestId);
+      const updated = Array.from(new Set([...parsed, ...toAdd]));
+      localStorage.setItem(STORAGE_KEYS.DELETED_REQUESTS, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error persisting deleted request id:', e);
+    }
+
+    // 2. Remove immediately from React state
+    setBloodRequests((prev) => prev.filter((r) => r.id !== id && r.requestId !== id));
+
+    // 3. Delete from Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await deleteBloodRequestInSupabase(id);
+      } catch (err: any) {
+        console.warn('[DataContext] Notice during Supabase deleteBloodRequest:', err?.message || err);
+      }
+    }
+
     addAuditLog('Blood Request Deleted', 'BloodRequest', id, {});
   };
 
@@ -3434,6 +3476,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(STORAGE_KEYS.USERS);
     localStorage.removeItem(STORAGE_KEYS.BLOOD_CAMPS);
     localStorage.removeItem(STORAGE_KEYS.CAMP_REGISTRATIONS);
+    localStorage.removeItem(STORAGE_KEYS.DELETED_REQUESTS);
   };
 
   return (
